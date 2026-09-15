@@ -12,6 +12,9 @@
   `config/hypr/yoga-windows.lua`: на `window.open` окно с eDP-2 при видимом слое
   `yoga-input-panel` переезжает на активный стол eDP-1 и получает фокус.
   Проверено: с панелью — eDP-1, без панели — eDP-2 как раньше.
+- `idle.lock` в shell.json = 2000000 с (~23 дня): idle-блокировки по сути нет. 0 нельзя —
+  это «запереть сразу», а больше 2147483 с переполняет 32-битный интервал QML Timer.
+  Заставка через 150 с осталась.
 - `systemctl --user mask --now omarchy-sleep-lock.service`: экран не запирается перед
   suspend/hibernate (по просьбе владельца). Idle-блокировка через 5 мин осталась
   (`idle.lock` в shell.json).
