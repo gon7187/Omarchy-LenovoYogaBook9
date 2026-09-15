@@ -51,6 +51,8 @@ def snapshot():
     # System-owned customization is recorded, never automatically installed as root.
     service=Path('/etc/systemd/system/yoga-sensor-keepalive.service')
     if service.is_file():shutil.copy2(service,target/'system-sensor-keepalive.reference')
+    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf')):
+        if Path(path).is_file():shutil.copy2(path,target/name)
     print(target)
     return target
 

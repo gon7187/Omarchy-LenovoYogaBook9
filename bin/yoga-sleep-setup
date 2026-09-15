@@ -1,0 +1,48 @@
+#!/bin/bash
+# Install, check or remove lid suspend-then-hibernate for the Yoga Book 9.
+# Run from a terminal as the normal user; privileged steps use sudo.
+set -euo pipefail
+
+SRC="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/config/systemd"
+SLEEP_DST=/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf
+LOGIND_DST=/etc/systemd/logind.conf.d/60-yoga-lid.conf
+SWAP_FILE=/swap/swapfile
+
+check() {
+  local ok=0 cmdline_offset real_offset
+  if ! swapon --show=NAME --noheadings | grep -qx "$SWAP_FILE"; then
+    echo "FAIL: $SWAP_FILE is not active swap"; ok=1
+  fi
+  if ! omarchy-hibernation-available; then
+    echo "FAIL: omarchy-hibernation-available says no (swap smaller than image or resume hook missing)"; ok=1
+  fi
+  cmdline_offset=$(grep -o 'resume_offset=[0-9]*' /proc/cmdline | cut -d= -f2 || true)
+  real_offset=$(sudo btrfs inspect-internal map-swapfile -r "$SWAP_FILE")
+  if [[ -z $cmdline_offset || $cmdline_offset != "$real_offset" ]]; then
+    echo "FAIL: resume_offset in cmdline ($cmdline_offset) != swapfile offset ($real_offset)"; ok=1
+  else
+    echo "OK: resume_offset $real_offset matches swapfile"
+  fi
+  for f in "$SLEEP_DST" "$LOGIND_DST"; do
+    [[ -f $f ]] && echo "Installed: $f" || echo "Not installed: $f"
+  done
+  return $ok
+}
+
+case "${1:-install}" in
+  check) check ;;
+  install)
+    check || { echo "Hibernation is not safe to use; nothing installed."; exit 1; }
+    sudo install -D -m 644 -o root -g root "$SRC/sleep.conf.d/${SLEEP_DST##*/}" "$SLEEP_DST"
+    sudo install -D -m 644 -o root -g root "$SRC/logind.conf.d/${LOGIND_DST##*/}" "$LOGIND_DST"
+    sudo systemctl reload systemd-logind
+    echo "Installed. Lid close: suspend, hibernate after 2 h on battery."
+    echo "Test once before relying on it: systemctl hibernate"
+    ;;
+  remove)
+    sudo rm -f "$SLEEP_DST" "$LOGIND_DST"
+    sudo systemctl reload systemd-logind
+    echo "Removed. Lid close is plain suspend again."
+    ;;
+  *) echo "Usage: yoga-sleep-setup [install|check|remove]"; exit 2 ;;
+esac

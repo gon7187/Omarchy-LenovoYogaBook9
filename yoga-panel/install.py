@@ -26,8 +26,8 @@ def main():
         SOURCE.parent/'bin/yoga-recovery':HOME/'.local/bin/yoga-recovery',
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
-        SOURCE.parent/'config/omarchy/plugins/gon7187.sysstats/manifest.json':HOME/'.config/omarchy/plugins/gon7187.sysstats/manifest.json',
-        SOURCE.parent/'config/omarchy/plugins/gon7187.sysstats/Panel.qml':HOME/'.config/omarchy/plugins/gon7187.sysstats/Panel.qml',
+        **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
+           for path in (SOURCE.parent/'config/omarchy/plugins').glob('*/*') if path.is_file()},
     }
     if args.dry_run:
         print('Build and install application:',TARGET)
@@ -51,7 +51,10 @@ def main():
         shutil.move(str(app),str(TARGET))
         for source,destination in destinations.items():
             destination.parent.mkdir(parents=True,exist_ok=True)
-            if destination.exists(): shutil.copy2(destination,backup/destination.name)
+            if destination.exists():
+                saved=backup/destination.relative_to(HOME)
+                saved.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copy2(destination,saved)
             shutil.copy2(source,destination)
             if destination.parent.name=='bin': destination.chmod(0o755)
     run('systemctl','--user','daemon-reload')
