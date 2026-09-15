@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <unordered_map>
 
-// Observe a short three-finger tap without grabbing or rewriting touch events.
-class ThreeFingerTap {
+// Observe a short 3-finger or 8–10-finger tap without grabbing touch events.
+class OpenPanelTap {
     struct Point { double x, y; };
     std::unordered_map<int, Point> points;
     uint32_t started = 0;
@@ -14,7 +14,7 @@ class ThreeFingerTap {
 public:
     void reset() { points.clear(); peak=0; moved=false; }
     void down(int id, uint32_t time, double x, double y) {
-        if (points.empty() || uint32_t(time-started)>700) { reset(); started=time; }
+        if (points.empty()) { reset(); started=time; }
         points[id]={x,y}; peak=std::max(peak,unsigned(points.size()));
     }
     void motion(int id, double x, double y) {
@@ -23,7 +23,8 @@ public:
     }
     bool up(int id, uint32_t time) {
         if (!points.erase(id) || !points.empty()) return false;
-        bool fire=peak==3 && !moved && uint32_t(time-started)<=500;
+        bool many=peak>=8 && peak<=10;
+        bool fire=(peak==3 || many) && !moved && uint32_t(time-started)<=(many ? 800u : 500u);
         reset(); return fire;
     }
 };

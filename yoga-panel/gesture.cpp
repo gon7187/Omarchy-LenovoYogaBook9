@@ -14,7 +14,7 @@
 #include "gesture.hpp"
 
 extern char **environ;
-static ThreeFingerTap recognizer;
+static OpenPanelTap recognizer;
 static std::unordered_map<int32_t, PHLLSREF> panelTouches;
 
 // Deliver panel touches without Hyprland's normal touchscreen refocus. Pointer
@@ -24,7 +24,7 @@ static void consume(Event::SCallbackInfo& info) {
     g_pInputManager->m_lastInputTouch = false;
 }
 static void down(ITouch::SDownEvent event, Event::SCallbackInfo& info) {
-    if (!event.device || event.device->m_boundOutput != "eDP-2") { recognizer.reset(); return; }
+    if (g_pSessionLockManager->isSessionLocked() || !event.device || event.device->m_boundOutput != "eDP-2") { recognizer.reset(); return; }
     if (!g_pSessionLockManager->isSessionLocked()) {
         auto monitor = State::monitorState()->query().name("eDP-2").run();
         if (monitor) {
@@ -63,6 +63,7 @@ static void up(ITouch::SUpEvent event, Event::SCallbackInfo& info) {
         g_pSeatManager->sendTouchUp(event.timeMs, event.touchID);
         return;
     }
+    if (g_pSessionLockManager->isSessionLocked()) { recognizer.reset(); return; }
     if (!recognizer.up(event.touchID,event.timeMs)) return;
     // Fixed executable and arguments; no shell or input-derived command text.
     const char* home = std::getenv("HOME");
@@ -123,7 +124,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 #else
     (void)handle;
 #endif
-    return {"yoga-panel-gesture","Yoga panel touch routing and three-finger opener","local","0.2.1"};
+    return {"yoga-panel-gesture","Yoga panel touch routing and 3/8-10 finger opener","local","0.3.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     for (const auto& [id, layer] : panelTouches) g_pSeatManager->sendTouchUp(0, id);
