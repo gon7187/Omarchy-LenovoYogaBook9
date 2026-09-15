@@ -251,6 +251,8 @@ The woofers already receive full-range stereo. What remains of the thin sound is
 
 A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC error`. The `CALI_DATA` UEFI variable holds valid-looking data for two amps, but its timestamp and CRC fields are zero, so the kernel discards it and the amps run uncalibrated.
 
+[`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot, and whether it audibly changes anything is untested.
+
 ### Fix (legacy snd_hda_intel only)
 
 Rather than patch the kernel, open the sink with four channels so the surround pair carries audio, and upmix to generate it. Drop [this file](config/wireplumber/51-yoga-bass-speakers.conf) into `~/.config/wireplumber/wireplumber.conf.d/` and restart WirePlumber:
