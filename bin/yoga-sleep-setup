@@ -1,12 +1,17 @@
 #!/bin/bash
 # Install, check or remove lid suspend-then-hibernate for the Yoga Book 9.
-# Run from a terminal as the normal user; privileged steps use sudo.
+# Run as the normal user; root steps use sudo in a terminal, pkexec otherwise.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/config/systemd"
 SLEEP_DST=/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf
 LOGIND_DST=/etc/systemd/logind.conf.d/60-yoga-lid.conf
 SWAP_FILE=/swap/swapfile
+
+# sudo in a terminal; the graphical polkit prompt when there is none.
+priv() {
+  if [[ -t 0 ]]; then sudo "$@"; else pkexec "$@"; fi
+}
 
 check() {
   local ok=0 cmdline_offset real_offset
@@ -17,7 +22,9 @@ check() {
     echo "FAIL: omarchy-hibernation-available says no (swap smaller than image or resume hook missing)"; ok=1
   fi
   cmdline_offset=$(grep -o 'resume_offset=[0-9]*' /proc/cmdline | cut -d= -f2 || true)
-  real_offset=$(sudo btrfs inspect-internal map-swapfile -r "$SWAP_FILE")
+  if ! real_offset=$(priv btrfs inspect-internal map-swapfile -r "$SWAP_FILE"); then
+    echo "FAIL: could not get root to read the swapfile offset"; return 1
+  fi
   if [[ -z $cmdline_offset || $cmdline_offset != "$real_offset" ]]; then
     echo "FAIL: resume_offset in cmdline ($cmdline_offset) != swapfile offset ($real_offset)"; ok=1
   else
@@ -33,15 +40,13 @@ case "${1:-install}" in
   check) check ;;
   install)
     check || { echo "Hibernation is not safe to use; nothing installed."; exit 1; }
-    sudo install -D -m 644 -o root -g root "$SRC/sleep.conf.d/${SLEEP_DST##*/}" "$SLEEP_DST"
-    sudo install -D -m 644 -o root -g root "$SRC/logind.conf.d/${LOGIND_DST##*/}" "$LOGIND_DST"
-    sudo systemctl reload systemd-logind
+    priv sh -c 'install -D -m 644 -o root -g root "$1" "$2" && install -D -m 644 -o root -g root "$3" "$4" && systemctl reload systemd-logind' sh \
+      "$SRC/sleep.conf.d/${SLEEP_DST##*/}" "$SLEEP_DST" "$SRC/logind.conf.d/${LOGIND_DST##*/}" "$LOGIND_DST"
     echo "Installed. Lid close: suspend, hibernate after 2 h on battery."
     echo "Test once before relying on it: systemctl hibernate"
     ;;
   remove)
-    sudo rm -f "$SLEEP_DST" "$LOGIND_DST"
-    sudo systemctl reload systemd-logind
+    priv sh -c 'rm -f "$1" "$2" && systemctl reload systemd-logind' sh "$SLEEP_DST" "$LOGIND_DST"
     echo "Removed. Lid close is plain suspend again."
     ;;
   *) echo "Usage: yoga-sleep-setup [install|check|remove]"; exit 2 ;;
