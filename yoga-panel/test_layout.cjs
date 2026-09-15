@@ -13,7 +13,7 @@ assert.equal(layout.character(layout.upper[0],true,true,true),'й');
 const qml=fs.readFileSync(process.argv[2] || `${__dirname}/shell.qml`,'utf8');
 const sent=[];
 let now=1000;
-const root=vm.createContext({languagePending:false,languageRequest:0,keyboardLanguage:"",languageGuard:{restart(){}},voiceSession:false,russian:true,shift:false,alt:false,control:false,logo:false,
+const root=vm.createContext({languagePending:false,languageRequest:0,keyboardLanguage:"",languageGuard:{restart(){}},pad:{stopMomentum(){}},voiceSession:false,russian:true,shift:false,alt:false,control:false,logo:false,
  predictionEnabled:true,wordPrefix:'',suggestions:[],predictionRequest:0,lastTypedAt:0,
  predictTimer:{restart(){}},Date:{now:()=>now},send:e=>sent.push(e)});
 vm.runInContext(qml.slice(qml.indexOf('function clearWord('),qml.indexOf('function typeKey(key)')),root);

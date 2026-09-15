@@ -64,12 +64,14 @@ ShellRoot {
     property real pointerSpeed: 2.4
     property real pointerAccel: 0.6
     property real scrollSpeed: 0.18
+    property bool inertiaEnabled: true
+    onInertiaEnabledChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
     onPointerSpeedChanged: if (settingsLoaded) saveSettings.restart()
     onPointerAccelChanged: if (settingsLoaded) saveSettings.restart()
-    onScrollSpeedChanged: if (settingsLoaded) saveSettings.restart()
+    onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -132,6 +134,7 @@ ShellRoot {
     function toggleShift() { if (alt) switchLanguage(); else shift=!shift; }
     function toggleAlt() { if (shift) switchLanguage(); else alt=!alt; }
     function typeKey(key) {
+        pad.stopMomentum();
         let mods = [];
         if (control) mods.push("ctrl");
         if (alt) mods.push("alt");
@@ -144,6 +147,7 @@ ShellRoot {
         control = false; alt = false; logo = false; shift = false;
     }
     function typeText(char) {
+        pad.stopMomentum();
         if (Date.now()-lastTypedAt>8000) clearWord();
         let mods = [];
         if (control) mods.push("ctrl");
@@ -177,7 +181,7 @@ ShellRoot {
                     try {
                         let s=JSON.parse(data).settings;
                         let message=JSON.parse(data);
-                        if (message.focusChanged) { micKey.cancel(); root.clearWord(); }
+                        if (message.focusChanged) { pad.stopMomentum(); micKey.cancel(); root.clearWord(); }
                         if (message.voice) {
                             if (message.voice==="error") {
                                 micKey.holding=false; root.finishVoice(); root.status="Диктовка недоступна или занята";
@@ -193,7 +197,7 @@ ShellRoot {
                             root.suggestions=message.suggestions;
                         if (s) {
                             root.settingsLoaded=false;
-                            root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed;
+                            root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed; root.inertiaEnabled=s.inertiaEnabled ?? true;
                             root.predictionEnabled=s.predictionEnabled ?? true;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
                             root.settingsLoaded=true;
@@ -368,12 +372,17 @@ ShellRoot {
                 Layout.maximumHeight: Math.min(400, panel.height * 0.48)
                 spacing: 12
                 Text { text: "Настройки"; color: "#f0f5ff"; font.pixelSize: 25 }
-                Key { Layout.preferredWidth: 320; Layout.preferredHeight: 40; textSize: 16; label: root.autocorrectEnabled ? "✓ Автоисправление по пробелу" : "Автоисправление выключено"; selected: root.autocorrectEnabled; onActivated: root.autocorrectEnabled=!root.autocorrectEnabled }
+                RowLayout {
+                    Layout.fillWidth: true; Layout.preferredHeight: 40; spacing: 12
+                    Key { Layout.preferredWidth: 320; Layout.fillHeight: true; textSize: 16; label: root.autocorrectEnabled ? "✓ Автоисправление по пробелу" : "Автоисправление выключено"; selected: root.autocorrectEnabled; onActivated: root.autocorrectEnabled=!root.autocorrectEnabled }
+                    Key { Layout.preferredWidth: 300; Layout.fillHeight: true; textSize: 16; label: root.inertiaEnabled ? "✓ Инерция прокрутки" : "Инерция выключена"; selected: root.inertiaEnabled; onActivated: root.inertiaEnabled=!root.inertiaEnabled }
+                    Item { Layout.fillWidth: true }
+                }
                 PreferenceRow { label: "Скорость курсора"; value: root.pointerSpeed; minimum: 0.5; maximum: 5; step: 0.1; onAdjusted: value => root.pointerSpeed=value }
                 PreferenceRow { label: "Ускорение"; value: root.pointerAccel; minimum: 0; maximum: 2; step: 0.1; onAdjusted: value => root.pointerAccel=value }
-                PreferenceRow { label: "Скорость прокрутки"; value: root.scrollSpeed; minimum: 0.03; maximum: 1; step: 0.03; onAdjusted: value => root.scrollSpeed=value }
+                ScrollPreference { value: root.scrollSpeed; onAdjusted: value => root.scrollSpeed=value }
                 Text { text: "Ускорение: быстрый жест перемещает курсор дальше. 0 — без ускорения.\nЗначения сохраняются автоматически. Тачпад внизу можно сразу проверить."; color: "#89a6c9"; font.pixelSize: 16 }
-                Key { Layout.preferredWidth: 245; Layout.preferredHeight: 44; label: "Сбросить настройки"; onActivated: { root.pointerSpeed=2.4; root.pointerAccel=0.6; root.scrollSpeed=0.18; } }
+                Key { Layout.preferredWidth: 245; Layout.preferredHeight: 44; label: "Сбросить настройки"; onActivated: { root.pointerSpeed=2.4; root.pointerAccel=0.6; root.scrollSpeed=0.18; root.inertiaEnabled=true; } }
                 Item { Layout.fillHeight: true }
             }
             Rectangle {
@@ -412,6 +421,14 @@ ShellRoot {
                     property bool scrolling: false
                     property var scrollDirections: ({x:0,y:0})
                     property var scrollReversals: ({x:0,y:0})
+                    property real scrollVX: 0
+                    property real scrollVY: 0
+                    property real lastScrollTime: 0
+                    property int velocitySamples: 0
+                    property real scrollDistance: 0
+                    property real momentumStarted: 0
+                    property real momentumLast: 0
+                    Timer { id: momentum; interval: 16; repeat: true; onTriggered: pad.tickMomentum() }
                     touchPoints: [TouchPoint { id: p1 }, TouchPoint { id: p2 }, TouchPoint { id: p3 }, TouchPoint { id: p4 }, TouchPoint { id: p5 }]
                     function sample(currentPoints) {
                         samples++;
@@ -427,7 +444,7 @@ ShellRoot {
                             tapDragging=false; endedDrag=true; lastTapTime=-1000;
                         }
                         if (!n) {
-                            if (scrolling) root.send({type:"scrollEnd"});
+                            if (scrolling && !startMomentum(now)) root.send({type:"scrollEnd"});
                             scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
@@ -442,6 +459,7 @@ ShellRoot {
                             return;
                         }
                         if (!previousCount) {
+                            stopMomentum(); clearVelocity();
                             began=now; travel=0; peakCount=0;
                             if (n===1 && !root.drag && now-lastTapTime < 350 && Math.hypot(points[0].x-lastTapX,points[0].y-lastTapY)<60) {
                                 tapDragging=true; dragPointId=points[0].pointId;
@@ -454,6 +472,7 @@ ShellRoot {
                         peakCount = Math.max(peakCount,n);
                         let startingSwipe = n >= 3 && !workspaceGesture;
                         if (startingSwipe) {
+                            stopMomentum(); clearVelocity();
                             workspaceGesture=true; swipeX=0; swipeY=0; lastTapTime=-1000;
                             if (tapDragging) {
                                 root.send({type:"button",button:272,state:0}); tapDragging=false;
@@ -506,7 +525,16 @@ ShellRoot {
                                 scrollEvents++;
                                 let dx=filterScroll(moving.reduce((sum,p)=>sum+p.dx,0)/2,"x");
                                 let dy=filterScroll(moving.reduce((sum,p)=>sum+p.dy,0)/2,"y");
-                                if (dx || dy) root.send({type:"scroll",x:-dx*root.scrollSpeed,y:-dy*root.scrollSpeed});
+                                if (dx || dy) {
+                                    let sx=-dx*root.scrollSpeed, sy=-dy*root.scrollSpeed;
+                                    root.send({type:"scroll",x:sx,y:sy});
+                                    if (sx*scrollVX<0) scrollVX=0;
+                                    if (sy*scrollVY<0) scrollVY=0;
+                                    let blend=1-Math.exp(-elapsed/35);
+                                    scrollVX=scrollVX*(1-blend)+(sx/elapsed)*blend;
+                                    scrollVY=scrollVY*(1-blend)+(sy/elapsed)*blend;
+                                    lastScrollTime=now; velocitySamples++; scrollDistance+=Math.hypot(dx,dy);
+                                }
                             } else {
                                 root.clearWord();
                                 moveEvents++;
@@ -517,6 +545,7 @@ ShellRoot {
                         previousCount=n; lastX=x; lastY=y;
                     }
                     function resetGesture() {
+                        stopMomentum(); clearVelocity();
                         if (scrolling) root.send({type:"scrollEnd"});
                         if (tapDragging) root.send({type:"button",button:272,state:0});
                         tapDragging=false; dragPointId=-1; lastTapTime=-1000;
@@ -537,7 +566,29 @@ ShellRoot {
                         scrollDirections[axis]=direction; scrollReversals[axis]=0;
                         return accumulated;
                     }
-                    onPressed: { pressEvents++; }
+                    function clearVelocity() {
+                        scrollVX=0; scrollVY=0; lastScrollTime=0; velocitySamples=0; scrollDistance=0;
+                    }
+                    function stopMomentum() {
+                        if (momentum.running) { momentum.stop(); root.send({type:"scrollEnd"}); }
+                    }
+                    function startMomentum(now) {
+                        if (!root.inertiaEnabled || workspaceGesture || peakCount>2 || velocitySamples<2 || scrollDistance<12 || now-lastScrollTime>70) return false;
+                        // A restrained tail: scale down release velocity and cap both axes.
+                        scrollVX=Math.max(-0.8,Math.min(0.8,scrollVX*0.65));
+                        scrollVY=Math.max(-0.8,Math.min(0.8,scrollVY*0.65));
+                        if (Math.hypot(scrollVX,scrollVY)<0.012) return false;
+                        momentumStarted=now; momentumLast=now; momentum.restart(); return true;
+                    }
+                    function tickMomentum() {
+                        let now=Date.now(), elapsed=now-momentumLast;
+                        if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>80 || now-momentumStarted>300 || Math.hypot(scrollVX,scrollVY)<0.006) { stopMomentum(); return; }
+                        if (elapsed<=0) return;
+                        let decay=Math.exp(-elapsed/85);
+                        root.send({type:"scroll",x:scrollVX*85*(1-decay),y:scrollVY*85*(1-decay)});
+                        scrollVX*=decay; scrollVY*=decay; momentumLast=now;
+                    }
+                    onPressed: { stopMomentum(); pressEvents++; }
                     onUpdated: { updateEvents++; }
                     // Use the completed event's active list once, not intermediate
                     // pressed/released snapshots while Qt updates its point pool.

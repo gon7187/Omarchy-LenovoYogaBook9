@@ -52,7 +52,7 @@ def layout_monitor():
             time.sleep(2)
 
 SETTINGS_PATH = Path.home()/'.config/yoga-panel/settings.json'
-DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18, 'predictionEnabled':True, 'autocorrectEnabled':True}
+DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18, 'predictionEnabled':True, 'autocorrectEnabled':True, 'inertiaEnabled':True}
 LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.03,1.0)}
 
 def valid_settings(data):
@@ -70,6 +70,9 @@ def valid_settings(data):
     correction=data.get('autocorrectEnabled',True)
     if type(correction) is not bool: raise ValueError('Invalid autocorrect setting')
     result['autocorrectEnabled']=correction
+    inertia=data.get('inertiaEnabled',True)
+    if type(inertia) is not bool: raise ValueError('Invalid inertia setting')
+    result['inertiaEnabled']=inertia
     return result
 
 def load_settings():

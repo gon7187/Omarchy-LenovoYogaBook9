@@ -12,6 +12,8 @@ function harness() {
     const sent = [];
     let now=1000;
     const c = vm.createContext({samples:0, histogram:[0,0,0,0,0,0],
+        scrollVX:0,scrollVY:0,lastScrollTime:0,velocitySamples:0,scrollDistance:0,momentumStarted:0,momentumLast:0,
+        momentum:{running:false,restart(){this.running=true},stop(){this.running=false}},
         previousCount:0, positions:{}, began:0, travel:0, peakCount:0,
         lastX:0,lastY:0,moveEvents:0,scrollEvents:0,
         lastSampleTime:0,lastTapTime:-1000,lastTapX:0,lastTapY:0,tapDragging:false,dragPointId:-1,
@@ -77,7 +79,7 @@ for(const [x,y] of [[20,0],[0,150],[130,140]]) {
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
-const keys=vm.createContext({predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
+const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
 vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),keys);
 keys.typeKey('Tab');
 assert.deepEqual(Array.from(keys.last.mods),['logo','shift']);
@@ -111,3 +113,28 @@ console.log('PASS: reverse jitter, deliberate reversal, scroll end, no lift-off 
 h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,102),p(1,200,102)]);h.sample([]);
 assert(!h.sent.some(e=>e.click),'A small scroll must not also right-click');
+
+function flick(h) {
+ h.c.root.inertiaEnabled=true;h.c.root.opened=true;h.c.root.scrollSpeed=.09;
+ h.sample([p(0,100,100),p(1,200,100)]);
+ for(let y=120;y<=180;y+=20)h.sample([p(0,100,y),p(1,200,y)]);
+ h.sample([]);
+}
+h=harness();flick(h);assert.equal(h.c.momentum.running,true);
+let distances=[];
+while(h.c.momentum.running){h.advance(16);let before=h.sent.length;h.c.tickMomentum();if(h.sent.length>before&&h.sent.at(-1).type==='scroll')distances.push(-h.sent.at(-1).y);}
+assert(distances.length>2&&distances.length<20);
+assert(distances.every((v,i)=>v>0&&(!i||v<distances[i-1])),'Tail decays without reversal');
+assert.equal(h.sent.at(-1).type,'scrollEnd');
+h=harness();flick(h);let before=h.sent.length;h.sample([p(0,200,200)]);
+assert.equal(h.c.momentum.running,false);assert.equal(h.sent[before].type,'scrollEnd');
+h=harness();flick(h);h.c.resetGesture();assert.equal(h.c.momentum.running,false);
+h=harness();h.c.root.inertiaEnabled=true;h.c.root.opened=true;
+h.sample([p(0,100,100),p(1,200,100)]);h.sample([p(0,100,120),p(1,200,120)]);h.sample([p(0,100,140),p(1,200,140)]);h.advance(100);h.sample([]);
+assert.equal(h.c.momentum.running,false,'Pause before release prevents coasting');
+h=harness();flick(h);h.advance(200);h.c.tickMomentum();assert.equal(h.c.momentum.running,false,'A stalled UI cannot emit a jump');
+h=harness();h.c.root.scrollSpeed=.09;
+h.sample([p(0,100,100),p(1,200,100)]);h.sample([p(0,100,120),p(1,200,120)]);
+let first=h.sent.at(-1).y;h.c.root.scrollSpeed=.18;h.sample([p(0,100,140),p(1,200,140)]);
+assert(Math.abs(h.sent.at(-1).y-2*first)<1e-9,'Speed changes affect the very next motion');
+console.log('PASS: short decaying inertia, immediate touch/cancel stop, paused lift, stalled timer, live sensitivity');
