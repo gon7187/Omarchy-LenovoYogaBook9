@@ -6,6 +6,7 @@ Rectangle {
     property real textSize: label.length > 3 ? 17 : 24
     property bool selected: false
     property bool repeatable: false
+    property bool activateOnRelease: false
     property bool down: false
     signal activated()
     onVisibleChanged: if (!visible) reset()
@@ -25,10 +26,11 @@ Rectangle {
         onPressedChanged: {
             if (pressed) {
                 key.down = true;
-                key.activated();
+                if (!key.activateOnRelease) key.activated();
                 if (key.repeatable) delay.restart();
             } else key.reset();
         }
+        onTapped: if (key.activateOnRelease) key.activated()
         onCanceled: key.reset()
     }
     function reset() { down = false; delay.stop(); repeater.stop(); }

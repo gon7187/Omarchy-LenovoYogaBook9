@@ -13,7 +13,7 @@ assert.equal(layout.character(layout.upper[0],true,true,true),'й');
 const qml=fs.readFileSync(process.argv[2] || `${__dirname}/shell.qml`,'utf8');
 const sent=[];
 let now=1000;
-const root=vm.createContext({voiceSession:false,russian:true,shift:false,alt:false,control:false,logo:false,
+const root=vm.createContext({languagePending:false,languageRequest:0,keyboardLanguage:"",languageGuard:{restart(){}},voiceSession:false,russian:true,shift:false,alt:false,control:false,logo:false,
  predictionEnabled:true,wordPrefix:'',suggestions:[],predictionRequest:0,lastTypedAt:0,
  predictTimer:{restart(){}},Date:{now:()=>now},send:e=>sent.push(e)});
 vm.runInContext(qml.slice(qml.indexOf('function clearWord('),qml.indexOf('function typeKey(key)')),root);
@@ -43,3 +43,19 @@ root.voiceSession=true;root.voiceRussian=true;root.russian=true;
 root.switchLanguage();assert.equal(root.voiceRussian,false);
 root.finishVoice();assert.equal(sent.at(-1).language,'en');
 console.log('PASS: dictation restores chosen language and respects explicit switches');
+
+root.languagePending=false;root.voiceSession=false;root.russian=true;root.keyboardLanguage='ru';
+root.shift=true;root.alt=true;
+let count=sent.length;
+for(let i=0;i<100;i++) root.applySystemLanguage('ru');
+assert.equal(sent.length,count,'Repeated notifications must not echo commands');
+assert.equal(root.shift,true);assert.equal(root.alt,true);
+root.switchLanguage();const first=root.languageRequest;
+root.applySystemLanguage('ru');assert.equal(root.russian,false,'Stale event cannot revert requested EN');
+root.switchLanguage();const second=root.languageRequest;
+root.languageGuard.interval=1500;root.acknowledgeLanguage({requestId:first});
+assert.equal(root.languageGuard.interval,1500,'Old acknowledgment cannot unlock a newer switch');
+root.acknowledgeLanguage({requestId:second});assert.equal(root.languageGuard.interval,120);
+root.languagePending=false;root.applySystemLanguage('en');assert.equal(root.russian,false);
+assert.equal(sent.at(-1).type,'keyboardGroup');
+console.log('PASS: no layout echo, modifier retention, stale events, rapid switch acknowledgments, external layout sync');

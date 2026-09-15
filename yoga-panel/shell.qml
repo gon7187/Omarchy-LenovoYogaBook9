@@ -9,6 +9,10 @@ ShellRoot {
     id: root
     property bool opened: false
     property bool russian: true
+    property bool languagePending: false
+    property int languageRequest: 0
+    property string keyboardLanguage: ""
+    Timer { id: languageGuard; interval: 1500; onTriggered: root.languagePending=false }
     property bool shift: false
     property bool caps: false
     property bool control: false
@@ -23,7 +27,7 @@ ShellRoot {
         voiceSession=false; voiceSawBusy=false;
         russian=voiceRussian;
         clearWord();
-        send({type:"language",language:russian ? "ru" : "en"});
+        requestLanguage();
         status="Готово";
     }
     Timer { id: voiceSettled; interval: 350; onTriggered: root.finishVoice() }
@@ -100,9 +104,30 @@ ShellRoot {
         if (!word.startsWith(original)) for (let i=0;i<original.length;i++) send({type:"key",key:"BackSpace",mods:[]});
         for (let ch of suffix) send({type:"text",text:ch,mods:[]});
     }
+    function requestLanguage() {
+        languageRequest++; languagePending=true;
+        keyboardLanguage=russian ? "ru" : "en";
+        languageGuard.interval=1500; languageGuard.restart();
+        send({type:"language",language:keyboardLanguage,requestId:languageRequest});
+    }
+    function acknowledgeLanguage(message) {
+        if (message.requestId!==languageRequest) return;
+        // Drain the compositor's per-device notifications from this command.
+        languageGuard.interval=120; languageGuard.restart();
+    }
+    function applySystemLanguage(language) {
+        if (voiceSession || languagePending) return;
+        let target=language==="ru";
+        if (russian!==target) { russian=target; shift=false; alt=false; }
+        // Same-language notifications must not reset modifiers or echo g forever.
+        if (keyboardLanguage!==language) {
+            keyboardLanguage=language;
+            send({type:"keyboardGroup",language:language});
+        }
+    }
     function switchLanguage() {
         russian=!russian; if (voiceSession) voiceRussian=russian; shift=false; alt=false; control=false; logo=false; clearWord();
-        send({type:"language",language:russian ? "ru" : "en"});
+        requestLanguage();
     }
     function toggleShift() { if (alt) switchLanguage(); else shift=!shift; }
     function toggleAlt() { if (shift) switchLanguage(); else alt=!alt; }
@@ -162,10 +187,8 @@ ShellRoot {
                                 if (message.voice==="processing" && root.voiceState==="idle" && root.voiceSawBusy) voiceSettled.restart();
                             }
                         }
-                        if (message.language && !root.voiceSession) {
-                            root.russian=message.language==="ru"; root.shift=false; root.alt=false;
-                            root.send({type:"keyboardGroup",language:message.language});
-                        }
+                        if (message.languageAck) root.acknowledgeLanguage(message);
+                        if (message.language) root.applySystemLanguage(message.language);
                         if (message.suggestions && root.predictionEnabled && message.requestId===root.predictionRequest && message.prefix===root.wordPrefix)
                             root.suggestions=message.suggestions;
                         if (s) {
@@ -323,7 +346,7 @@ ShellRoot {
                         onFinished: { root.clearWord(); root.send({type:"voice",action:"stop"}); }
                         onAborted: root.send({type:"voice",action:"cancel"})
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: root.russian ? "RU / EN" : "EN / RU"; textSize: 18; onActivated: root.switchLanguage() }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: root.russian ? "RU / en" : "ru / EN"; activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
                     ColumnLayout {
                         Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; spacing: 4

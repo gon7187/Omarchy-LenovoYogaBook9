@@ -167,6 +167,7 @@ def main():
                     if kind == 'language':
                         result=subprocess.run(['hyprctl','switchxkblayout','all',index],capture_output=True,text=True,timeout=3,check=True)
                         if result.stdout.strip()!='ok': raise ValueError('Layout switch failed')
+                        emit({'languageAck':True,'requestId':e.get('requestId')})
                 elif kind == 'workspace':
                     result = subprocess.run(workspace_command(e['direction']),capture_output=True,text=True,timeout=3,check=True)
                     if result.stdout.strip() != 'ok':
