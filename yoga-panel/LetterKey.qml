@@ -31,13 +31,13 @@ Key {
         anchors.left: parent.left; anchors.bottom: parent.bottom
         anchors.leftMargin: 16; anchors.bottomMargin: 9
         text: key.symbols.en
-        color: "#f1f5fc"; font.pixelSize: 25
+        color: "#f1f5fc"; font.pixelSize: 32; font.weight: Font.Medium
     }
     Text {
         visible: !/^[a-z]$/i.test(key.symbols.en)
         anchors.right: parent.right; anchors.top: parent.top
         anchors.rightMargin: 10; anchors.topMargin: 5
         text: key.russianActive ? key.symbols.ruShift : key.symbols.enShift
-        color: key.shifted ? "#f1f5fc" : "#8091a9"; font.pixelSize: 13
+        color: key.shifted ? "#f1f5fc" : "#a5b5cb"; font.pixelSize: 21
     }
 }

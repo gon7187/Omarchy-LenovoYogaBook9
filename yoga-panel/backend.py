@@ -9,8 +9,10 @@ import os
 import math
 import socket
 import time
+import signal
 from prediction import Predictor
 from autocorrect import Autocorrect
+from voice import Voice
 
 OUTPUT_LOCK = threading.Lock()
 def emit(value):
@@ -109,9 +111,17 @@ def keyboard_args(event):
         args += ['--', text]
     return args
 
+def stop_on_signal(signum, frame):
+    # Quickshell/systemd terminate us with SIGTERM during reload or shutdown.
+    # Raising exits through finally so a held microphone cannot be abandoned.
+    raise SystemExit(0)
+
 def main():
+    signal.signal(signal.SIGTERM,stop_on_signal)
+    signal.signal(signal.SIGINT,stop_on_signal)
     predictor=Predictor()
     corrector=Autocorrect(predictor)
+    voice=Voice()
     pointer = subprocess.Popen([str(Path(__file__).parent/'build/yoga-pointer')], stdin=subprocess.PIPE, text=True)
     keyboard = subprocess.Popen([str(Path(__file__).parent/'build/yoga-keyboard')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     def keyboard_status():
@@ -126,7 +136,18 @@ def main():
             try:
                 e = json.loads(line)
                 kind = e.get('type')
-                if kind == 'resetWord':
+                if kind == 'voice':
+                    corrector.reset()
+                    try:
+                        action=e.get('action')
+                        if action not in ('start','stop','cancel'): raise ValueError('Invalid voice action')
+                        getattr(voice,action)()
+                        emit({'voice':'recording' if voice.owned else 'processing' if action=='stop' else 'idle'})
+                    except (OSError,ValueError,subprocess.SubprocessError):
+                        try: voice.cancel()
+                        except (OSError,subprocess.SubprocessError): pass
+                        emit({'voice':'error'})
+                elif kind == 'resetWord':
                     corrector.reset()
                 elif kind == 'settings':
                     save_settings(e['values'])
@@ -171,6 +192,8 @@ def main():
             except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError):
                 print('input-error', flush=True)
     finally:
+        try: voice.cancel()
+        except (OSError,subprocess.SubprocessError): pass
         try:
             keyboard.stdin.close()
             keyboard.wait(timeout=2)

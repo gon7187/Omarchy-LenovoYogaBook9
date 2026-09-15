@@ -18,17 +18,19 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dry-run',action='store_true')
     parser.add_argument('--no-start',action='store_true')
+    parser.add_argument('--previous-app',type=Path,help='Previous application directory when migrating a development installation')
     args=parser.parse_args()
     destinations={
         SOURCE/'bin/yoga-panel':HOME/'.local/bin/yoga-panel',
         SOURCE/'systemd/yoga-panel.service':HOME/'.config/systemd/user/yoga-panel.service',
+        SOURCE.parent/'bin/yoga-recovery':HOME/'.local/bin/yoga-recovery',
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
     }
     if args.dry_run:
         print('Build and install application:',TARGET)
         for destination in destinations.values(): print('Install:',destination)
-        print('Back up existing files; enable panel and brightness synchronization services.')
+        print('Back up existing files; enable panel and brightness synchronization services; install Omarchy post-update check.')
         return
     for command in ['g++','gcc','pkg-config','wayland-scanner','quickshell','hyprctl','brightnessctl']:
         if not shutil.which(command): raise SystemExit('Missing dependency: '+command)
@@ -40,7 +42,8 @@ def main():
         run('bash','build.sh',cwd=app)
         run('bash','build-gesture.sh',cwd=app)
         subprocess.run(['systemctl','--user','stop','yoga-panel.service'],check=False)
-        subprocess.run(['hyprctl','plugin','unload',str(TARGET/'build/yoga-panel-gesture.so')],check=False)
+        for old_app in {TARGET,args.previous_app} - {None}:
+            subprocess.run(['hyprctl','plugin','unload',str(old_app/'build/yoga-panel-gesture.so')],check=False)
         backup.mkdir(parents=True)
         if TARGET.exists(): shutil.move(str(TARGET),str(backup/'app'))
         shutil.move(str(app),str(TARGET))
@@ -53,6 +56,8 @@ def main():
     run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service')
     if not args.no_start:
         run('systemctl','--user','restart','yoga-brightness-sync.service','yoga-panel.service')
+    if shutil.which('omarchy'):
+        run('omarchy','hook','install','post-update',str(SOURCE.parent/'config/omarchy/hooks/90-yoga-check'))
     print('Installed. Previous files:',backup)
     print('Open with ~/.local/bin/yoga-panel show')
 

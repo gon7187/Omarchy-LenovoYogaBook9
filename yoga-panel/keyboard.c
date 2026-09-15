@@ -72,14 +72,18 @@ int main(void) {
         xkb_keycode_t found=0;
         xkb_layout_index_t group=0;
         xkb_level_index_t level=0;
-        for (xkb_keycode_t key=xkb_keymap_min_keycode(map);key<=xkb_keymap_max_keycode(map)&&!found;key++) {
-            xkb_layout_index_t groups=xkb_keymap_num_layouts_for_key(map,key);
-            for (xkb_layout_index_t offset=0;offset<groups&&!found;offset++) {
-                xkb_layout_index_t g=(last_group+offset)%groups;
+        // Search the entire selected layout before trying another layout.
+        // Searching both groups per key picked US period before Russian period.
+        for (xkb_layout_index_t offset=0;offset<2&&!found;offset++) {
+            xkb_layout_index_t wanted=(last_group+offset)%2;
+            for (xkb_keycode_t key=xkb_keymap_min_keycode(map);key<=xkb_keymap_max_keycode(map)&&!found;key++) {
+                xkb_layout_index_t groups=xkb_keymap_num_layouts_for_key(map,key);
+                xkb_layout_index_t g=groups==1 ? 0 : wanted;
+                if (g>=groups) continue;
                 for (xkb_level_index_t l=0;l<2&&!found;l++) {
                     const xkb_keysym_t *syms;
                     int n=xkb_keymap_key_get_syms_by_level(map,key,g,l,&syms);
-                    if (n==1 && syms[0]==symbol) {found=key;group=g;level=l;}
+                    if (n==1 && syms[0]==symbol) {found=key;group=groups==1 ? last_group : g;level=l;}
                 }
             }
         }
@@ -87,7 +91,7 @@ int main(void) {
         // Neutral keys (space, Backspace, arrows) must preserve the previous
         // language even when XKB stores their identical symbol only in group 0.
         if (symbol == 0x20 || named) group=last_group;
-        last_group=group;
+        // A fallback symbol must not change the user-selected language.
         uint32_t mods=level ? mask(map,XKB_MOD_NAME_SHIFT) : 0;
         if (mod&1) mods|=mask(map,XKB_MOD_NAME_CTRL);
         if (mod&2) mods|=mask(map,XKB_MOD_NAME_ALT);
@@ -96,7 +100,7 @@ int main(void) {
         zwp_virtual_keyboard_v1_modifiers(keyboard,mods,0,0,group);
         zwp_virtual_keyboard_v1_key(keyboard,now(),found-8,WL_KEYBOARD_KEY_STATE_PRESSED);
         zwp_virtual_keyboard_v1_key(keyboard,now(),found-8,WL_KEYBOARD_KEY_STATE_RELEASED);
-        zwp_virtual_keyboard_v1_modifiers(keyboard,0,0,0,group);
+        zwp_virtual_keyboard_v1_modifiers(keyboard,0,0,0,last_group);
         if (wl_display_roundtrip(display)<0) break;
     }
     zwp_virtual_keyboard_v1_modifiers(keyboard,0,0,0,0);

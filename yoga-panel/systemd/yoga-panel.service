@@ -6,6 +6,7 @@ StartLimitIntervalSec=60
 StartLimitBurst=3
 
 [Service]
+ExecStartPre=/usr/bin/python3 %h/.local/share/yoga-panel/ensure-runtime.py
 ExecStartPre=/usr/bin/python3 %h/.local/share/yoga-panel/ensure-plugin.py
 ExecStart=/usr/bin/quickshell -p %h/.local/share/yoga-panel --no-duplicate
 TimeoutStartSec=90

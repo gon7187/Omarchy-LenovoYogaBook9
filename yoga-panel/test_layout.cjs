@@ -13,7 +13,7 @@ assert.equal(layout.character(layout.upper[0],true,true,true),'й');
 const qml=fs.readFileSync(process.argv[2] || `${__dirname}/shell.qml`,'utf8');
 const sent=[];
 let now=1000;
-const root=vm.createContext({russian:true,shift:false,alt:false,control:false,logo:false,
+const root=vm.createContext({voiceSession:false,russian:true,shift:false,alt:false,control:false,logo:false,
  predictionEnabled:true,wordPrefix:'',suggestions:[],predictionRequest:0,lastTypedAt:0,
  predictTimer:{restart(){}},Date:{now:()=>now},send:e=>sent.push(e)});
 vm.runInContext(qml.slice(qml.indexOf('function clearWord('),qml.indexOf('function typeKey(key)')),root);
@@ -35,3 +35,11 @@ for (const c of 'буду провирят ') root.typeText(c);
 assert.equal(sent.filter(e=>e.type==='text').at(-1).autocorrect,true);
 assert.equal(sent.filter(e=>e.type==='text').at(-1).language,'ru');
 console.log('PASS: hidden suggestions preserve word tracking and autocorrect');
+vm.runInContext(qml.slice(qml.indexOf('function finishVoice()'),qml.indexOf('    Timer { id: voiceSettled')),root);
+root.voiceSession=true;root.voiceRussian=true;root.russian=false;
+root.finishVoice();assert.equal(root.russian,true);assert.equal(root.voiceSession,false);
+assert.equal(sent.at(-1).language,'ru');
+root.voiceSession=true;root.voiceRussian=true;root.russian=true;
+root.switchLanguage();assert.equal(root.voiceRussian,false);
+root.finishVoice();assert.equal(sent.at(-1).language,'en');
+console.log('PASS: dictation restores chosen language and respects explicit switches');

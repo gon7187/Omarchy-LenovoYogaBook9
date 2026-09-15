@@ -14,6 +14,37 @@ ShellRoot {
     property bool control: false
     property bool alt: false
     property bool logo: false
+    property bool voiceSession: false
+    property bool voiceRussian: true
+    property bool voiceSawBusy: false
+    property string voiceState: "idle"
+    function finishVoice() {
+        if (!voiceSession) return;
+        voiceSession=false; voiceSawBusy=false;
+        russian=voiceRussian;
+        clearWord();
+        send({type:"language",language:russian ? "ru" : "en"});
+        status="Готово";
+    }
+    Timer { id: voiceSettled; interval: 350; onTriggered: root.finishVoice() }
+    Process {
+        id: voiceMonitor
+        command: ["voxtype","status","--follow","--format","json"]
+        running: true
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    let state=JSON.parse(data).class;
+                    root.voiceState=state;
+                    if (!root.voiceSession) return;
+                    if (state==="recording" || state==="transcribing" || state==="processing") {
+                        root.voiceSawBusy=true; voiceSettled.stop();
+                        root.status=state==="recording" ? "Говори…" : "Распознаю…";
+                    } else if (state==="idle" && root.voiceSawBusy && !micKey.holding) voiceSettled.restart();
+                } catch (e) {}
+            }
+        }
+    }
     property bool drag: false
     property bool settingsOpen: false
     property bool settingsLoaded: false
@@ -70,7 +101,7 @@ ShellRoot {
         for (let ch of suffix) send({type:"text",text:ch,mods:[]});
     }
     function switchLanguage() {
-        russian=!russian; shift=false; alt=false; control=false; logo=false; clearWord();
+        russian=!russian; if (voiceSession) voiceRussian=russian; shift=false; alt=false; control=false; logo=false; clearWord();
         send({type:"language",language:russian ? "ru" : "en"});
     }
     function toggleShift() { if (alt) switchLanguage(); else shift=!shift; }
@@ -104,6 +135,7 @@ ShellRoot {
         send({type:"button",button:button,state:0});
     }
     function closePanel() {
+        micKey.cancel();
         clearWord();
         pad.resetGesture();
         send({type:"release"}); drag = false; opened = false;
@@ -120,8 +152,17 @@ ShellRoot {
                     try {
                         let s=JSON.parse(data).settings;
                         let message=JSON.parse(data);
-                        if (message.focusChanged) root.clearWord();
-                        if (message.language) {
+                        if (message.focusChanged) { micKey.cancel(); root.clearWord(); }
+                        if (message.voice) {
+                            if (message.voice==="error") {
+                                micKey.holding=false; root.finishVoice(); root.status="Диктовка недоступна или занята";
+                            } else if (message.voice==="idle") root.finishVoice();
+                            else {
+                                root.status=message.voice==="recording" ? "Говори…" : "Распознаю…";
+                                if (message.voice==="processing" && root.voiceState==="idle" && root.voiceSawBusy) voiceSettled.restart();
+                            }
+                        }
+                        if (message.language && !root.voiceSession) {
                             root.russian=message.language==="ru"; root.shift=false; root.alt=false;
                             root.send({type:"keyboardGroup",language:message.language});
                         }
@@ -275,6 +316,14 @@ ShellRoot {
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt() }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: root.russian ? "Русский  ·  пробел" : "English  ·  space"; onActivated: root.typeText(" ") }
+                    MicKey {
+                        id: micKey
+                        Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true
+                        onStarted: { voiceSettled.stop(); root.voiceRussian=root.russian; root.voiceSession=true; root.voiceSawBusy=false; root.clearWord(); root.shift=false; root.control=false; root.alt=false; root.logo=false; root.send({type:"voice",action:"start"}); }
+                        onFinished: { root.clearWord(); root.send({type:"voice",action:"stop"}); }
+                        onAborted: root.send({type:"voice",action:"cancel"})
+                    }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: root.russian ? "RU / EN" : "EN / RU"; textSize: 18; onActivated: root.switchLanguage() }
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
                     ColumnLayout {
                         Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; spacing: 4
