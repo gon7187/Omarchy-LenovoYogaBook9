@@ -1,0 +1,13 @@
+#!/bin/bash
+# Which physical speakers make sound? Play music, run this, listen.
+# Speaker Playback Switch (numid=7) drives pin 0x17, Bass Speaker Playback
+# Switch (numid=9) drives pin 0x14. Both are switched back on at the end.
+set -uo pipefail
+STEP="${1:-8}"
+sw() { amixer -c 0 cset numid="$1" "$2" >/dev/null; }
+say() { echo "$1"; notify-send -t $((STEP * 1000)) "Тест динамиков" "$1"; }
+restore() { sw 7 on; sw 9 on; say "Готово, оба канала включены"; }
+trap 'restore; exit' INT TERM EXIT
+say "1/3 Оба (как обычно)";              sw 7 on;  sw 9 on;  sleep "$STEP"
+say "2/3 Только пин 0x17 (Speaker)";      sw 7 on;  sw 9 off; sleep "$STEP"
+say "3/3 Только пин 0x14 (Bass Speaker)"; sw 7 off; sw 9 on;  sleep "$STEP"

@@ -198,7 +198,27 @@ A stereo stream reaches one DAC pair, so the woofers receive nothing. Both pins 
 
 So the workaround below is not a stopgap awaiting something better — it is the correct answer until the kernel is patched.
 
-### Fix
+### On the SOF driver the 4-channel sink never engages
+
+This machine runs the SOF DSP driver (`sof-hda-generic-2ch.tplg`), whose `HDA Analog` PCM is fixed at two channels. WirePlumber accepts `audio.channels = 4`, but PipeWire logs `spa.alsa: given audio.channels 4 out of range:2-2` and opens the device in stereo, so the upmix below does nothing.
+
+It is not needed either. In 2-channel mode the codec shares the stream onto **both** speaker DACs. With anything playing:
+
+```
+$ awk '/^Node 0x0[23] /,/^Node 0x04/' /proc/asound/card0/codec#0 | grep -E '^Node|Converter'
+Node 0x02 [Audio Output]    Converter: stream=1, channel=0   <- woofers
+Node 0x03 [Audio Output]    Converter: stream=1, channel=0   <- tweeters
+```
+
+The woofers already receive full-range stereo. What remains of the thin sound is tone, not routing: use [`62-yoga-dolby-eq.conf`](config/pipewire/62-yoga-dolby-eq.conf) with `yoga-volume` (below), and do not install `51-yoga-bass-speakers.conf`. The file stays for machines on the legacy `snd_hda_intel` driver.
+
+A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC error`. The `CALI_DATA` UEFI variable holds valid-looking data for two amps, but its timestamp and CRC fields are zero, so the kernel discards it and the amps run uncalibrated.
+
+[`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot.
+
+**This was the missing bass.** With the EQ confirmed working digitally (+13 dB at 100 Hz measured on the sink monitor) there was still no low end by ear, with or without processing, and no amp profile changed that. After `yoga-amp-calib fix` and a reboot the `V1 CRC error` is gone and the bass is back. The uncalibrated amps were evidently running a conservative protection model that cut the low end.
+
+### Fix (legacy snd_hda_intel only)
 
 Rather than patch the kernel, open the sink with four channels so the surround pair carries audio, and upmix to generate it. Drop [this file](config/wireplumber/51-yoga-bass-speakers.conf) into `~/.config/wireplumber/wireplumber.conf.d/` and restart WirePlumber:
 
@@ -591,10 +611,12 @@ done
 hyprctl reload
 hyprctl configerrors   # must print nothing
 
-# Quirk 5 — bass speakers
-install -Dm644 config/wireplumber/51-yoga-bass-speakers.conf \
-  ~/.config/wireplumber/wireplumber.conf.d/51-yoga-bass-speakers.conf
-systemctl --user restart wireplumber
+# Quirk 5 — speaker EQ and sliding bass (no 4-channel sink on SOF, see Quirk 5)
+install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
+  ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
+install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
+systemctl --user restart pipewire pipewire-pulse wireplumber
+wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 
 # Emulated touchpad: drop the phantom right button (root-owned path; libinput
 # reads only /etc/libinput, and applies quirks when a device is added, so this
@@ -787,13 +809,15 @@ grep "disabling EV_KEY BTN_RIGHT" $XDG_RUNTIME_DIR/hypr/*/hyprland.log
 
 libinput logs the `kernel bug: clickpad advertising right button` notice *after* applying the quirk, because that line describes the hardware rather than libinput's resulting state. Its absence is not the success signal — it persists when the quirk works.
 
-### Speaker amp calibration fails
+### Speaker amp calibration fails — fixed
 
 ```
 tas2781-hda i2c-TIAS2781:00: tas2781_apply_calib: V1 CRC error
 ```
 
-The TAS2781 smart amp rejects its calibration blob at every boot. Audio works, but an uncalibrated smart amp runs conservative, so expect thin and quiet output. The loaded topology is also the generic fallback rather than anything machine-specific:
+The `CALI_DATA` UEFI variable carries real calibration for both amps, but its timestamp and CRC fields are zero, so the kernel's V1 check rejects it and the amps run a conservative default. That was the thin, bass-less sound. `bin/yoga-amp-calib fix` writes the missing CRC (backing up the variable first); after a reboot the error is gone and the bass is back. See Quirk 5.
+
+The loaded topology is still the generic fallback rather than anything machine-specific:
 
 ```
 loading topology: intel/sof-tplg/sof-hda-generic-2ch.tplg
