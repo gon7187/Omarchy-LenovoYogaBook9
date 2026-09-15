@@ -18,6 +18,8 @@
 
 - Все пользовательские плагины бара (`gon7187.monitor`, `gon7187.power`,
   `gon7187.sysstats`) и раскладка бара [`shell.json`](config/omarchy/shell.json).
+- Vivaldi с нативным Wayland ([флаги](config/vivaldi/vivaldi-stable.conf));
+  доустановленные пакеты — [packages.txt](config/packages.txt).
 - zram + swapfile + гибернация при закрытой крышке — [SWAP.md](SWAP.md).
 
 **[Установка и использование](yoga-panel/README.md)** ·

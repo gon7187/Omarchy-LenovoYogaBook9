@@ -1,5 +1,11 @@
 # Изменения форка
 
+## 2026-09-15 — Vivaldi
+
+- Установлены `vivaldi` и `vivaldi-ffmpeg-codecs` из extra; список пакетов в `config/packages.txt`.
+- `~/.config/vivaldi-stable.conf`: нативный Wayland, gnome-libsecret, жест «назад» тачпадом.
+  Ставится установщиком и сохраняется `yoga-recovery`.
+
 ## 2026-09-15 — своп, сон и резервная копия бара
 
 - SWAP.md: текущая схема zram 15.3 ГБ + swapfile 15.3 ГБ, почему не 32 ГБ.

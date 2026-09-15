@@ -1,0 +1,4 @@
+# Packages installed on top of Omarchy (official repos).
+# pkexec pacman -S --needed $(grep -v "^#" config/packages.txt)
+vivaldi
+vivaldi-ffmpeg-codecs
