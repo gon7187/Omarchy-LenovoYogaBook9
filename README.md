@@ -1,5 +1,16 @@
 # Omarchy on the Lenovo Yoga Book 9i
 
+## This fork: lower-screen keyboard and touchpad
+
+Fork of [pybe/Omarchy-LenovoYogaBook9](https://github.com/pybe/Omarchy-LenovoYogaBook9).
+Adds **[Yoga Panel](yoga-panel/README.md)**: RU/EN keyboard with Super, a full-width
+touchpad, tap-to-drag, two-finger right click/scroll, three-finger workspace
+swipes, saved sensitivity settings, and automatic plugin rebuilding after ABI
+updates. Also adds a user service to keep both internal backlights synchronized.
+
+**[Установка и жесты →](yoga-panel/README.md)** · Tested hardware: 82YQ / 13IRU8.
+The original hardware documentation follows below.
+
 Notes and config for running [Omarchy](https://omarchy.org/) on a **Lenovo Yoga Book 9 13IRU8** (machine type `82YQ`) — the dual-screen laptop with two 13.3" 2880x1800 OLED panels.
 
 Omarchy installs and runs fine on this machine, but the dual-screen hardware hits a few things that no amount of clicking around will fix, because they need config that doesn't exist by default. This documents each one: what you see, what's actually causing it, and the fix.

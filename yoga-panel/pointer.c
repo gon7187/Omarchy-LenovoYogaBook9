@@ -1,0 +1,78 @@
+#define _POSIX_C_SOURCE 200809L
+#include <wayland-client.h>
+#include <linux/input-event-codes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include "virtual-pointer.h"
+
+static struct zwlr_virtual_pointer_manager_v1 *manager;
+static void global(void *data, struct wl_registry *registry, uint32_t id,
+                   const char *name, uint32_t version) {
+    (void)data;
+    if (!strcmp(name, "zwlr_virtual_pointer_manager_v1"))
+        manager = wl_registry_bind(registry, id,
+            &zwlr_virtual_pointer_manager_v1_interface, version > 2 ? 2 : version);
+}
+static void removed(void *data, struct wl_registry *registry, uint32_t id) {
+    (void)data; (void)registry; (void)id;
+}
+static uint32_t now(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint32_t)(t.tv_sec * 1000 + t.tv_nsec / 1000000);
+}
+int main(int argc, char **argv) {
+    struct wl_display *display = wl_display_connect(NULL);
+    if (!display) { fputs("Cannot connect to Wayland\n", stderr); return 1; }
+    struct wl_registry *registry = wl_display_get_registry(display);
+    const struct wl_registry_listener listener = {global, removed};
+    wl_registry_add_listener(registry, &listener, NULL);
+    if (wl_display_roundtrip(display) < 0 || !manager) {
+        fputs("Virtual pointer protocol unavailable\n", stderr); return 1;
+    }
+    if (argc > 1 && !strcmp(argv[1], "--check")) {
+        puts("Wayland virtual pointer available"); wl_display_disconnect(display); return 0;
+    }
+    struct zwlr_virtual_pointer_v1 *pointer =
+        zwlr_virtual_pointer_manager_v1_create_virtual_pointer(manager, NULL);
+    char line[160], op;
+    double x, y;
+    unsigned button, state, ax, ay, width, height;
+    while (fgets(line, sizeof(line), stdin)) {
+        uint32_t time = now();
+        if (sscanf(line, "%c %lf %lf", &op, &x, &y) == 3 &&
+            (op == 'm' || op == 's') && isfinite(x) && isfinite(y) &&
+            fabs(x) < 4096 && fabs(y) < 4096) {
+            if (op == 'm') {
+                zwlr_virtual_pointer_v1_motion(pointer, time,
+                    wl_fixed_from_double(x), wl_fixed_from_double(y));
+            } else {
+                zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_FINGER);
+                if (x) zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, wl_fixed_from_double(x));
+                if (y) zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(y));
+            }
+        } else if (sscanf(line, "a %u %u %u %u", &ax, &ay, &width, &height) == 4 && width && height && ax <= width && ay <= height) {
+            zwlr_virtual_pointer_v1_motion_absolute(pointer,time,ax,ay,width,height);
+        } else if (sscanf(line, "b %u %u", &button, &state) == 2 &&
+                   (button == BTN_LEFT || button == BTN_RIGHT) && state <= 1) {
+            zwlr_virtual_pointer_v1_button(pointer, time, button, state);
+        } else if (line[0] == 'r') {
+            zwlr_virtual_pointer_v1_button(pointer, time, BTN_LEFT, 0);
+            zwlr_virtual_pointer_v1_button(pointer, time, BTN_RIGHT, 0);
+            zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
+        } else continue;
+        zwlr_virtual_pointer_v1_frame(pointer);
+        if (wl_display_roundtrip(display) < 0) break;
+    }
+    zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, 0);
+    zwlr_virtual_pointer_v1_button(pointer, now(), BTN_RIGHT, 0);
+    zwlr_virtual_pointer_v1_frame(pointer);
+    zwlr_virtual_pointer_v1_destroy(pointer);
+    wl_display_flush(display);
+    wl_display_disconnect(display);
+    return 0;
+}
