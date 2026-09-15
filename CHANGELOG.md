@@ -1,5 +1,10 @@
 # Изменения форка
 
+## 2026-09-16 — отправлено в pybe
+
+- [PR #14](https://github.com/pybe/Omarchy-LenovoYogaBook9/pull/14): калибровка усилителей, басы, SOF 2 канала (ветка `speaker-calibration`).
+- [PR #15](https://github.com/pybe/Omarchy-LenovoYogaBook9/pull/15): Yoga Panel с английским README, без личных настроек (ветка `yoga-panel`).
+
 ## 2026-09-16 — звук: эквалайзер вместо нерабочего 4-канального режима
 
 - Выяснено: на драйвере SOF PCM динамиков только 2 канала, 4-канальный синк из
