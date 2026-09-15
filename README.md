@@ -20,6 +20,8 @@
   `gon7187.sysstats`) и раскладка бара [`shell.json`](config/omarchy/shell.json).
 - Vivaldi — браузер по умолчанию ([mimeapps.list](config/mimeapps.list)), с нативным Wayland ([флаги](config/vivaldi/vivaldi-stable.conf));
   доустановленные пакеты — [packages.txt](config/packages.txt).
+- Claude Desktop (с Cowork) и ChatGPT/Codex Desktop; CLI claude и codex через
+  [mise](config/mise/config.toml).
 - zram + swapfile + гибернация при закрытой крышке — [SWAP.md](SWAP.md).
 
 **[Установка и использование](yoga-panel/README.md)** ·

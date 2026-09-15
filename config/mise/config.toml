@@ -1,0 +1,11 @@
+[tools]
+claude = "latest"
+codex = "latest"
+direnv = "latest"
+gh = "latest"
+just = "latest"
+node = "26.8.1"
+uv = "latest"
+
+[settings.upgrade]
+auto_prune = false

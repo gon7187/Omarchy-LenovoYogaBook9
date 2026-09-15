@@ -1,4 +1,16 @@
-# Packages installed on top of Omarchy (official repos).
-# pkexec pacman -S --needed $(grep -v "^#" config/packages.txt)
+# Packages installed on top of Omarchy.
+# Repo packages (extra, omarchy):
+#   pkexec pacman -S --needed $(sed -n '/^# repo/,/^# aur/p' config/packages.txt | grep -v '^#')
+# AUR packages:
+#   yay -S --needed --sudo pkexec $(sed -n '/^# aur/,$p' config/packages.txt | grep -v '^#')
+# Cowork in Claude Desktop also needs: sudo usermod -aG kvm $USER, then re-login.
+# CLI tools (claude, codex, gh, uv, ...) come from mise: config/mise/config.toml
+# repo
 vivaldi
 vivaldi-ffmpeg-codecs
+claude-desktop
+qemu-system-x86
+edk2-ovmf
+virtiofsd
+# aur
+chatgpt-desktop

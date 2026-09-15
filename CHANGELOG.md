@@ -1,5 +1,14 @@
 # Изменения форка
 
+## 2026-09-15 — Claude и Codex
+
+- `claude-desktop` из репозитория omarchy; для Cowork доставлены `qemu-system-x86`,
+  `edk2-ovmf`, `virtiofsd` (explicit, чтобы не удалялись как сироты), пользователь в группе `kvm`.
+- `chatgpt-desktop` из AUR (официальный .deb OpenAI, включает Codex).
+- CLI через mise: Claude Code 2.1.273, Codex 0.154.0; `config/mise/config.toml` в репо
+  и в `yoga-recovery`.
+- `config/packages.txt` разделён на пакеты из репозиториев и AUR.
+
 ## 2026-09-15 — Vivaldi
 
 - Установлены `vivaldi` и `vivaldi-ffmpeg-codecs` из extra; список пакетов в `config/packages.txt`.
