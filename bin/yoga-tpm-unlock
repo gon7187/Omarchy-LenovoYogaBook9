@@ -1,0 +1,89 @@
+#!/bin/bash
+# Unlock the LUKS root from the TPM so boot needs no passphrase.
+#
+#   yoga-tpm-unlock status    what is enrolled and configured
+#   yoga-tpm-unlock install   enrol TPM, switch initramfs to systemd, rebuild
+#   yoga-tpm-unlock remove    undo all of it (passphrase-only boot)
+#
+# Deliberately NO PCR binding (--tpm2-pcrs=): the key is released on every
+# boot, so firmware or BIOS changes never bring the prompt back. This protects
+# a drive pulled out of the machine, not a stolen laptop. With Secure Boot see
+# SECUREBOOT.md for the PCR 7 variant.
+#
+# The passphrase keyslot is kept. If TPM unlock ever fails, systemd asks for
+# the passphrase (USB keyboard needed: no Bluetooth in the initramfs), and the
+# Snapshots boot entry still carries the old initramfs.
+#
+# Run in a terminal: it asks for sudo and, once, the current disk passphrase.
+set -euo pipefail
+
+LIMINE=/etc/default/limine
+DROPIN=/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf
+BACKUP=/etc/default/limine.yoga-before-tpm
+
+partuuid="$(cat "$LIMINE" "$BACKUP" 2>/dev/null | grep -o 'cryptdevice=PARTUUID=[^:]*' | head -1 | sed 's/.*PARTUUID=//' || true)"
+[[ -n $partuuid ]] || { echo "cryptdevice=PARTUUID=... not found in $LIMINE" >&2; exit 1; }
+device="$(readlink -f "/dev/disk/by-partuuid/$partuuid")"
+luks_uuid="$(sudo cryptsetup luksUUID "$device")"
+
+status() {
+  echo "LUKS device: $device (UUID $luks_uuid)"
+  sudo cryptsetup luksDump "$device" | sed -n '/^Tokens:/,/^Digests:/p' | grep -E "systemd-tpm2|^\s+[0-9]+:" || true
+  [[ -f $DROPIN ]] && echo "initramfs: sd-encrypt drop-in present" || echo "initramfs: busybox encrypt (no TPM)"
+  grep -q "rd.luks.name=$luks_uuid" "$LIMINE" && echo "cmdline: rd.luks.name" || echo "cmdline: cryptdevice"
+}
+
+install() {
+  systemd-cryptenroll --tpm2-device=list | grep /dev/tpm >/dev/null || { echo "No TPM2 device" >&2; exit 1; }
+
+  if sudo cryptsetup luksDump "$device" | grep systemd-tpm2 >/dev/null; then
+    echo "TPM2 token already enrolled"
+  else
+    echo "Enter the current disk passphrase to add a TPM keyslot (the passphrase stays valid):"
+    sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs= "$device"
+  fi
+
+  # Omarchy's hook list is busybox-based; translate it to systemd equivalents
+  # after every other drop-in (zz-numlock included) has run.
+  sudo tee "$DROPIN" >/dev/null <<'EOF'
+# yoga-tpm-unlock: systemd initramfs so sd-encrypt can use the TPM2 token.
+# resume is handled by systemd-hibernate-resume-generator from resume=.
+_yoga_hooks=()
+for _yoga_h in "${HOOKS[@]}"; do
+  case $_yoga_h in
+    udev) _yoga_hooks+=(systemd) ;;
+    keymap) _yoga_hooks+=(sd-vconsole) ;;
+    consolefont | resume | numlock) ;;
+    encrypt) _yoga_hooks+=(sd-encrypt) ;;
+    btrfs-overlayfs) _yoga_hooks+=(sd-btrfs-overlayfs) ;;
+    *) _yoga_hooks+=("$_yoga_h") ;;
+  esac
+done
+HOOKS=("${_yoga_hooks[@]}")
+unset _yoga_hooks _yoga_h
+EOF
+
+  if grep "cryptdevice=PARTUUID=$partuuid:root" "$LIMINE" >/dev/null; then
+    sudo cp -n "$LIMINE" "$BACKUP"
+    sudo sed -i "s|cryptdevice=PARTUUID=$partuuid:root|rd.luks.name=$luks_uuid=root rd.luks.options=$luks_uuid=tpm2-device=auto|" "$LIMINE"
+  fi
+
+  sudo limine-mkinitcpio
+  sudo grep -q "rd.luks.name=$luks_uuid" /boot/limine.conf || { echo "limine.conf was not updated" >&2; exit 1; }
+  echo "Done. Reboot: the disk should unlock without a prompt."
+}
+
+remove() {
+  sudo systemd-cryptenroll --wipe-slot=tpm2 "$device" || true
+  sudo rm -f "$DROPIN"
+  [[ -f $BACKUP ]] && sudo cp "$BACKUP" "$LIMINE"
+  sudo limine-mkinitcpio
+  echo "Removed. Next boot asks for the passphrase again."
+}
+
+case "${1:-status}" in
+  status) status ;;
+  install) install ;;
+  remove) remove ;;
+  *) sed -n '2,8p' "$0"; exit 1 ;;
+esac

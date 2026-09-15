@@ -1,5 +1,16 @@
 # Изменения форка
 
+## 2026-09-16 — загрузка без пароля и засыпание усилителей
+
+- `bin/yoga-tpm-unlock`: разблокировка LUKS через TPM2 без привязки к PCR (без Secure Boot,
+  защита только от вынутого SSD — осознанный выбор). Добавляет слот TPM, пароль остаётся;
+  initramfs переводится на systemd/sd-encrypt drop-in'ом `zz-sd-encrypt.conf`,
+  `cryptdevice=` → `rd.luks.name=` в `/etc/default/limine` (копия `limine.yoga-before-tpm`).
+  `remove` откатывает.
+- `config/udev/90-yoga-tas2781-no-runtime-pm.rules`: усилители TAS2781 не уходят в runtime
+  suspend. После пробуждения драйвер не перезаливает программу и калибровку, если номер
+  программы не менялся, — звук был хорош после загрузки и портился после паузы.
+
 ## 2026-09-16 — температура в баре
 
 - `gon7187.sysstats`: `CPU 8% 69°C  RAM 56%`. Датчики ищутся по имени hwmon (`coretemp`
