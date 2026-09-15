@@ -1,5 +1,5 @@
 import unittest
-from backend import workspace_command
+from backend import minimize_command, workspace_command
 class WorkspaceTests(unittest.TestCase):
     def command(self,current,direction,extra=()):
         monitors=[{'name':'eDP-1','activeWorkspace':{'id':current}},
@@ -20,4 +20,8 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):workspace_command('next',[],[])
     def test_invalid_direction(self):
         with self.assertRaises(ValueError):workspace_command('bad',[],[])
+    def test_minimize_targets_upper_screen(self):
+        self.assertEqual(minimize_command('down'),['hyprctl','eval','require("hypr.minimize").minimize_all("eDP-1")'])
+        self.assertIn('restore_all("eDP-1")',minimize_command('up')[2])
+        with self.assertRaises(ValueError):minimize_command('sideways')
 if __name__=='__main__': unittest.main()

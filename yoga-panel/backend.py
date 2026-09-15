@@ -121,6 +121,13 @@ def workspace_command(direction, monitors=None, workspaces=None):
     code+='hl.dispatch(hl.dsp.focus({ workspace = "'+str(target)+'" }))'
     return ['hyprctl','eval',code]
 
+def minimize_command(direction):
+    """Hide or bring back upper-screen windows via ~/.config/hypr/minimize.lua."""
+    function={'down':'minimize_all','up':'restore_all'}.get(direction)
+    if function is None:
+        raise ValueError('Invalid minimize direction')
+    return ['hyprctl','eval','require("hypr.minimize").'+function+'("eDP-1")']
+
 def keyboard_args(event):
     args = ['wtype']
     for mod in event.get('mods', []):
@@ -195,6 +202,10 @@ def main():
                         result=subprocess.run(['hyprctl','switchxkblayout','all',index],capture_output=True,text=True,timeout=3,check=True)
                         if result.stdout.strip()!='ok': raise ValueError('Layout switch failed')
                         emit({'languageAck':True,'requestId':e.get('requestId')})
+                elif kind == 'minimize':
+                    result = subprocess.run(minimize_command(e['direction']),capture_output=True,text=True,timeout=3,check=True)
+                    if result.stdout.strip() != 'ok':
+                        raise ValueError('Minimize dispatch failed')
                 elif kind == 'workspace':
                     result = subprocess.run(workspace_command(e['direction']),capture_output=True,text=True,timeout=3,check=True)
                     if result.stdout.strip() != 'ok':

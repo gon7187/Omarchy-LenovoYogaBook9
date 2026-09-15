@@ -429,6 +429,8 @@ ShellRoot {
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
                                     root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
+                                else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
+                                    root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
                             } else if (!scrolling && !endedDrag && previousCount && now-began < 350 && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);
@@ -468,7 +470,7 @@ ShellRoot {
                             if (distance > 0.05) moving.push({dx:dx,dy:dy,distance:distance});
                         }
                         positions=next;
-                        if (workspaceGesture && n<3 && Math.abs(swipeX)<30)
+                        if (workspaceGesture && n<3 && Math.max(Math.abs(swipeX),Math.abs(swipeY))<30)
                             workspaceGesture=false;
                         if (workspaceGesture) {
                             // Accumulate only movement while all three fingers

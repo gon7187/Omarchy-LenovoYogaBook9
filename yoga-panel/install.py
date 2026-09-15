@@ -27,6 +27,7 @@ def main():
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
+        SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
            for path in (SOURCE.parent/'config/omarchy/plugins').glob('*/*') if path.is_file()},
     }
@@ -58,6 +59,10 @@ def main():
                 shutil.copy2(destination,saved)
             shutil.copy2(source,destination)
             if destination.parent.name=='bin': destination.chmod(0o755)
+    hyprland=HOME/'.config/hypr/hyprland.lua'
+    if hyprland.exists() and 'require("hypr.minimize")' not in hyprland.read_text():
+        with hyprland.open('a') as config:
+            config.write('\n-- Three-finger swipe down/up: minimize/restore all windows on the workspace.\nrequire("hypr.minimize")\n')
     run('systemctl','--user','daemon-reload')
     run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service')
     if not args.no_start:

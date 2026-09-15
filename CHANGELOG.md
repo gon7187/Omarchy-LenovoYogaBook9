@@ -6,6 +6,10 @@
   `special:minimized-<id>`, три пальца вверх — возвращаются. Своя заначка у каждого
   воркспейса. Подключается `require("hypr.minimize")` в `hyprland.lua`; сохраняется
   `yoga-recovery` (шаблон `.config/hypr/*.lua`).
+- Виртуальный тачпад yoga-panel сам разбирает трёхпальцевые жесты, поэтому вертикальный
+  свайп добавлен и туда: `shell.qml` шлёт `minimize`, `backend.py` вызывает
+  `minimize_all/restore_all("eDP-1")`. Установщик ставит `minimize.lua` и дописывает `require`.
+- Тап двумя пальцами = ПКМ уже работал (yoga-panel и tap-to-click Hyprland), без изменений.
 
 ## 2026-09-15 — Claude и Codex
 

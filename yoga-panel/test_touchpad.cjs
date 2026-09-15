@@ -73,9 +73,14 @@ for(const [delta,direction] of [[-140,'previous'],[140,'next']]) {
  h.sample([p(0,300+delta,100),p(1,400+delta,100)]);h.sample([]);
  assert.deepEqual(h.sent,[{type:'workspace',direction}],'Swipe emits once with no pointer movement, scroll or click');
 }
-for(const [x,y] of [[20,0],[0,150],[130,140]]) {
+for(const [x,y] of [[20,0],[0,20],[130,140]]) {
  h=harness();h.sample(three(300));h.sample(three(300+x,100+y));h.sample([]);
- assert.deepEqual(h.sent,[],'Short, vertical or diagonal gestures do not switch');
+ assert.deepEqual(h.sent,[],'Short or diagonal gestures do nothing');
+}
+for(const [delta,direction] of [[150,'down'],[-150,'up']]) {
+ h=harness();h.sample(three(300));h.sample(three(300,100+delta));
+ h.sample([p(0,300,100+delta),p(1,400,100+delta)]);h.sample([]);
+ assert.deepEqual(h.sent,[{type:'minimize',direction}],'Vertical swipe minimizes or restores once, without scroll or click');
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
@@ -87,7 +92,7 @@ assert.equal(keys.logo,false);assert.equal(keys.shift,false);
 keys.logo=true;keys.typeText('3');
 assert.equal(keys.last.text,'3');assert.deepEqual(Array.from(keys.last.mods),['logo']);
 keys.typeText('4');assert.equal(keys.last.mods.length,0,'Super is one-shot');
-console.log('PASS: right click, horizontal swipes, staggered release, rejected gestures, cancel, Super combinations');
+console.log('PASS: right click, horizontal and vertical swipes, staggered release, rejected gestures, cancel, Super combinations');
 
 h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,120),p(1,200,120)]);
