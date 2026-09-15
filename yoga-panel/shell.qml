@@ -63,7 +63,7 @@ ShellRoot {
     onPredictionEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
     property real pointerSpeed: 2.4
     property real pointerAccel: 0.6
-    property real scrollSpeed: 0.18
+    property real scrollSpeed: 0.018
     property bool inertiaEnabled: true
     property real inertiaStrength: 0.65
     property real inertiaDuration: 650
@@ -414,6 +414,8 @@ ShellRoot {
                     property bool scrolling: false
                     property var scrollDirections: ({x:0,y:0})
                     property var scrollReversals: ({x:0,y:0})
+                    property var reversalSamples: ({x:0,y:0})
+                    property var reversalStarted: ({x:0,y:0})
                     property real scrollVX: 0
                     property real scrollVY: 0
                     property real lastScrollTime: 0
@@ -439,6 +441,7 @@ ShellRoot {
                         if (!n) {
                             if (scrolling && !startMomentum(now)) root.send({type:"scrollEnd"});
                             scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
+                        reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
                                     root.send({type:"workspace",direction:swipeX<0 ? "next" : "previous"});
@@ -546,19 +549,30 @@ ShellRoot {
                         workspaceGesture=false; swipeX=0; swipeY=0;
                         scrolling=false;
                         scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
+                        reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
                     }
                     function filterScroll(delta, axis) {
                         if (!delta) return 0;
                         let direction=Math.sign(delta);
                         if (!scrollDirections[axis] || direction===scrollDirections[axis]) {
-                            scrollDirections[axis]=direction; scrollReversals[axis]=0; return delta;
+                            scrollDirections[axis]=direction; scrollReversals[axis]=0;
+                            reversalSamples[axis]=0; reversalStarted[axis]=0;
+                            return delta;
                         }
+                        // A lifting fingertip often rolls backwards. Stop coasting
+                        // on this axis until continued motion confirms a reversal.
+                        if (axis==="x") scrollVX=0; else scrollVY=0;
+                        if (!reversalSamples[axis]) reversalStarted[axis]=Date.now();
+                        reversalSamples[axis]++;
                         scrollReversals[axis]+=delta;
-                        if (Math.abs(scrollReversals[axis])<4) return 0;
-                        let accumulated=scrollReversals[axis];
+                        if (Math.abs(scrollReversals[axis])<10 || reversalSamples[axis]<3 ||
+                                Date.now()-reversalStarted[axis]<32) return 0;
                         scrollDirections[axis]=direction; scrollReversals[axis]=0;
-                        return accumulated;
+                        reversalSamples[axis]=0; reversalStarted[axis]=0;
+                        // Do not replay the buffered jitter as one velocity spike.
+                        return delta;
                     }
+
                     function clearVelocity() {
                         scrollVX=0; scrollVY=0; lastScrollTime=0; velocitySamples=0; scrollDistance=0;
                     }

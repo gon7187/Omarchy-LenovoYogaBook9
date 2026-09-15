@@ -10,7 +10,7 @@ ColumnLayout {
         Text { text: "Под себя"; color: "#f0f6ff"; font.pixelSize: 23; font.weight: Font.DemiBold }
         Text { text: "Сохраняется автоматически"; color: "#8296ae"; font.pixelSize: 12; Layout.leftMargin: 12 }
         Item { Layout.fillWidth: true }
-        Key { label: "Сбросить тачпад"; textSize: 12; radius: 8; Layout.preferredWidth: 150; Layout.fillHeight: true; onActivated: { settings.pointerSpeed=2.4; settings.pointerAccel=.6; settings.scrollSpeed=.18; settings.inertiaEnabled=true; settings.inertiaStrength=.65; settings.inertiaDuration=650; } }
+        Key { label: "Сбросить тачпад"; textSize: 12; radius: 8; Layout.preferredWidth: 150; Layout.fillHeight: true; onActivated: { settings.pointerSpeed=2.4; settings.pointerAccel=.6; settings.scrollSpeed=.018; settings.inertiaEnabled=true; settings.inertiaStrength=.65; settings.inertiaDuration=650; } }
     }
     RowLayout {
         Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12

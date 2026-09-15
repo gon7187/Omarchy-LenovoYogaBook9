@@ -12,7 +12,7 @@ function harness() {
     const sent = [];
     let now=1000;
     const c = vm.createContext({samples:0, histogram:[0,0,0,0,0,0],
-        scrollVX:0,scrollVY:0,lastScrollTime:0,velocitySamples:0,scrollDistance:0,momentumStarted:0,momentumLast:0,
+        reversalSamples:{x:0,y:0},reversalStarted:{x:0,y:0},scrollVX:0,scrollVY:0,lastScrollTime:0,velocitySamples:0,scrollDistance:0,momentumStarted:0,momentumLast:0,
         momentum:{running:false,restart(){this.running=true},stop(){this.running=false}},
         previousCount:0, positions:{}, began:0, travel:0, peakCount:0,
         lastX:0,lastY:0,moveEvents:0,scrollEvents:0,
@@ -104,6 +104,7 @@ h.sample([p(0,100,120),p(1,200,120)]);
 h.sample([p(0,100,119),p(1,200,119)]);
 assert.equal(h.sent.length,1,'Small reverse release jitter is suppressed');
 h.sample([p(0,100,115),p(1,200,115)]);
+h.sample([p(0,100,108),p(1,200,108)]);
 assert(h.sent.at(-1).y>0,'Intentional reverse scrolling still works');
 h.sample([p(0,100,110)]);h.sample([]);
 assert.equal(h.sent.at(-1).type,'scrollEnd');
@@ -154,3 +155,26 @@ assert(Math.abs(strong.total/short.total-2)<.001);
 console.log('PASS: continuous stop at zero, configurable duration and strength');
 
 h=harness();flick(h,.0018);assert.equal(h.c.momentum.running,true,"Inertia is available at 1% scroll speed");
+
+// Lift-off drift used to switch the captured velocity after just 4 px.
+for (const axis of ['x','y']) for (const sign of [-1,1]) {
+ h=harness(); h.c.root.inertiaEnabled=true; h.c.root.opened=true;
+ const points=v=>[p(0,axis==='x'?v:100,axis==='y'?v:100),p(1,axis==='x'?v+100:200,axis==='y'?v:100)];
+ h.sample(points(100));
+ for(const v of [120,140,160,180]) h.sample(points(100+sign*(v-100)));
+ const before=h.sent.length;
+ h.sample(points(100+sign*75)); h.sample([]);
+ while(h.c.momentum.running){h.advance(16);h.c.tickMomentum();}
+ assert(!h.sent.slice(before).some(e=>e.type==='scroll'&&e[axis]*sign>0),'Lift-off drift must not launch reverse inertia');
+}
+console.log('PASS: lift-off reversal regression on both axes and directions');
+
+for (const sign of [-1,1]) {
+ h=harness();h.c.root.inertiaEnabled=true;h.c.root.opened=true;
+ const points=v=>[p(0,100,100+sign*v),p(1,200,100+sign*v)];
+ for(const v of [0,20,40,60,80,74,68,62,56,50])h.sample(points(v));
+ h.sample([]);assert(h.c.momentum.running);
+ h.advance(16);h.c.tickMomentum();
+ assert(h.sent.at(-1).y*sign>0,'Sustained intentional reversal gets matching inertia');
+}
+console.log('PASS: sustained deliberate reverse scroll retains inertia');
