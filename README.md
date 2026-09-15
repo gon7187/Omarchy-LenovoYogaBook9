@@ -216,6 +216,8 @@ A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC erro
 
 [`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot.
 
+**Calibration is lost again on the first PCM close/open.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and the power-up block on `OPEN`, but `tasdevice_select_tuningprm_cfg` only rewrites the calibration when the DSP configuration number changes ("Unneeded loading dsp conf" otherwise). WirePlumber suspends an idle sink after 5 s, which closes the PCM, so restarting the browser was enough to lose the bass until the next boot. Runtime PM of the amps (`config/udev/90-yoga-tas2781-no-runtime-pm.rules`) is not the trigger; the PCM close is. [`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) sets `session.suspend-timeout-seconds = 0` on the speaker sink so the PCM stays open and the cycle never happens, at some battery cost (codec and DSP stay powered). Toggling `Speaker Config Id` (`amixer -c0 cset numid=5 1; amixer -c0 cset numid=5 0`) forces a configuration reload and re-applies the calibration without a reboot.
+
 **This was the missing bass.** With the EQ confirmed working digitally (+13 dB at 100 Hz measured on the sink monitor) there was still no low end by ear, with or without processing, and no amp profile changed that. After `yoga-amp-calib fix` and a reboot the `V1 CRC error` is gone and the bass is back. The uncalibrated amps were evidently running a conservative protection model that cut the low end.
 
 ### Fix (legacy snd_hda_intel only)
@@ -615,6 +617,8 @@ hyprctl configerrors   # must print nothing
 install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
   ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
 install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
+install -Dm644 config/wireplumber/52-yoga-speakers-keep-open.conf \
+  ~/.config/wireplumber/wireplumber.conf.d/52-yoga-speakers-keep-open.conf
 systemctl --user restart pipewire pipewire-pulse wireplumber
 wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 

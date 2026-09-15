@@ -1,0 +1,9 @@
+# Keep the TAS2781 speaker amps out of runtime suspend.
+#
+# The driver autosuspends them 3 s after playback stops. Runtime resume only
+# calls tasdevice_prmg_load(cur_prog), which is a no-op when the program number
+# is unchanged, so if the amps lost their register state while suspended the
+# DSP program and speaker calibration are never written back: sound is good
+# after boot and thin again after the first pause. System resume does reset
+# and reload everything; runtime resume does not.
+ACTION=="add|bind", SUBSYSTEM=="i2c", KERNEL=="i2c-TIAS2781:00", ATTR{power/control}="on"
