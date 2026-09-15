@@ -8,6 +8,7 @@ class Autocorrect:
 
     def reset(self):
         self.word = ''
+        self.previous_word = ''
         self.undo = None
         self.last = 0
         self.blocked = False
@@ -39,9 +40,10 @@ class Autocorrect:
         char = event['text']
         if char == ' ' and event.get('autocorrect') and self.word and not self.blocked:
             original = self.word
-            try: replacement = self.predictor.correction(original, event.get('language'))
+            try: replacement = self.predictor.correction(original, event.get('language'),self.previous_word)
             except OSError: replacement = None
             self.word = ''
+            self.previous_word = replacement or original
             if replacement:
                 self.undo = (original, replacement)
                 return ['k BackSpace 0']*len(original)+self.text(replacement+' ')
@@ -51,6 +53,8 @@ class Autocorrect:
                 self.blocked = True
             self.word += char
         else:
+            if self.word: self.previous_word = self.word if char==' ' else ''
+            elif char!=' ': self.previous_word = ''
             self.word = ''
             self.blocked = False
         return None

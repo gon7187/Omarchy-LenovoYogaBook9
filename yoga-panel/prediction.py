@@ -62,7 +62,7 @@ class Predictor:
         # Preserve even mixed casing in the characters the user already entered.
         return [prefix + word[len(prefix):] for word in best]
 
-    def corrections(self, word, language, limit=3):
+    def corrections(self, word, language, limit=3, infinitive=False):
         """One insertion, deletion, substitution or adjacent transposition."""
         if language not in ('ru', 'en') or not isinstance(word, str) or not 4 <= len(word) <= 32:
             return []
@@ -79,11 +79,36 @@ class Predictor:
                 edits.add(left+right[1:])
                 edits.update(left+c+right[1:] for c in alphabet)
             if len(right)>1: edits.add(left+right[1]+right[0]+right[2:])
-        ranked = sorted((w for w in edits if w in frequencies), key=lambda w: (-frequencies[w], w))[:limit]
+        candidates = {w for w in edits if w in frequencies}
+        if infinitive:
+            candidates = {w for w in candidates if w.endswith(('ть','ться'))}
+        if not candidates and len(lower)>=5:
+            # Bounded fallback for two mistakes, without generating millions of edits.
+            for candidate in frequencies:
+                if abs(len(candidate)-len(lower))>2: continue
+                if infinitive and not candidate.endswith(('ть','ться')): continue
+                if self.distance(lower,candidate)<=2: candidates.add(candidate)
+        ranked = sorted(candidates, key=lambda w: (-frequencies[w], w))[:limit]
         return [w.upper() if word.isupper() else w.title() if word.istitle() else w for w in ranked]
 
-    def correction(self, word, language):
-        candidates = self.corrections(word, language)
+    @staticmethod
+    def distance(a, b):
+        previous = list(range(len(b)+1))
+        older = None
+        for i, ca in enumerate(a,1):
+            row = [3]*(len(b)+1)
+            row[0] = i
+            for j in range(max(1,i-2),min(len(b),i+2)+1):
+                row[j] = min(previous[j]+1,row[j-1]+1,previous[j-1]+(ca!=b[j-1]))
+                if older is not None and j>1 and ca==b[j-2] and a[i-2]==b[j-1]:
+                    row[j] = min(row[j],older[j-2]+1)
+            if min(row)>2: return 3
+            older,previous = previous,row
+        return previous[-1]
+
+    def correction(self, word, language, previous_word=''):
+        infinitive = language=='ru' and previous_word.lower() in ('буду','будешь','будет','будем','будете','будут')
+        candidates = self.corrections(word, language, infinitive=infinitive)
         if not candidates or (not word.islower() and not word.istitle()): return None
         _, frequencies = self._load(language)
         top = frequencies[candidates[0].lower()]

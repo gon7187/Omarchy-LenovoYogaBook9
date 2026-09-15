@@ -18,6 +18,8 @@ ShellRoot {
     property bool settingsOpen: false
     property bool settingsLoaded: false
     property bool predictionEnabled: true
+    property bool autocorrectEnabled: true
+    onAutocorrectEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
     property string wordPrefix: ""
     property var suggestions: []
     property int predictionRequest: 0
@@ -32,7 +34,7 @@ ShellRoot {
     onScrollSpeedChanged: if (settingsLoaded) saveSettings.restart()
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -52,7 +54,7 @@ ShellRoot {
         wordPrefix=""; suggestions=[]; predictionRequest++;
     }
     function updateWord(char) {
-        if (!predictionEnabled) return;
+        if (!predictionEnabled && !autocorrectEnabled) return;
         if (Date.now()-lastTypedAt>8000) clearWord(true);
         lastTypedAt=Date.now();
         if (/^[a-zа-яё]$/i.test(char)) {
@@ -92,7 +94,7 @@ ShellRoot {
         if (alt) mods.push("alt");
         if (logo) mods.push("logo");
         if (shift && (logo || control || alt)) mods.push("shift");
-        send({type: "text", text: char, mods: mods, autocorrect: predictionEnabled, language: russian ? "ru" : "en"});
+        send({type: "text", text: char, mods: mods, autocorrect: autocorrectEnabled, language: russian ? "ru" : "en"});
         if (control || alt || logo) clearWord(); else updateWord(char);
         shift = false; control = false; alt = false; logo = false;
     }
@@ -129,6 +131,7 @@ ShellRoot {
                             root.settingsLoaded=false;
                             root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed;
                             root.predictionEnabled=s.predictionEnabled ?? true;
+                            root.autocorrectEnabled=s.autocorrectEnabled ?? true;
                             root.settingsLoaded=true;
                         }
                     } catch(e) { root.status="Не удалось загрузить настройки"; }
@@ -144,7 +147,7 @@ ShellRoot {
         function openPanel(): void { root.opened = true; }
         function hide(): void { root.closePanel(); }
         function status(): string { return root.opened ? "open" : "closed"; }
-        function predictionStatus(): string { return JSON.stringify({enabled:root.predictionEnabled,ready:root.suggestions.length,prefixLength:root.wordPrefix.length,requestId:root.predictionRequest,language:root.russian ? "ru" : "en"}); }
+        function predictionStatus(): string { return JSON.stringify({enabled:root.predictionEnabled,autocorrect:root.autocorrectEnabled,ready:root.suggestions.length,prefixLength:root.wordPrefix.length,requestId:root.predictionRequest,language:root.russian ? "ru" : "en"}); }
         function setWords(enabled: bool): void { root.predictionEnabled=enabled; }
         function testPrediction(): void { root.russian=true; root.predictionEnabled=true; root.clearWord(); root.typeText("п"); root.typeText("р"); root.typeText("и"); }
         function acceptFirstPrediction(): void { if (root.suggestions.length) root.completeWord(root.suggestions[0]); }
@@ -205,7 +208,7 @@ ShellRoot {
                 Item { Layout.fillWidth: true }
                 Text { text: root.status; color: "#89a6c9"; font.pixelSize: 12 }
                 Key { Layout.preferredWidth: 90; Layout.fillHeight: true; radius: 7; textSize: 12; label: "✦ Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
-                Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Тачпад"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
+                Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
                 Key { Layout.preferredWidth: 48; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Esc"; onActivated: root.typeKey("Escape") }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
@@ -287,7 +290,8 @@ ShellRoot {
                 Layout.preferredHeight: Math.min(400, panel.height * 0.48)
                 Layout.maximumHeight: Math.min(400, panel.height * 0.48)
                 spacing: 12
-                Text { text: "Настройки тачпада"; color: "#f0f5ff"; font.pixelSize: 25 }
+                Text { text: "Настройки"; color: "#f0f5ff"; font.pixelSize: 25 }
+                Key { Layout.preferredWidth: 320; Layout.preferredHeight: 40; textSize: 16; label: root.autocorrectEnabled ? "✓ Автоисправление по пробелу" : "Автоисправление выключено"; selected: root.autocorrectEnabled; onActivated: root.autocorrectEnabled=!root.autocorrectEnabled }
                 PreferenceRow { label: "Скорость курсора"; value: root.pointerSpeed; minimum: 0.5; maximum: 5; step: 0.1; onAdjusted: value => root.pointerSpeed=value }
                 PreferenceRow { label: "Ускорение"; value: root.pointerAccel; minimum: 0; maximum: 2; step: 0.1; onAdjusted: value => root.pointerAccel=value }
                 PreferenceRow { label: "Скорость прокрутки"; value: root.scrollSpeed; minimum: 0.03; maximum: 1; step: 0.03; onAdjusted: value => root.scrollSpeed=value }

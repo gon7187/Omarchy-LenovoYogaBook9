@@ -21,6 +21,11 @@ class CorrectionTests(unittest.TestCase):
         self.event(dict(type='key',key='BackSpace'))
         self.assertEqual(self.value,'првиет')
         self.type(' ');self.assertEqual(self.value,'првиет ')
+    def test_future_context_two_errors(self):
+        self.type('буду провирят ')
+        self.assertEqual(self.value,'буду проверять ')
+        self.event(dict(type='key',key='BackSpace'))
+        self.assertEqual(self.value,'буду провирят')
     def test_en(self):
         self.type('Helllo ',language='en');self.assertEqual(self.value,'Hello ')
     def test_disabled_known_and_unknown(self):

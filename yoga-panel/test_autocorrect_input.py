@@ -25,12 +25,12 @@ try:
                 raise RuntimeError('Test surface exited before injection')
             
             import json
-            events=[{'type':'text','text':ch,'autocorrect':True,'language':'ru'} for ch in 'првиет ']
+            events=[{'type':'text','text':ch,'autocorrect':True,'language':'ru'} for ch in 'буду провирят ']
             events += [{'type':'key','key':'BackSpace'},{'type':'text','text':'!'}]
             subprocess.run(['python3',str(base/'backend.py')],input=''.join(json.dumps(e)+'\n' for e in events),text=True,check=True,timeout=5)
             sent = True
-        if 'INPUT_TEST:првиет!' in output:
-            assert 'INPUT_TEST:привет ' in output, 'Correction did not reach the field'
+        if 'INPUT_TEST:буду провирят!' in output:
+            assert 'INPUT_TEST:буду проверять ' in output, 'Correction did not reach the field'
             print('PASS: real correction and Backspace undo received by test field')
             break
     else:

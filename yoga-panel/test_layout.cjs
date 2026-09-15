@@ -28,3 +28,10 @@ assert.equal(root.wordPrefix,'');
 root.updateWord('h');root.updateWord('e');now+=9000;
 const n=sent.length;root.completeWord('hello');assert.equal(sent.filter(e=>e.type!=="resetWord").length,sent.slice(0,n).filter(e=>e.type!=="resetWord").length,'Stale completion cannot insert text');
 console.log('PASS: complete RU/EN mappings, punctuation, Caps/Shift, Alt+Shift both orders, safe prefix completion');
+
+vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),root);
+root.predictionEnabled=false;root.autocorrectEnabled=true;root.clearWord();
+for (const c of 'буду провирят ') root.typeText(c);
+assert.equal(sent.filter(e=>e.type==='text').at(-1).autocorrect,true);
+assert.equal(sent.filter(e=>e.type==='text').at(-1).language,'ru');
+console.log('PASS: hidden suggestions preserve word tracking and autocorrect');
