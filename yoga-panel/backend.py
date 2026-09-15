@@ -52,8 +52,8 @@ def layout_monitor():
             time.sleep(2)
 
 SETTINGS_PATH = Path.home()/'.config/yoga-panel/settings.json'
-DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18, 'predictionEnabled':True, 'autocorrectEnabled':True, 'inertiaEnabled':True}
-LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.03,1.0)}
+DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18, 'predictionEnabled':True, 'autocorrectEnabled':True, 'inertiaEnabled':True, 'inertiaStrength':0.65, 'inertiaDuration':650}
+LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.0018,1.0), 'inertiaStrength':(0.15,1.5), 'inertiaDuration':(200,1500)}
 
 def valid_settings(data):
     result = {}

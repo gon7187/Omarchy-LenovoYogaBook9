@@ -19,7 +19,7 @@ function harness() {
         lastSampleTime:0,lastTapTime:-1000,lastTapX:0,lastTapY:0,tapDragging:false,dragPointId:-1,
         workspaceGesture:false,swipeX:0,swipeY:0,scrolling:false,scrollDirections:{x:0,y:0},scrollReversals:{x:0,y:0},
         Date:{now:()=>now},
-        root:{clearWord:()=>{},drag:false,pointerSpeed:1.5,pointerAccel:0,scrollSpeed:0.6,send:e=>sent.push({...e}),click:b=>sent.push({click:b})}});
+        root:{inertiaStrength:.65,inertiaDuration:650,clearWord:()=>{},drag:false,pointerSpeed:1.5,pointerAccel:0,scrollSpeed:0.6,send:e=>sent.push({...e}),click:b=>sent.push({click:b})}});
     vm.runInContext(source, c);
     return {sample:p=>{now+=16;c.sample(p)},sent,c,advance:t=>now+=t};
 }
@@ -114,8 +114,8 @@ h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,102),p(1,200,102)]);h.sample([]);
 assert(!h.sent.some(e=>e.click),'A small scroll must not also right-click');
 
-function flick(h) {
- h.c.root.inertiaEnabled=true;h.c.root.opened=true;h.c.root.scrollSpeed=.09;
+function flick(h,speed=.09) {
+ h.c.root.inertiaEnabled=true;h.c.root.opened=true;h.c.root.scrollSpeed=speed;
  h.sample([p(0,100,100),p(1,200,100)]);
  for(let y=120;y<=180;y+=20)h.sample([p(0,100,y),p(1,200,y)]);
  h.sample([]);
@@ -123,7 +123,7 @@ function flick(h) {
 h=harness();flick(h);assert.equal(h.c.momentum.running,true);
 let distances=[];
 while(h.c.momentum.running){h.advance(16);let before=h.sent.length;h.c.tickMomentum();if(h.sent.length>before&&h.sent.at(-1).type==='scroll')distances.push(-h.sent.at(-1).y);}
-assert(distances.length>2&&distances.length<20);
+assert(distances.length>2&&distances.length<100);
 assert(distances.every((v,i)=>v>0&&(!i||v<distances[i-1])),'Tail decays without reversal');
 assert.equal(h.sent.at(-1).type,'scrollEnd');
 h=harness();flick(h);let before=h.sent.length;h.sample([p(0,200,200)]);
@@ -138,3 +138,19 @@ h.sample([p(0,100,100),p(1,200,100)]);h.sample([p(0,100,120),p(1,200,120)]);
 let first=h.sent.at(-1).y;h.c.root.scrollSpeed=.18;h.sample([p(0,100,140),p(1,200,140)]);
 assert(Math.abs(h.sent.at(-1).y-2*first)<1e-9,'Speed changes affect the very next motion');
 console.log('PASS: short decaying inertia, immediate touch/cancel stop, paused lift, stalled timer, live sensitivity');
+
+assert(distances.at(-1)<distances[0]*.001,'Last motion approaches zero before scrollEnd');
+function tail(duration,strength) {
+ let a=harness();flick(a);a.c.root.inertiaDuration=duration;
+ // Scale the already captured release velocity as a different strength would.
+ a.c.scrollVX*=strength/.65;a.c.scrollVY*=strength/.65;
+ let total=0;let frames=0;
+ while(a.c.momentum.running){a.advance(16);let before=a.sent.length;a.c.tickMomentum();for(const e of a.sent.slice(before))if(e.type==='scroll')total+=Math.abs(e.y);frames++;}
+ return {total,frames};
+}
+let short=tail(300,.65),long=tail(900,.65),strong=tail(300,1.3);
+assert(long.frames>short.frames);assert(Math.abs(long.total/short.total-3)<.001);
+assert(Math.abs(strong.total/short.total-2)<.001);
+console.log('PASS: continuous stop at zero, configurable duration and strength');
+
+h=harness();flick(h,.0018);assert.equal(h.c.momentum.running,true,"Inertia is available at 1% scroll speed");

@@ -65,13 +65,17 @@ ShellRoot {
     property real pointerAccel: 0.6
     property real scrollSpeed: 0.18
     property bool inertiaEnabled: true
+    property real inertiaStrength: 0.65
+    property real inertiaDuration: 650
+    onInertiaStrengthChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
+    onInertiaDurationChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
     onInertiaEnabledChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
     onPointerSpeedChanged: if (settingsLoaded) saveSettings.restart()
     onPointerAccelChanged: if (settingsLoaded) saveSettings.restart()
     onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -198,6 +202,7 @@ ShellRoot {
                         if (s) {
                             root.settingsLoaded=false;
                             root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed; root.inertiaEnabled=s.inertiaEnabled ?? true;
+                            root.inertiaStrength=s.inertiaStrength ?? 0.65; root.inertiaDuration=s.inertiaDuration ?? 650;
                             root.predictionEnabled=s.predictionEnabled ?? true;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
                             root.settingsLoaded=true;
@@ -365,25 +370,13 @@ ShellRoot {
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "→"; repeatable: true; onActivated: root.typeKey("Right") }
                 }
             }
-            ColumnLayout {
+            PanelSettings {
                 visible: root.settingsOpen
+                settings: root
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(400, panel.height * 0.48)
-                Layout.maximumHeight: Math.min(400, panel.height * 0.48)
-                spacing: 12
-                Text { text: "Настройки"; color: "#f0f5ff"; font.pixelSize: 25 }
-                RowLayout {
-                    Layout.fillWidth: true; Layout.preferredHeight: 40; spacing: 12
-                    Key { Layout.preferredWidth: 320; Layout.fillHeight: true; textSize: 16; label: root.autocorrectEnabled ? "✓ Автоисправление по пробелу" : "Автоисправление выключено"; selected: root.autocorrectEnabled; onActivated: root.autocorrectEnabled=!root.autocorrectEnabled }
-                    Key { Layout.preferredWidth: 300; Layout.fillHeight: true; textSize: 16; label: root.inertiaEnabled ? "✓ Инерция прокрутки" : "Инерция выключена"; selected: root.inertiaEnabled; onActivated: root.inertiaEnabled=!root.inertiaEnabled }
-                    Item { Layout.fillWidth: true }
-                }
-                PreferenceRow { label: "Скорость курсора"; value: root.pointerSpeed; minimum: 0.5; maximum: 5; step: 0.1; onAdjusted: value => root.pointerSpeed=value }
-                PreferenceRow { label: "Ускорение"; value: root.pointerAccel; minimum: 0; maximum: 2; step: 0.1; onAdjusted: value => root.pointerAccel=value }
-                ScrollPreference { value: root.scrollSpeed; onAdjusted: value => root.scrollSpeed=value }
-                Text { text: "Ускорение: быстрый жест перемещает курсор дальше. 0 — без ускорения.\nЗначения сохраняются автоматически. Тачпад внизу можно сразу проверить."; color: "#89a6c9"; font.pixelSize: 16 }
-                Key { Layout.preferredWidth: 245; Layout.preferredHeight: 44; label: "Сбросить настройки"; onActivated: { root.pointerSpeed=2.4; root.pointerAccel=0.6; root.scrollSpeed=0.18; root.inertiaEnabled=true; } }
-                Item { Layout.fillHeight: true }
+                Layout.preferredHeight: Math.min(420, panel.height * 0.50)
+                Layout.minimumHeight: 380
+                Layout.maximumHeight: Math.min(420, panel.height * 0.50)
             }
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true
@@ -575,18 +568,24 @@ ShellRoot {
                     function startMomentum(now) {
                         if (!root.inertiaEnabled || workspaceGesture || peakCount>2 || velocitySamples<2 || scrollDistance<12 || now-lastScrollTime>70) return false;
                         // A restrained tail: scale down release velocity and cap both axes.
-                        scrollVX=Math.max(-0.8,Math.min(0.8,scrollVX*0.65));
-                        scrollVY=Math.max(-0.8,Math.min(0.8,scrollVY*0.65));
-                        if (Math.hypot(scrollVX,scrollVY)<0.012) return false;
+                        scrollVX=Math.max(-0.8,Math.min(0.8,scrollVX*root.inertiaStrength));
+                        scrollVY=Math.max(-0.8,Math.min(0.8,scrollVY*root.inertiaStrength));
+                        if (Math.hypot(scrollVX,scrollVY)<0.0001) return false;
                         momentumStarted=now; momentumLast=now; momentum.restart(); return true;
                     }
                     function tickMomentum() {
                         let now=Date.now(), elapsed=now-momentumLast;
-                        if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>80 || now-momentumStarted>300 || Math.hypot(scrollVX,scrollVY)<0.006) { stopMomentum(); return; }
+                        if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>80) { stopMomentum(); return; }
                         if (elapsed<=0) return;
-                        let decay=Math.exp(-elapsed/85);
-                        root.send({type:"scroll",x:scrollVX*85*(1-decay),y:scrollVY*85*(1-decay)});
-                        scrollVX*=decay; scrollVY*=decay; momentumLast=now;
+                        let duration=root.inertiaDuration;
+                        let a=Math.min(1,Math.max(0,(momentumLast-momentumStarted)/duration));
+                        let b=Math.min(1,Math.max(0,(now-momentumStarted)/duration));
+                        // Integrate v(t)=v0*(1-t/T)^3: velocity AND its slope
+                        // reach zero at the end instead of chopping off a live tail.
+                        let distance=duration/4*(Math.pow(1-a,4)-Math.pow(1-b,4));
+                        if (distance>0) root.send({type:"scroll",x:scrollVX*distance,y:scrollVY*distance});
+                        momentumLast=now;
+                        if (b>=1) stopMomentum();
                     }
                     onPressed: { stopMomentum(); pressEvents++; }
                     onUpdated: { updateEvents++; }
