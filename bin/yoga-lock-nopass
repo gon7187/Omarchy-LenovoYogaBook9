@@ -1,0 +1,26 @@
+#!/bin/bash
+# Let the Omarchy lock screen open without the account password.
+#
+#   yoga-lock-nopass install   any non-empty input unlocks (pam_permit)
+#   yoga-lock-nopass remove    restore the saved original PAM config
+#   yoga-lock-nopass check     show which one is active
+#
+# The lock UI ignores an empty submit, so "any character + Enter" is the
+# minimum. The original /etc/pam.d/omarchy-lock-password is kept next to it
+# as .yoga-orig. This removes the lock screen's protection entirely.
+set -euo pipefail
+PAM=/etc/pam.d/omarchy-lock-password
+ORIG=$PAM.yoga-orig
+
+priv() { if [[ -t 0 ]]; then sudo "$@"; else pkexec "$@"; fi; }
+
+case "${1:-check}" in
+  install)
+    priv sh -c "[ -f '$ORIG' ] || cp -p '$PAM' '$ORIG'; printf '%s\n' '#%PAM-1.0' '# yoga-lock-nopass: any input unlocks. Original in $ORIG' 'auth     sufficient pam_permit.so' 'account  include    system-local-login' > '$PAM'"
+    ;;
+  remove)
+    [[ -f $ORIG ]] || { echo "No backup at $ORIG" >&2; exit 1; }
+    priv sh -c "mv -f '$ORIG' '$PAM'"
+    ;;
+esac
+grep -q "yoga-lock-nopass" "$PAM" && echo "lock screen: no password (pam_permit)" || echo "lock screen: account password"

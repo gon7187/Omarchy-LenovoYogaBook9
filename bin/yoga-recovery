@@ -54,7 +54,7 @@ def snapshot():
     # System-owned customization is recorded, never automatically installed as root.
     service=Path('/etc/systemd/system/yoga-sensor-keepalive.service')
     if service.is_file():shutil.copy2(service,target/'system-sensor-keepalive.reference')
-    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules')):
+    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules'),('system-lock-pam.reference','/etc/pam.d/omarchy-lock-password')):
         if Path(path).is_file():shutil.copy2(path,target/name)
     print(target)
     return target
