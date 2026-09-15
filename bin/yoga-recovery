@@ -19,7 +19,7 @@ PATTERNS=(
     '.config/wireplumber/wireplumber.conf.d/*yoga*',
     '.config/omarchy/extensions/omarchy-menu.jsonc',
     '.config/omarchy/shell.json', '.config/omarchy/plugins/*/*',
-    '.config/vivaldi-stable.conf',
+    '.config/vivaldi-stable.conf', '.config/mimeapps.list',
     '.config/omarchy/hooks/post-update.d/*yoga*',
     '.local/share/applications/*yoga*.desktop',
     '.local/share/yoga-panel/**/*',

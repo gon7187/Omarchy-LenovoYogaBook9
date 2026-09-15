@@ -5,6 +5,9 @@
 - Установлены `vivaldi` и `vivaldi-ffmpeg-codecs` из extra; список пакетов в `config/packages.txt`.
 - `~/.config/vivaldi-stable.conf`: нативный Wayland, gnome-libsecret, жест «назад» тачпадом.
   Ставится установщиком и сохраняется `yoga-recovery`.
+- Vivaldi — браузер по умолчанию (`xdg-settings`, http/https/html/about/unknown);
+  `mimeapps.list` сохранён в `config/` и в `yoga-recovery`. Веб-приложения Omarchy
+  (`omarchy launch webapp`) по-прежнему открываются в Chromium.
 
 ## 2026-09-15 — своп, сон и резервная копия бара
 
