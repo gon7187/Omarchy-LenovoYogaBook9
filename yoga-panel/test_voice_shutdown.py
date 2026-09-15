@@ -13,7 +13,7 @@ class ShutdownTests(unittest.TestCase):
         source=Path(__file__).parent
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);(base/'build').mkdir()
-            for name in ('backend.py','voice.py','prediction.py','autocorrect.py'):
+            for name in ('backend.py','voice.py','prediction.py','autocorrect.py','defaults.json'):
                 shutil.copy2(source/name,base/name)
             helper='#!/usr/bin/python3\nimport sys\nprint("ready",flush=True)\nfor line in sys.stdin: pass\n'
             for name in ('yoga-keyboard','yoga-pointer'):

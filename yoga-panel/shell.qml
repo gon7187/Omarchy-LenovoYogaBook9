@@ -52,7 +52,7 @@ ShellRoot {
     property bool drag: false
     property bool settingsOpen: false
     property bool settingsLoaded: false
-    property bool predictionEnabled: true
+    property bool predictionEnabled: false
     property bool autocorrectEnabled: true
     onAutocorrectEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
     property string wordPrefix: ""
@@ -62,10 +62,10 @@ ShellRoot {
     onRussianChanged: clearWord()
     onPredictionEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
     property real pointerSpeed: 2.4
-    property real pointerAccel: 0.6
-    property real scrollSpeed: 0.018
+    property real pointerAccel: 0.1
+    property real scrollSpeed: 0.9
     property bool inertiaEnabled: true
-    property real inertiaStrength: 0.65
+    property real inertiaStrength: 1.5
     property real inertiaDuration: 650
     onInertiaStrengthChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
     onInertiaDurationChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
@@ -202,8 +202,8 @@ ShellRoot {
                         if (s) {
                             root.settingsLoaded=false;
                             root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed; root.inertiaEnabled=s.inertiaEnabled ?? true;
-                            root.inertiaStrength=s.inertiaStrength ?? 0.65; root.inertiaDuration=s.inertiaDuration ?? 650;
-                            root.predictionEnabled=s.predictionEnabled ?? true;
+                            root.inertiaStrength=s.inertiaStrength ?? 1.5; root.inertiaDuration=s.inertiaDuration ?? 650;
+                            root.predictionEnabled=s.predictionEnabled ?? false;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
                             root.settingsLoaded=true;
                         }
@@ -454,7 +454,7 @@ ShellRoot {
                             if (!scrolling) clearCarry();
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
-                                    root.send({type:"workspace",direction:swipeX<0 ? "next" : "previous"});
+                                    root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
                             } else if (!scrolling && !endedDrag && previousCount && now-began < 350 && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);

@@ -1,16 +1,26 @@
 # Omarchy on the Lenovo Yoga Book 9i
 
-## This fork: lower-screen keyboard and touchpad
+## Yoga Panel — клавиатура и тачпад на нижнем экране
 
-Fork of [pybe/Omarchy-LenovoYogaBook9](https://github.com/pybe/Omarchy-LenovoYogaBook9).
-Adds **[Yoga Panel](yoga-panel/README.md)**: bilingual RU/EN key legends, offline
-word completion, Alt+Shift layout synchronization, Super, a full-width
-touchpad, tap-to-drag, two-finger right click/scroll, three-finger workspace
-swipes, saved sensitivity settings, and automatic plugin rebuilding after ABI
-updates. Also adds a user service to keep both internal backlights synchronized.
+Форк [pybe/Omarchy-LenovoYogaBook9](https://github.com/pybe/Omarchy-LenovoYogaBook9)
+для **Lenovo Yoga Book 9 13IRU8 / 82YQ**, Omarchy и Hyprland.
 
-**[Установка и жесты →](yoga-panel/README.md)** · Tested hardware: 82YQ / 13IRU8.
-The original hardware documentation follows below.
+- Клавиатура с двумя подписями RU/EN, Alt+Shift, Esc, Super и голосовым вводом.
+- Тачпад во всю ширину: выделение двойным тапом, правый клик двумя пальцами,
+  переключение рабочих столов тремя, плавная прокрутка с разгоном повторными свайпами.
+- Офлайн-словари, подсказки и автоисправление; отдельные настройки скорости и инерции.
+- Синхронизация яркости двух экранов, автозапуск, пересборка плагина после обновлений,
+  резервное копирование и восстановление пользовательских настроек.
+
+**[Установка и использование](yoga-panel/README.md)** ·
+**[Сохранённый профиль владельца](yoga-panel/defaults.json)** ·
+**[История изменений](CHANGELOG.md)**
+
+Профиль по умолчанию: курсор 2,4× / ускорение 0,1; прокрутка 500%;
+инерция 150% / 0,65 с. Подсказки выключены, автоисправление включено.
+Установщик сохраняет уже настроенные пользовательские значения.
+
+Ниже сохранена исходная документация автора по оборудованию.
 
 Notes and config for running [Omarchy](https://omarchy.org/) on a **Lenovo Yoga Book 9 13IRU8** (machine type `82YQ`) — the dual-screen laptop with two 13.3" 2880x1800 OLED panels.
 

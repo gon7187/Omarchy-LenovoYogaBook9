@@ -19,6 +19,18 @@ def emit(value):
     with OUTPUT_LOCK:
         print(json.dumps(value) if isinstance(value,dict) else value,flush=True)
 
+def active_language():
+    """Read the active keyboard rather than a stale auxiliary-device event."""
+    try:
+        devices=json.loads(subprocess.check_output(['hyprctl','devices','-j'],text=True,timeout=2))['keyboards']
+        keyboard=next((k for k in devices if k.get('main')),None)
+        layout=keyboard.get('active_keymap','') if keyboard else ''
+        if 'Russian' in layout: return 'ru'
+        if 'English' in layout: return 'en'
+    except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError):
+        pass
+    return None
+
 def layout_monitor():
     """Observe layout/focus notifications only; never forward window titles."""
     path=Path(os.environ.get('XDG_RUNTIME_DIR',f'/run/user/{os.getuid()}'))/'hypr'/os.environ.get('HYPRLAND_INSTANCE_SIGNATURE','')/'.socket2.sock'
@@ -27,15 +39,8 @@ def layout_monitor():
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as stream:
                 stream.connect(str(path))
                 last_focus=None
-                try:
-                    devices=json.loads(subprocess.check_output(['hyprctl','devices','-j'],text=True,timeout=2))['keyboards']
-                    keyboard=next((k for k in devices if k.get('main')),None)
-                    if keyboard:
-                        layout=keyboard.get('active_keymap','')
-                        if 'Russian' in layout: emit({'language':'ru'})
-                        elif 'English' in layout: emit({'language':'en'})
-                except (OSError,ValueError,KeyError,subprocess.SubprocessError):
-                    pass
+                language=active_language()
+                if language: emit({'language':language})
                 with stream.makefile() as events:
                     for event in events:
                         if event.startswith('activewindowv2>>'):
@@ -46,13 +51,13 @@ def layout_monitor():
                         elif event.startswith('activelayout>>'):
                             device,_,layout=event.strip().partition('>>')[2].partition(',')
                             if 'yoga-keyboard' in device: continue
-                            if 'Russian' in layout: emit({'language':'ru'})
-                            elif 'English' in layout: emit({'language':'en'})
+                            language=active_language()
+                            if language: emit({'language':language})
         except OSError:
             time.sleep(2)
 
 SETTINGS_PATH = Path.home()/'.config/yoga-panel/settings.json'
-DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.018, 'predictionEnabled':True, 'autocorrectEnabled':True, 'inertiaEnabled':True, 'inertiaStrength':0.65, 'inertiaDuration':650}
+DEFAULTS = json.loads((Path(__file__).parent/'defaults.json').read_text())
 LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.0018,1.0), 'inertiaStrength':(0.15,1.5), 'inertiaDuration':(200,1500)}
 
 def valid_settings(data):
@@ -64,13 +69,13 @@ def valid_settings(data):
             raise ValueError('Nonfinite setting')
         low, high = LIMITS[key]
         result[key] = max(low,min(high,value))
-    prediction=data.get('predictionEnabled',True)
+    prediction=data.get('predictionEnabled',DEFAULTS['predictionEnabled'])
     if type(prediction) is not bool: raise ValueError('Invalid prediction setting')
     result['predictionEnabled']=prediction
-    correction=data.get('autocorrectEnabled',True)
+    correction=data.get('autocorrectEnabled',DEFAULTS['autocorrectEnabled'])
     if type(correction) is not bool: raise ValueError('Invalid autocorrect setting')
     result['autocorrectEnabled']=correction
-    inertia=data.get('inertiaEnabled',True)
+    inertia=data.get('inertiaEnabled',DEFAULTS['inertiaEnabled'])
     if type(inertia) is not bool: raise ValueError('Invalid inertia setting')
     result['inertiaEnabled']=inertia
     return result
@@ -90,12 +95,31 @@ def save_settings(data):
 
 KEYS = {'Escape', 'Tab', 'BackSpace', 'Return', 'Left', 'Right', 'Up', 'Down', 'Delete', 'Home', 'End'}
 
-def workspace_command(direction):
-    # Same workspace selectors as Omarchy's Super+Tab / Super+Shift+Tab.
-    selectors = {'next':'e+1', 'previous':'e-1'}
-    if direction not in selectors:
+def workspace_command(direction, monitors=None, workspaces=None):
+    """Cycle upper-screen desktops, reserving 2 and other monitors' desktops."""
+    if direction not in ('next','previous'):
         raise ValueError('Invalid workspace direction')
-    return ['hyprctl','dispatch','hl.dsp.focus({ workspace = "'+selectors[direction]+'" })']
+    if monitors is None:
+        monitors=json.loads(subprocess.check_output(['hyprctl','monitors','-j'],text=True,timeout=2))
+    if workspaces is None:
+        workspaces=json.loads(subprocess.check_output(['hyprctl','workspaces','-j'],text=True,timeout=2))
+    upper=next((m for m in monitors if m.get('name')=='eDP-1'),None)
+    if upper is None:
+        raise ValueError('Upper display unavailable')
+    current=int(upper['activeWorkspace']['id'])
+    excluded={2} | {int(w['id']) for w in workspaces if w.get('monitor')!='eDP-1'}
+    candidates=sorted((set(range(1,11)) | {int(w['id']) for w in workspaces
+                      if w.get('monitor')=='eDP-1' and int(w['id'])>0})-excluded)
+    if not candidates: raise ValueError('No upper-screen workspace available')
+    if direction=='next':
+        target=next((n for n in candidates if n>current),candidates[0])
+    else:
+        target=next((n for n in reversed(candidates) if n<current),candidates[-1])
+    # Focus the upper monitor before creating an empty workspace. Otherwise a
+    # touch-focused lower monitor could receive the new desktop.
+    code='hl.dispatch(hl.dsp.focus({ monitor = "eDP-1" })); '
+    code+='hl.dispatch(hl.dsp.focus({ workspace = "'+str(target)+'" }))'
+    return ['hyprctl','eval',code]
 
 def keyboard_args(event):
     args = ['wtype']
