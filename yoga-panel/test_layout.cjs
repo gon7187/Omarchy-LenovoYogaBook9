@@ -1,0 +1,30 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const layout=vm.createContext({});
+vm.runInContext(fs.readFileSync(`${__dirname}/KeyboardLayout.js`,'utf8').replace('.pragma library',''),layout);
+assert.equal(layout.upper.length,12);assert.equal(layout.middle.length,11);assert.equal(layout.lower.length,10);
+const all=[...layout.numbers,...layout.upper,...layout.middle,...layout.lower];
+for(const letter of 'abcdefghijklmnopqrstuvwxyz') assert(all.some(k=>k.en===letter),letter);
+for(const letter of 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя') assert(all.some(k=>k.ru===letter),letter);
+assert.equal(layout.character(layout.numbers[2],true,true,false),'"');
+assert.equal(layout.character(layout.numbers[2],false,true,false),'@');
+assert.equal(layout.character(layout.upper[0],true,false,false),'й');
+assert.equal(layout.character(layout.upper[0],true,false,true),'Й');
+assert.equal(layout.character(layout.upper[0],true,true,true),'й');
+const qml=fs.readFileSync(process.argv[2] || `${__dirname}/shell.qml`,'utf8');
+const sent=[];
+let now=1000;
+const root=vm.createContext({russian:true,shift:false,alt:false,control:false,logo:false,
+ predictionEnabled:true,wordPrefix:'',suggestions:[],predictionRequest:0,lastTypedAt:0,
+ predictTimer:{restart(){}},Date:{now:()=>now},send:e=>sent.push(e)});
+vm.runInContext(qml.slice(qml.indexOf('function clearWord()'),qml.indexOf('function typeKey(key)')),root);
+root.toggleShift();root.toggleAlt();
+assert.equal(root.russian,false);assert.equal(root.shift,false);assert.equal(root.alt,false);
+assert.equal(sent.at(-1).language,'en');
+root.toggleAlt();root.toggleShift();assert.equal(root.russian,true);
+root.updateWord('п');root.updateWord('р');assert.equal(root.wordPrefix,'пр');
+root.completeWord('привет');
+assert.equal(sent.slice(-5).map(e=>e.text).join(''),'ивет ');
+assert.equal(root.wordPrefix,'');
+root.updateWord('h');root.updateWord('e');now+=9000;
+const n=sent.length;root.completeWord('hello');assert.equal(sent.length,n,'Stale completion cannot insert text');
+console.log('PASS: complete RU/EN mappings, punctuation, Caps/Shift, Alt+Shift both orders, safe prefix completion');

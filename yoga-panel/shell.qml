@@ -3,18 +3,27 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "KeyboardLayout.js" as Layouts
 
 ShellRoot {
     id: root
     property bool opened: false
     property bool russian: true
     property bool shift: false
+    property bool caps: false
     property bool control: false
     property bool alt: false
     property bool logo: false
     property bool drag: false
     property bool settingsOpen: false
     property bool settingsLoaded: false
+    property bool predictionEnabled: true
+    property string wordPrefix: ""
+    property var suggestions: []
+    property int predictionRequest: 0
+    property real lastTypedAt: 0
+    onRussianChanged: clearWord()
+    onPredictionEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
     property real pointerSpeed: 2.4
     property real pointerAccel: 0.6
     property real scrollSpeed: 0.18
@@ -23,7 +32,7 @@ ShellRoot {
     onScrollSpeedChanged: if (settingsLoaded) saveSettings.restart()
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -33,6 +42,34 @@ ShellRoot {
         if (!backend.running) { status = "Ошибка ввода — перезапусти панель"; return; }
         backend.write(JSON.stringify(e) + "\n");
     }
+    Timer {
+        id: predictTimer; interval: 65
+        onTriggered: if (root.predictionEnabled && root.wordPrefix.length>=2)
+            root.send({type:"suggest",prefix:root.wordPrefix,language:root.russian ? "ru" : "en",requestId:root.predictionRequest})
+    }
+    function clearWord() {
+        wordPrefix=""; suggestions=[]; predictionRequest++;
+    }
+    function updateWord(char) {
+        if (!predictionEnabled) return;
+        if (Date.now()-lastTypedAt>8000) clearWord();
+        lastTypedAt=Date.now();
+        if (/^[a-zа-яё]$/i.test(char)) {
+            wordPrefix=(wordPrefix+char).slice(-64); suggestions=[]; predictionRequest++; predictTimer.restart();
+        } else clearWord();
+    }
+    function completeWord(word) {
+        if (!predictionEnabled || !wordPrefix || Date.now()-lastTypedAt>8000 || !word.startsWith(wordPrefix)) { clearWord(); return; }
+        let suffix=word.slice(wordPrefix.length)+" ";
+        clearWord();
+        for (let ch of suffix) send({type:"text",text:ch,mods:[]});
+    }
+    function switchLanguage() {
+        russian=!russian; shift=false; alt=false; control=false; logo=false; clearWord();
+        send({type:"language",language:russian ? "ru" : "en"});
+    }
+    function toggleShift() { if (alt) switchLanguage(); else shift=!shift; }
+    function toggleAlt() { if (shift) switchLanguage(); else alt=!alt; }
     function typeKey(key) {
         let mods = [];
         if (control) mods.push("ctrl");
@@ -40,6 +77,9 @@ ShellRoot {
         if (logo) mods.push("logo");
         if (shift) mods.push("shift");
         send({type: "key", key: key, mods: mods});
+        if (key==="BackSpace" && !mods.length && wordPrefix.length) {
+            wordPrefix=wordPrefix.slice(0,-1); suggestions=[]; predictionRequest++; predictTimer.restart(); lastTypedAt=Date.now();
+        } else clearWord();
         control = false; alt = false; logo = false; shift = false;
     }
     function typeText(char) {
@@ -47,15 +87,18 @@ ShellRoot {
         if (control) mods.push("ctrl");
         if (alt) mods.push("alt");
         if (logo) mods.push("logo");
-        if (shift) mods.push("shift");
-        send({type: "text", text: shift ? char.toUpperCase() : char, mods: mods});
+        if (shift && (logo || control || alt)) mods.push("shift");
+        send({type: "text", text: char, mods: mods});
+        if (control || alt || logo) clearWord(); else updateWord(char);
         shift = false; control = false; alt = false; logo = false;
     }
     function click(button) {
+        clearWord();
         send({type:"button",button:button,state:1});
         send({type:"button",button:button,state:0});
     }
     function closePanel() {
+        clearWord();
         pad.resetGesture();
         send({type:"release"}); drag = false; opened = false;
         shift = false; control = false; alt = false; logo = false;
@@ -70,9 +113,18 @@ ShellRoot {
                 if (data.startsWith("{")) {
                     try {
                         let s=JSON.parse(data).settings;
+                        let message=JSON.parse(data);
+                        if (message.focusChanged) root.clearWord();
+                        if (message.language) {
+                            root.russian=message.language==="ru"; root.shift=false; root.alt=false;
+                            root.send({type:"keyboardGroup",language:message.language});
+                        }
+                        if (message.suggestions && root.predictionEnabled && message.requestId===root.predictionRequest && message.prefix===root.wordPrefix)
+                            root.suggestions=message.suggestions;
                         if (s) {
                             root.settingsLoaded=false;
                             root.pointerSpeed=s.pointerSpeed; root.pointerAccel=s.pointerAccel; root.scrollSpeed=s.scrollSpeed;
+                            root.predictionEnabled=s.predictionEnabled ?? true;
                             root.settingsLoaded=true;
                         }
                     } catch(e) { root.status="Не удалось загрузить настройки"; }
@@ -88,10 +140,14 @@ ShellRoot {
         function openPanel(): void { root.opened = true; }
         function hide(): void { root.closePanel(); }
         function status(): string { return root.opened ? "open" : "closed"; }
+        function predictionStatus(): string { return JSON.stringify({enabled:root.predictionEnabled,ready:root.suggestions.length,prefixLength:root.wordPrefix.length,requestId:root.predictionRequest,language:root.russian ? "ru" : "en"}); }
+        function setWords(enabled: bool): void { root.predictionEnabled=enabled; }
+        function testPrediction(): void { root.russian=true; root.predictionEnabled=true; root.clearWord(); root.typeText("п"); root.typeText("р"); root.typeText("и"); }
+        function acceptFirstPrediction(): void { if (root.suggestions.length) root.completeWord(root.suggestions[0]); }
         function touchStatus(): string { return JSON.stringify({pressed:pad.pressEvents,updated:pad.updateEvents,samples:pad.samples,moves:pad.moveEvents,count:pad.previousCount,peak:pad.peakCount,histogram:pad.histogram}); }
-        function testKeys(): void { digitKeys.itemAt(0).activated(); letterKeys.itemAt(0).activated(); root.typeText(" "); }
+        function testKeys(): void { let old=root.russian; root.russian=true; digitKeys.itemAt(1).activated(); letterKeys.itemAt(0).activated(); root.typeText(" "); root.russian=old; }
         function testCenters(): string {
-            return JSON.stringify([digitKeys.itemAt(0), letterKeys.itemAt(0), spaceKey].map(k => k.mapToGlobal(k.width/2,k.height/2)));
+            return JSON.stringify([digitKeys.itemAt(1), letterKeys.itemAt(0), spaceKey].map(k => k.mapToGlobal(k.width/2,k.height/2)));
         }
     }
     PanelWindow {
@@ -144,64 +200,83 @@ ShellRoot {
                 Text { text: "YOGA"; color: "#b9cbe4"; font.pixelSize: 13; font.letterSpacing: 1 }
                 Item { Layout.fillWidth: true }
                 Text { text: root.status; color: "#89a6c9"; font.pixelSize: 12 }
+                Key { Layout.preferredWidth: 90; Layout.fillHeight: true; radius: 7; textSize: 12; label: "✦ Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
                 Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Тачпад"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
-                Key { Layout.preferredWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.russian ? "RU → EN" : "EN → RU"; onActivated: root.russian = !root.russian }
+                Key { Layout.preferredWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.russian ? "RU → EN" : "EN → RU"; onActivated: root.switchLanguage() }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
+            }
+            RowLayout {
+                visible: root.predictionEnabled && !root.settingsOpen
+                Layout.fillWidth: true; Layout.preferredHeight: 32; Layout.maximumHeight: 32; spacing: 7
+                Text { visible: root.suggestions.length===0; Layout.fillWidth: true; text: root.wordPrefix.length>=2 ? "Продолжай печатать…" : "Подсказки слов  ·  " + (root.russian ? "Русский" : "English"); color: "#71859f"; font.pixelSize: 13 }
+                Repeater {
+                    model: root.suggestions
+                    Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; radius: 7; textSize: 17; label: modelData; onActivated: root.completeWord(modelData) }
+                }
             }
             ColumnLayout {
                 id: keyboard
                 visible: !root.settingsOpen
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(400, panel.height * 0.48)
-                Layout.maximumHeight: Math.min(400, panel.height * 0.48)
-                Layout.minimumHeight: 240
-                spacing: 8
+                Layout.preferredHeight: Math.min(380, panel.height * 0.44)
+                Layout.maximumHeight: Math.min(380, panel.height * 0.44)
+                Layout.minimumHeight: 280
+                spacing: 7
+                readonly property real keyHeight: (Math.min(380,panel.height*0.44)-28)/5
+                readonly property real unit: (panel.width - 32 - 14*7)/15
+                Layout.minimumWidth: 0
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 7
-                    Key { Layout.preferredWidth: 72; Layout.fillHeight: true; label: "Esc"; onActivated: root.typeKey("Escape") }
+                    Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
                     Repeater {
                         id: digitKeys
-                        model: root.shift ? ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "_", "+"] : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
-                        Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; label: modelData; onActivated: root.typeText(modelData) }
+                        model: Layouts.numbers
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: 118; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
+                    Key { Layout.preferredWidth: keyboard.unit*2+7; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 7
-                    Key { Layout.preferredWidth: 92; Layout.fillHeight: true; label: "Tab"; onActivated: root.typeKey("Tab") }
+                    Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
+                    Key { Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillHeight: true; label: "Tab ⇥"; onActivated: root.typeKey("Tab") }
                     Repeater {
                         id: letterKeys
-                        model: (root.russian ? "йцукенгшщзхъё" : "qwertyuiop[]\\").split("")
-                        Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; label: root.shift ? modelData.toUpperCase() : modelData; onActivated: root.typeText(modelData) }
+                        model: Layouts.upper
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
+                    LetterKey { symbols: Layouts.pair("\\","\\","|","/"); russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillHeight: true; onActivated: root.typeText(character) }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 7
-                    Item { Layout.preferredWidth: 26 }
+                    Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
+                    Key { Layout.preferredWidth: keyboard.unit*1.75+5.25; Layout.fillHeight: true; label: "Caps ⇪"; selected: root.caps; onActivated: root.caps=!root.caps }
                     Repeater {
-                        model: (root.russian ? "фывапролджэ" : "asdfghjkl;'").split("")
-                        Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; label: root.shift ? modelData.toUpperCase() : modelData; onActivated: root.typeText(modelData) }
+                        model: Layouts.middle
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: 135; Layout.fillHeight: true; label: "Enter ↵"; onActivated: root.typeKey("Return") }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Enter ↵"; onActivated: root.typeKey("Return") }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 7
-                    Key { Layout.preferredWidth: 122; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.shift = !root.shift }
+                    Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift() }
                     Repeater {
-                        model: (root.russian ? "ячсмитьбю.," : "zxcvbnm,./?").split("")
-                        Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; label: root.shift ? modelData.toUpperCase() : modelData; onActivated: root.typeText(modelData) }
+                        model: Layouts.lower
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: 85; Layout.fillHeight: true; label: "↑"; repeatable: true; onActivated: root.typeKey("Up") }
+                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift() }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 7
-                    Key { Layout.preferredWidth: 92; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control = !root.control }
-                    Key { Layout.preferredWidth: 115; Layout.fillHeight: true; label: "Super ⊞"; selected: root.logo; onActivated: root.logo = !root.logo }
-                    Key { Layout.preferredWidth: 92; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.alt = !root.alt }
-                    Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: "Пробел"; onActivated: root.typeText(" ") }
-                    Key { Layout.preferredWidth: 85; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
-                    Key { Layout.preferredWidth: 85; Layout.fillHeight: true; label: "↓"; repeatable: true; onActivated: root.typeKey("Down") }
-                    Key { Layout.preferredWidth: 85; Layout.fillHeight: true; label: "→"; repeatable: true; onActivated: root.typeKey("Right") }
+                    Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Esc"; onActivated: root.typeKey("Escape") }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Super ⊞"; selected: root.logo; onActivated: root.logo=!root.logo }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt() }
+                    Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: root.russian ? "Русский  ·  пробел" : "English  ·  space"; onActivated: root.typeText(" ") }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: root.russian ? "RU / EN" : "EN / RU"; textSize: 14; onActivated: root.switchLanguage() }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
+                    ColumnLayout {
+                        Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; spacing: 4
+                        Key { Layout.fillWidth: true; Layout.fillHeight: true; label: "↑"; textSize: 18; repeatable: true; onActivated: root.typeKey("Up") }
+                        Key { Layout.fillWidth: true; Layout.fillHeight: true; label: "↓"; textSize: 18; repeatable: true; onActivated: root.typeKey("Down") }
+                    }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "→"; repeatable: true; onActivated: root.typeKey("Right") }
                 }
             }
             ColumnLayout {
@@ -258,6 +333,8 @@ ShellRoot {
                     property real swipeX: 0
                     property real swipeY: 0
                     property bool scrolling: false
+                    property var scrollDirections: ({x:0,y:0})
+                    property var scrollReversals: ({x:0,y:0})
                     touchPoints: [TouchPoint { id: p1 }, TouchPoint { id: p2 }, TouchPoint { id: p3 }, TouchPoint { id: p4 }, TouchPoint { id: p5 }]
                     function sample(currentPoints) {
                         samples++;
@@ -273,11 +350,13 @@ ShellRoot {
                             tapDragging=false; endedDrag=true; lastTapTime=-1000;
                         }
                         if (!n) {
+                            if (scrolling) root.send({type:"scrollEnd"});
+                            scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
                                     root.send({type:"workspace",direction:swipeX<0 ? "next" : "previous"});
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
-                            } else if (!endedDrag && previousCount && now-began < 350 && travel < 18 && !root.drag && peakCount <= 2) {
+                            } else if (!scrolling && !endedDrag && previousCount && now-began < 350 && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);
                                 lastTapTime=peakCount === 1 ? now : -1000;
                                 lastTapX=lastX; lastTapY=lastY;
@@ -326,7 +405,11 @@ ShellRoot {
                             return;
                         }
                         moving.sort((a,b) => b.distance-a.distance);
-                        if (n<2) scrolling=false;
+                        // Wait for all scrolling fingers to lift. The last
+                        // finger's release must not turn into cursor movement.
+                        if (scrolling && n<2) {
+                            previousCount=n; lastX=x; lastY=y; return;
+                        }
                         if (moving.length) {
                             let first=moving[0], second=moving[1];
                             travel += first.distance;
@@ -342,9 +425,13 @@ ShellRoot {
                                 }
                             }
                             if (scrolling && n===2) {
+                                root.clearWord();
                                 scrollEvents++;
-                                root.send({type:"scroll",x:-moving.reduce((sum,p)=>sum+p.dx,0)*root.scrollSpeed/2,y:-moving.reduce((sum,p)=>sum+p.dy,0)*root.scrollSpeed/2});
+                                let dx=filterScroll(moving.reduce((sum,p)=>sum+p.dx,0)/2,"x");
+                                let dy=filterScroll(moving.reduce((sum,p)=>sum+p.dy,0)/2,"y");
+                                if (dx || dy) root.send({type:"scroll",x:-dx*root.scrollSpeed,y:-dy*root.scrollSpeed});
                             } else {
+                                root.clearWord();
                                 moveEvents++;
                                 let gain=root.pointerSpeed*(1+root.pointerAccel*Math.min(first.distance/elapsed/1.2,2));
                                 root.send({type:"move",x:first.dx*gain,y:first.dy*gain});
@@ -353,11 +440,25 @@ ShellRoot {
                         previousCount=n; lastX=x; lastY=y;
                     }
                     function resetGesture() {
+                        if (scrolling) root.send({type:"scrollEnd"});
                         if (tapDragging) root.send({type:"button",button:272,state:0});
                         tapDragging=false; dragPointId=-1; lastTapTime=-1000;
                         previousCount=0; positions={};
                         workspaceGesture=false; swipeX=0; swipeY=0;
                         scrolling=false;
+                        scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
+                    }
+                    function filterScroll(delta, axis) {
+                        if (!delta) return 0;
+                        let direction=Math.sign(delta);
+                        if (!scrollDirections[axis] || direction===scrollDirections[axis]) {
+                            scrollDirections[axis]=direction; scrollReversals[axis]=0; return delta;
+                        }
+                        scrollReversals[axis]+=delta;
+                        if (Math.abs(scrollReversals[axis])<4) return 0;
+                        let accumulated=scrollReversals[axis];
+                        scrollDirections[axis]=direction; scrollReversals[axis]=0;
+                        return accumulated;
                     }
                     onPressed: { pressEvents++; }
                     onUpdated: { updateEvents++; }

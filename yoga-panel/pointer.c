@@ -59,6 +59,9 @@ int main(int argc, char **argv) {
         } else if (sscanf(line, "b %u %u", &button, &state) == 2 &&
                    (button == BTN_LEFT || button == BTN_RIGHT) && state <= 1) {
             zwlr_virtual_pointer_v1_button(pointer, time, button, state);
+        } else if (line[0] == 'e') {
+            zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
         } else if (line[0] == 'r') {
             zwlr_virtual_pointer_v1_button(pointer, time, BTN_LEFT, 0);
             zwlr_virtual_pointer_v1_button(pointer, time, BTN_RIGHT, 0);

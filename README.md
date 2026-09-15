@@ -3,7 +3,8 @@
 ## This fork: lower-screen keyboard and touchpad
 
 Fork of [pybe/Omarchy-LenovoYogaBook9](https://github.com/pybe/Omarchy-LenovoYogaBook9).
-Adds **[Yoga Panel](yoga-panel/README.md)**: RU/EN keyboard with Super, a full-width
+Adds **[Yoga Panel](yoga-panel/README.md)**: bilingual RU/EN key legends, offline
+word completion, Alt+Shift layout synchronization, Super, a full-width
 touchpad, tap-to-drag, two-finger right click/scroll, three-finger workspace
 swipes, saved sensitivity settings, and automatic plugin rebuilding after ABI
 updates. Also adds a user service to keep both internal backlights synchronized.

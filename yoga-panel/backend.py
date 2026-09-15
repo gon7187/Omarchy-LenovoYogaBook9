@@ -7,19 +7,63 @@ import sys
 import threading
 import os
 import math
+import socket
+import time
+from prediction import Predictor
+
+OUTPUT_LOCK = threading.Lock()
+def emit(value):
+    with OUTPUT_LOCK:
+        print(json.dumps(value) if isinstance(value,dict) else value,flush=True)
+
+def layout_monitor():
+    """Observe layout/focus notifications only; never forward window titles."""
+    path=Path(os.environ.get('XDG_RUNTIME_DIR',f'/run/user/{os.getuid()}'))/'hypr'/os.environ.get('HYPRLAND_INSTANCE_SIGNATURE','')/'.socket2.sock'
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as stream:
+                stream.connect(str(path))
+                last_focus=None
+                try:
+                    devices=json.loads(subprocess.check_output(['hyprctl','devices','-j'],text=True,timeout=2))['keyboards']
+                    keyboard=next((k for k in devices if k.get('main')),None)
+                    if keyboard:
+                        layout=keyboard.get('active_keymap','')
+                        if 'Russian' in layout: emit({'language':'ru'})
+                        elif 'English' in layout: emit({'language':'en'})
+                except (OSError,ValueError,KeyError,subprocess.SubprocessError):
+                    pass
+                with stream.makefile() as events:
+                    for event in events:
+                        if event.startswith('activewindowv2>>'):
+                            focus=event.strip().partition('>>')[2]
+                            if focus != last_focus:
+                                emit({'focusChanged':True})
+                                last_focus=focus
+                        elif event.startswith('activelayout>>'):
+                            device,_,layout=event.strip().partition('>>')[2].partition(',')
+                            if 'yoga-keyboard' in device: continue
+                            if 'Russian' in layout: emit({'language':'ru'})
+                            elif 'English' in layout: emit({'language':'en'})
+        except OSError:
+            time.sleep(2)
 
 SETTINGS_PATH = Path.home()/'.config/yoga-panel/settings.json'
-DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18}
+DEFAULTS = {'pointerSpeed':2.4, 'pointerAccel':0.6, 'scrollSpeed':0.18, 'predictionEnabled':True}
 LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.03,1.0)}
 
 def valid_settings(data):
     result = {}
-    for key, default in DEFAULTS.items():
+    for key in LIMITS:
+        default=DEFAULTS[key]
         value = float(data.get(key, default))
         if not math.isfinite(value):
             raise ValueError('Nonfinite setting')
         low, high = LIMITS[key]
         result[key] = max(low,min(high,value))
+    prediction=data.get('predictionEnabled',True)
+    if type(prediction) is not bool: raise ValueError('Invalid prediction setting')
+    result['predictionEnabled']=prediction
     return result
 
 def load_settings():
@@ -62,14 +106,16 @@ def keyboard_args(event):
     return args
 
 def main():
+    predictor=Predictor()
     pointer = subprocess.Popen([str(Path(__file__).parent/'build/yoga-pointer')], stdin=subprocess.PIPE, text=True)
     keyboard = subprocess.Popen([str(Path(__file__).parent/'build/yoga-keyboard')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     def keyboard_status():
         for status in keyboard.stdout:
-            print(status.strip(), flush=True)
+            emit(status.strip())
     threading.Thread(target=keyboard_status, daemon=True).start()
-    print('ready', flush=True)
-    print(json.dumps({'settings':load_settings()}), flush=True)
+    emit('ready')
+    emit({'settings':load_settings()})
+    threading.Thread(target=layout_monitor,daemon=True).start()
     try:
         for line in sys.stdin:
             try:
@@ -77,6 +123,20 @@ def main():
                 kind = e.get('type')
                 if kind == 'settings':
                     save_settings(e['values'])
+                elif kind == 'suggest':
+                    prefix=e.get('prefix','')
+                    suggestions=[]
+                    if isinstance(prefix,str) and len(prefix)<=64:
+                        try: suggestions=predictor.suggest(prefix,e.get('language'),3)
+                        except OSError: pass
+                    emit({'suggestions':suggestions,'prefix':prefix,'requestId':e.get('requestId')})
+                elif kind in ('language','keyboardGroup'):
+                    index={'en':'0','ru':'1'}.get(e.get('language'))
+                    if index is None: raise ValueError('Invalid language')
+                    keyboard.stdin.write('g '+index+'\n'); keyboard.stdin.flush()
+                    if kind == 'language':
+                        result=subprocess.run(['hyprctl','switchxkblayout','all',index],capture_output=True,text=True,timeout=3,check=True)
+                        if result.stdout.strip()!='ok': raise ValueError('Layout switch failed')
                 elif kind == 'workspace':
                     result = subprocess.run(workspace_command(e['direction']),capture_output=True,text=True,timeout=3,check=True)
                     if result.stdout.strip() != 'ok':
@@ -96,6 +156,8 @@ def main():
                     pointer.stdin.write(f"b {e['button']} {e['state']}\n"); pointer.stdin.flush()
                 elif kind == 'release':
                     pointer.stdin.write('r\n'); pointer.stdin.flush()
+                elif kind == 'scrollEnd':
+                    pointer.stdin.write('e\n'); pointer.stdin.flush()
             except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError):
                 print('input-error', flush=True)
     finally:

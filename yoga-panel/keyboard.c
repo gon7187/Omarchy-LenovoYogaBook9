@@ -51,18 +51,31 @@ int main(void) {
     close(fd);free(text);
     char line[128],name[64],op;
     unsigned cp,mod;
+    xkb_layout_index_t last_group=0;
     puts("ready");fflush(stdout);
     while (fgets(line,sizeof(line),stdin)) {
+        unsigned requested_group;
+        if (sscanf(line,"g %u",&requested_group)==1 && requested_group<2) {
+            last_group=requested_group;
+            zwp_virtual_keyboard_v1_modifiers(keyboard,0,0,0,last_group);
+            if (wl_display_roundtrip(display)<0) break;
+            continue;
+        }
         xkb_keysym_t symbol=XKB_KEY_NoSymbol;
+        int named=0;
         if (sscanf(line,"t %u %u",&cp,&mod)==2) symbol=xkb_utf32_to_keysym(cp);
-        else if (sscanf(line,"%c %63s %u",&op,name,&mod)==3 && op=='k')
+        else if (sscanf(line,"%c %63s %u",&op,name,&mod)==3 && op=='k') {
             symbol=xkb_keysym_from_name(name,XKB_KEYSYM_NO_FLAGS);
+            named=1;
+        }
         if (!symbol || mod>15) { puts("input-error");fflush(stdout);continue; }
         xkb_keycode_t found=0;
         xkb_layout_index_t group=0;
         xkb_level_index_t level=0;
         for (xkb_keycode_t key=xkb_keymap_min_keycode(map);key<=xkb_keymap_max_keycode(map)&&!found;key++) {
-            for (xkb_layout_index_t g=0;g<xkb_keymap_num_layouts_for_key(map,key)&&!found;g++) {
+            xkb_layout_index_t groups=xkb_keymap_num_layouts_for_key(map,key);
+            for (xkb_layout_index_t offset=0;offset<groups&&!found;offset++) {
+                xkb_layout_index_t g=(last_group+offset)%groups;
                 for (xkb_level_index_t l=0;l<2&&!found;l++) {
                     const xkb_keysym_t *syms;
                     int n=xkb_keymap_key_get_syms_by_level(map,key,g,l,&syms);
@@ -71,6 +84,10 @@ int main(void) {
             }
         }
         if (!found) {puts("input-error");fflush(stdout);continue;}
+        // Neutral keys (space, Backspace, arrows) must preserve the previous
+        // language even when XKB stores their identical symbol only in group 0.
+        if (symbol == 0x20 || named) group=last_group;
+        last_group=group;
         uint32_t mods=level ? mask(map,XKB_MOD_NAME_SHIFT) : 0;
         if (mod&1) mods|=mask(map,XKB_MOD_NAME_CTRL);
         if (mod&2) mods|=mask(map,XKB_MOD_NAME_ALT);
