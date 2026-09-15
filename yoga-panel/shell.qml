@@ -423,7 +423,11 @@ ShellRoot {
                     property real scrollDistance: 0
                     property real momentumStarted: 0
                     property real momentumLast: 0
-                    Timer { id: momentum; interval: 16; repeat: true; onTriggered: pad.tickMomentum() }
+                    // Match the display animation clock, not a free-running 16 ms timer.
+                    FrameAnimation {
+                        id: momentum
+                        onTriggered: pad.tickMomentum(pad.momentumStarted + elapsedTime*1000)
+                    }
                     touchPoints: [TouchPoint { id: p1 }, TouchPoint { id: p2 }, TouchPoint { id: p3 }, TouchPoint { id: p4 }, TouchPoint { id: p5 }]
                     function sample(currentPoints) {
                         samples++;
@@ -587,8 +591,9 @@ ShellRoot {
                         if (Math.hypot(scrollVX,scrollVY)<0.0001) return false;
                         momentumStarted=now; momentumLast=now; momentum.restart(); return true;
                     }
-                    function tickMomentum() {
-                        let now=Date.now(), elapsed=now-momentumLast;
+                    function tickMomentum(frameNow) {
+                        let now=frameNow === undefined ? Date.now() : frameNow;
+                        let elapsed=now-momentumLast;
                         if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>80) { stopMomentum(); return; }
                         if (elapsed<=0) return;
                         let duration=root.inertiaDuration;

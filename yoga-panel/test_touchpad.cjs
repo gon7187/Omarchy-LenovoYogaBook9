@@ -178,3 +178,22 @@ for (const sign of [-1,1]) {
  assert(h.sent.at(-1).y*sign>0,'Sustained intentional reversal gets matching inertia');
 }
 console.log('PASS: sustained deliberate reverse scroll retains inertia');
+
+// Animation time is monotonic even if the wall clock jumps; integration must
+// preserve distance at variable frame rates instead of adding fixed steps.
+function scheduledTail(intervals) {
+ const a=harness();flick(a);let t=a.c.momentumStarted, total=0, i=0;
+ while(a.c.momentum.running) {
+  t+=intervals[i++%intervals.length];
+  const begin=a.sent.length;
+  a.advance(10000); // Deliberately unrelated wall clock.
+  a.c.tickMomentum(t);
+  for(const e of a.sent.slice(begin))if(e.type==='scroll')total+=Math.abs(e.y);
+  assert(i<200);
+ }
+ return total;
+}
+assert(Math.abs(scheduledTail([1000/60])-scheduledTail([8,25,17,16]))<1e-9,
+ 'Variable display frame times preserve distance and survive wall-clock changes');
+assert(scheduledTail([1000/60])>0,'Animation clock actually produces motion');
+console.log('PASS: display-frame timing, clock jumps, frame-rate independent distance');
