@@ -84,7 +84,7 @@ for(const [delta,direction] of [[150,'down'],[-150,'up']]) {
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
-const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",shiftHeld:false,shiftUsed:false,clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
+const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",held:{},used:{},clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
 vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),keys);
 keys.typeKey('Tab');
 assert.deepEqual(Array.from(keys.last.mods),['logo','shift']);
@@ -92,16 +92,24 @@ assert.equal(keys.logo,false);assert.equal(keys.shift,false);
 keys.logo=true;keys.typeText('3');
 assert.equal(keys.last.text,'3');assert.deepEqual(Array.from(keys.last.mods),['logo']);
 keys.typeText('4');assert.equal(keys.last.mods.length,0,'Super is one-shot');
-keys.shiftHeld=false;keys.shiftUsed=false;
-keys.holdShift(true);keys.shift=true;
+keys.holdMod('shift',true);keys.shift=true;
 keys.typeText('П');keys.typeText('Р');keys.typeKey('Left');
 assert.equal(keys.shift,true,'Held Shift stays active for every key');
 assert.deepEqual(Array.from(keys.last.mods),['shift']);
-keys.holdShift(false);assert.equal(keys.shift,false,'Releasing a used Shift clears it');
-keys.holdShift(true);keys.shift=true;keys.holdShift(false);
+keys.holdMod('shift',false);assert.equal(keys.shift,false,'Releasing a used Shift clears it');
+keys.holdMod('shift',true);keys.shift=true;keys.holdMod('shift',false);
 assert.equal(keys.shift,true,'Tapped Shift remains one-shot');
 keys.typeText('П');assert.equal(keys.shift,false);
-console.log('PASS: right click, horizontal and vertical swipes, staggered release, rejected gestures, cancel, Super combinations, held Shift');
+keys.holdMod('logo',true);keys.logo=true;
+keys.typeText('3');keys.typeText('4');
+assert.equal(keys.logo,true,'Held Super stays active');assert.deepEqual(Array.from(keys.last.mods),['logo']);
+keys.holdMod('control',true);keys.control=true;keys.typeKey('Tab');
+assert.deepEqual(Array.from(keys.last.mods).sort(),['ctrl','logo'],'Two held modifiers combine');
+keys.holdMod('logo',false);keys.holdMod('control',false);
+assert.equal(keys.logo,false);assert.equal(keys.control,false,'Released modifiers clear');
+keys.holdMod('alt',true);keys.alt=true;keys.holdMod('alt',false);
+assert.equal(keys.alt,true,'Tapped Alt remains one-shot');keys.typeKey('Tab');assert.equal(keys.alt,false);
+console.log('PASS: right click, horizontal and vertical swipes, staggered release, rejected gestures, cancel, Super combinations, held modifiers');
 
 h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,120),p(1,200,120)]);

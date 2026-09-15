@@ -14,10 +14,10 @@ ShellRoot {
     property string keyboardLanguage: ""
     Timer { id: languageGuard; interval: 1500; onTriggered: root.languagePending=false }
     property bool shift: false
-    // A held Shift key applies to every character typed until it is released;
-    // a tap stays one-shot.
-    property bool shiftHeld: false
-    property bool shiftUsed: false
+    // A held modifier key (Shift, Ctrl, Alt, Super) applies to every key typed
+    // until it is released; a tap stays one-shot.
+    property var held: ({})
+    property var used: ({})
     property bool caps: false
     property bool control: false
     property bool alt: false
@@ -152,7 +152,7 @@ ShellRoot {
         if (key==="BackSpace" && !mods.length && wordPrefix.length) {
             wordPrefix=wordPrefix.slice(0,-1); suggestions=[]; predictionRequest++; predictTimer.restart(); lastTypedAt=Date.now();
         } else clearWord(key==="BackSpace" && !mods.length);
-        control = false; alt = false; logo = false; releaseShift();
+        releaseMods();
     }
     function typeText(char) {
         pad.stopMomentum();
@@ -164,15 +164,25 @@ ShellRoot {
         if (shift && (logo || control || alt)) mods.push("shift");
         send({type: "text", text: char, mods: mods, autocorrect: autocorrectEnabled, language: russian ? "ru" : "en"});
         if (control || alt || logo) clearWord(); else updateWord(char);
-        releaseShift(); control = false; alt = false; logo = false;
+        releaseMods();
     }
-    function holdShift(held) {
-        if (held) { shiftHeld=true; shiftUsed=false; return; }
-        shiftHeld=false;
-        if (shiftUsed) shift=false;
-        shiftUsed=false;
+    function setMod(name, value) {
+        if (name === "shift") shift = value;
+        else if (name === "control") control = value;
+        else if (name === "alt") alt = value;
+        else if (name === "logo") logo = value;
     }
-    function releaseShift() { if (shiftHeld) shiftUsed=true; else shift=false; }
+    function holdMod(name, down) {
+        if (down) { held[name] = true; used[name] = false; return; }
+        held[name] = false;
+        if (used[name]) setMod(name, false);
+        used[name] = false;
+    }
+    function releaseMods() {
+        for (const name of ["shift", "control", "alt", "logo"]) {
+            if (held[name]) used[name] = true; else setMod(name, false);
+        }
+    }
     function click(button) {
         clearWord();
         send({type:"button",button:button,state:1});
@@ -325,18 +335,18 @@ ShellRoot {
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                     Repeater {
                         model: Layouts.lower
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt() }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: root.russian ? "Русский  ·  пробел" : "English  ·  space"; onActivated: root.typeText(" ") }
                     MicKey {
                         id: micKey
