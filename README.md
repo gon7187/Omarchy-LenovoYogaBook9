@@ -251,7 +251,9 @@ The woofers already receive full-range stereo. What remains of the thin sound is
 
 A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC error`. The `CALI_DATA` UEFI variable holds valid-looking data for two amps, but its timestamp and CRC fields are zero, so the kernel discards it and the amps run uncalibrated.
 
-[`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot, and whether it audibly changes anything is untested.
+[`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot.
+
+**This was the missing bass.** With the EQ confirmed working digitally (+13 dB at 100 Hz measured on the sink monitor) there was still no low end by ear, with or without processing, and no amp profile changed that. After `yoga-amp-calib fix` and a reboot the `V1 CRC error` is gone and the bass is back. The uncalibrated amps were evidently running a conservative protection model that cut the low end.
 
 ### Fix (legacy snd_hda_intel only)
 
