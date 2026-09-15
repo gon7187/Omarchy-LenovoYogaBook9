@@ -16,7 +16,7 @@ let now=1000;
 const root=vm.createContext({russian:true,shift:false,alt:false,control:false,logo:false,
  predictionEnabled:true,wordPrefix:'',suggestions:[],predictionRequest:0,lastTypedAt:0,
  predictTimer:{restart(){}},Date:{now:()=>now},send:e=>sent.push(e)});
-vm.runInContext(qml.slice(qml.indexOf('function clearWord()'),qml.indexOf('function typeKey(key)')),root);
+vm.runInContext(qml.slice(qml.indexOf('function clearWord('),qml.indexOf('function typeKey(key)')),root);
 root.toggleShift();root.toggleAlt();
 assert.equal(root.russian,false);assert.equal(root.shift,false);assert.equal(root.alt,false);
 assert.equal(sent.at(-1).language,'en');
@@ -26,5 +26,5 @@ root.completeWord('привет');
 assert.equal(sent.slice(-5).map(e=>e.text).join(''),'ивет ');
 assert.equal(root.wordPrefix,'');
 root.updateWord('h');root.updateWord('e');now+=9000;
-const n=sent.length;root.completeWord('hello');assert.equal(sent.length,n,'Stale completion cannot insert text');
+const n=sent.length;root.completeWord('hello');assert.equal(sent.filter(e=>e.type!=="resetWord").length,sent.slice(0,n).filter(e=>e.type!=="resetWord").length,'Stale completion cannot insert text');
 console.log('PASS: complete RU/EN mappings, punctuation, Caps/Shift, Alt+Shift both orders, safe prefix completion');

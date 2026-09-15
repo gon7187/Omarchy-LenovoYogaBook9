@@ -77,7 +77,7 @@ for(const [x,y] of [[20,0],[0,150],[130,140]]) {
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
-const keys=vm.createContext({logo:true,shift:true,control:false,alt:false,wordPrefix:"",clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
+const keys=vm.createContext({predictionEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
 vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),keys);
 keys.typeKey('Tab');
 assert.deepEqual(Array.from(keys.last.mods),['logo','shift']);

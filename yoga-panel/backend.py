@@ -10,6 +10,7 @@ import math
 import socket
 import time
 from prediction import Predictor
+from autocorrect import Autocorrect
 
 OUTPUT_LOCK = threading.Lock()
 def emit(value):
@@ -107,6 +108,7 @@ def keyboard_args(event):
 
 def main():
     predictor=Predictor()
+    corrector=Autocorrect(predictor)
     pointer = subprocess.Popen([str(Path(__file__).parent/'build/yoga-pointer')], stdin=subprocess.PIPE, text=True)
     keyboard = subprocess.Popen([str(Path(__file__).parent/'build/yoga-keyboard')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     def keyboard_status():
@@ -121,13 +123,17 @@ def main():
             try:
                 e = json.loads(line)
                 kind = e.get('type')
-                if kind == 'settings':
+                if kind == 'resetWord':
+                    corrector.reset()
+                elif kind == 'settings':
                     save_settings(e['values'])
                 elif kind == 'suggest':
                     prefix=e.get('prefix','')
                     suggestions=[]
                     if isinstance(prefix,str) and len(prefix)<=64:
-                        try: suggestions=predictor.suggest(prefix,e.get('language'),3)
+                        try:
+                            suggestions=predictor.corrections(prefix,e.get('language'),3)+predictor.suggest(prefix,e.get('language'),3)
+                            suggestions=list(dict.fromkeys(suggestions))[:3]
                         except OSError: pass
                     emit({'suggestions':suggestions,'prefix':prefix,'requestId':e.get('requestId')})
                 elif kind in ('language','keyboardGroup'):
@@ -145,7 +151,8 @@ def main():
                     keyboard_args(e)  # Validate before serializing into private transport.
                     mod = sum({'ctrl':1,'alt':2,'logo':4,'shift':8}[m] for m in set(e.get('mods', [])))
                     command = f"k {e['key']} {mod}" if kind == 'key' else f"t {ord(e['text'])} {mod}"
-                    keyboard.stdin.write(command+'\n'); keyboard.stdin.flush()
+                    commands=corrector.process(e)
+                    keyboard.stdin.write('\n'.join(commands if commands is not None else [command])+'\n'); keyboard.stdin.flush()
                 elif kind in ('move', 'scroll'):
                     x, y = float(e['x']), float(e['y'])
                     pointer.stdin.write(f"{'m' if kind == 'move' else 's'} {x} {y}\n")

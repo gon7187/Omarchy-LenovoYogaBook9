@@ -47,21 +47,24 @@ ShellRoot {
         onTriggered: if (root.predictionEnabled && root.wordPrefix.length>=2)
             root.send({type:"suggest",prefix:root.wordPrefix,language:root.russian ? "ru" : "en",requestId:root.predictionRequest})
     }
-    function clearWord() {
+    function clearWord(preserveUndo) {
+        if (!preserveUndo) send({type:"resetWord"});
         wordPrefix=""; suggestions=[]; predictionRequest++;
     }
     function updateWord(char) {
         if (!predictionEnabled) return;
-        if (Date.now()-lastTypedAt>8000) clearWord();
+        if (Date.now()-lastTypedAt>8000) clearWord(true);
         lastTypedAt=Date.now();
         if (/^[a-zа-яё]$/i.test(char)) {
             wordPrefix=(wordPrefix+char).slice(-64); suggestions=[]; predictionRequest++; predictTimer.restart();
-        } else clearWord();
+        } else clearWord(true);
     }
     function completeWord(word) {
-        if (!predictionEnabled || !wordPrefix || Date.now()-lastTypedAt>8000 || !word.startsWith(wordPrefix)) { clearWord(); return; }
-        let suffix=word.slice(wordPrefix.length)+" ";
+        if (!predictionEnabled || !wordPrefix || Date.now()-lastTypedAt>8000) { clearWord(); return; }
+        let original=wordPrefix;
+        let suffix=word.startsWith(original) ? word.slice(original.length)+" " : word+" ";
         clearWord();
+        if (!word.startsWith(original)) for (let i=0;i<original.length;i++) send({type:"key",key:"BackSpace",mods:[]});
         for (let ch of suffix) send({type:"text",text:ch,mods:[]});
     }
     function switchLanguage() {
@@ -79,16 +82,17 @@ ShellRoot {
         send({type: "key", key: key, mods: mods});
         if (key==="BackSpace" && !mods.length && wordPrefix.length) {
             wordPrefix=wordPrefix.slice(0,-1); suggestions=[]; predictionRequest++; predictTimer.restart(); lastTypedAt=Date.now();
-        } else clearWord();
+        } else clearWord(key==="BackSpace" && !mods.length);
         control = false; alt = false; logo = false; shift = false;
     }
     function typeText(char) {
+        if (Date.now()-lastTypedAt>8000) clearWord();
         let mods = [];
         if (control) mods.push("ctrl");
         if (alt) mods.push("alt");
         if (logo) mods.push("logo");
         if (shift && (logo || control || alt)) mods.push("shift");
-        send({type: "text", text: char, mods: mods});
+        send({type: "text", text: char, mods: mods, autocorrect: predictionEnabled, language: russian ? "ru" : "en"});
         if (control || alt || logo) clearWord(); else updateWord(char);
         shift = false; control = false; alt = false; logo = false;
     }
@@ -202,7 +206,7 @@ ShellRoot {
                 Text { text: root.status; color: "#89a6c9"; font.pixelSize: 12 }
                 Key { Layout.preferredWidth: 90; Layout.fillHeight: true; radius: 7; textSize: 12; label: "✦ Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
                 Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Тачпад"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
-                Key { Layout.preferredWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.russian ? "RU → EN" : "EN → RU"; onActivated: root.switchLanguage() }
+                Key { Layout.preferredWidth: 48; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Esc"; onActivated: root.typeKey("Escape") }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             RowLayout {
@@ -264,12 +268,10 @@ ShellRoot {
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Esc"; onActivated: root.typeKey("Escape") }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Super ⊞"; selected: root.logo; onActivated: root.logo=!root.logo }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt() }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: root.russian ? "Русский  ·  пробел" : "English  ·  space"; onActivated: root.typeText(" ") }
-                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: root.russian ? "RU / EN" : "EN / RU"; textSize: 14; onActivated: root.switchLanguage() }
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
                     ColumnLayout {
                         Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; spacing: 4
@@ -299,12 +301,6 @@ ShellRoot {
                 radius: 15
                 color: "#151f2c"
                 border.color: "#344356"
-                Text {
-                    anchors.centerIn: parent
-                    text: "ТАЧПАД\nТап — левый клик · тап двумя — правый\nДва пальца — прокрутка · три влево / вправо — рабочие столы\nДвойной тап и движение — выделение / перетаскивание"
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "#60748e"; font.pixelSize: 17; lineHeight: 1.5
-                }
                 MultiPointTouchArea {
                     id: pad
                     anchors.fill: parent

@@ -1,4 +1,4 @@
-"""Offline RU/EN prefix completion; never records or changes typed text.
+"""Offline RU/EN word completion and conservative typo candidates.
 
 Dictionary data has separate CC BY-SA 4.0 terms: see data/ATTRIBUTION.md.
 """
@@ -61,3 +61,32 @@ class Predictor:
             return [word.title() for word in best]
         # Preserve even mixed casing in the characters the user already entered.
         return [prefix + word[len(prefix):] for word in best]
+
+    def corrections(self, word, language, limit=3):
+        """One insertion, deletion, substitution or adjacent transposition."""
+        if language not in ('ru', 'en') or not isinstance(word, str) or not 4 <= len(word) <= 32:
+            return []
+        alphabet = 'abcdefghijklmnopqrstuvwxyz' if language == 'en' else 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+        lower = word.lower()
+        if any(c not in alphabet for c in lower): return []
+        _, frequencies = self._load(language)
+        if lower in frequencies: return []
+        edits = set()
+        for i in range(len(lower)+1):
+            left, right = lower[:i], lower[i:]
+            edits.update(left+c+right for c in alphabet)
+            if right:
+                edits.add(left+right[1:])
+                edits.update(left+c+right[1:] for c in alphabet)
+            if len(right)>1: edits.add(left+right[1]+right[0]+right[2:])
+        ranked = sorted((w for w in edits if w in frequencies), key=lambda w: (-frequencies[w], w))[:limit]
+        return [w.upper() if word.isupper() else w.title() if word.istitle() else w for w in ranked]
+
+    def correction(self, word, language):
+        candidates = self.corrections(word, language)
+        if not candidates or (not word.islower() and not word.istitle()): return None
+        _, frequencies = self._load(language)
+        top = frequencies[candidates[0].lower()]
+        # Unknown names and ambiguous words stay as typed.
+        if top < 1000 or (len(candidates)>1 and top < 5*frequencies[candidates[1].lower()]): return None
+        return candidates[0]
