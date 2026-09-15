@@ -231,32 +231,6 @@ ShellRoot {
         }
     }
     PanelWindow {
-        id: handle
-        screen: root.bottom
-        visible: root.bottom !== null && !root.opened
-        anchors { bottom: true }
-        implicitWidth: 360
-        implicitHeight: 45
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "yoga-panel-handle"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Rectangle {
-            anchors.fill: parent
-            radius: 16
-            color: "#ec172231"
-            border.color: "#556a85"
-            Text { anchors.centerIn: parent; text: "⌨  Клавиатура и тачпад"; color: "#e3edff"; font.pixelSize: 17 }
-            MultiPointTouchArea {
-                anchors.fill: parent
-                minimumTouchPoints: 1
-                maximumTouchPoints: 5
-                onReleased: root.opened = true
-            }
-        }
-    }
-    PanelWindow {
         id: panel
         screen: root.bottom
         visible: root.bottom !== null && root.opened
