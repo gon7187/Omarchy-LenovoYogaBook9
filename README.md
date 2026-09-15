@@ -23,6 +23,9 @@
 - Claude Desktop (с Cowork) и ChatGPT/Codex Desktop; CLI claude и codex через
   [mise](config/mise/config.toml).
 - zram + swapfile + гибернация при закрытой крышке — [SWAP.md](SWAP.md).
+- Свайп тремя пальцами по тачпаду вниз сворачивает все окна воркспейса, вверх —
+  возвращает ([minimize.lua](config/hypr/minimize.lua); подключить строкой
+  `require("hypr.minimize")` в конце `~/.config/hypr/hyprland.lua`).
 
 **[Установка и использование](yoga-panel/README.md)** ·
 **[Сохранённый профиль владельца](yoga-panel/defaults.json)** ·

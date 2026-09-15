@@ -1,5 +1,12 @@
 # Изменения форка
 
+## 2026-09-15 — свернуть все окна жестом
+
+- `config/hypr/minimize.lua`: три пальца вниз — окна текущего воркспейса уходят в
+  `special:minimized-<id>`, три пальца вверх — возвращаются. Своя заначка у каждого
+  воркспейса. Подключается `require("hypr.minimize")` в `hyprland.lua`; сохраняется
+  `yoga-recovery` (шаблон `.config/hypr/*.lua`).
+
 ## 2026-09-15 — Claude и Codex
 
 - `claude-desktop` из репозитория omarchy; для Cowork доставлены `qemu-system-x86`,
