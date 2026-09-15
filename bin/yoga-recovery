@@ -18,6 +18,7 @@ PATTERNS=(
     '.config/systemd/user/voxtype.service', '.config/systemd/user/voxtype.service.d/*.conf', '.local/bin/yoga-*',
     '.config/wireplumber/wireplumber.conf.d/*yoga*',
     '.config/omarchy/extensions/omarchy-menu.jsonc',
+    '.config/omarchy/shell.json', '.config/omarchy/plugins/*/*',
     '.config/omarchy/hooks/post-update.d/*yoga*',
     '.local/share/applications/*yoga*.desktop',
     '.local/share/yoga-panel/**/*',

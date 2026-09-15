@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "gon7187.sysstats",
+  "name": "System stats",
+  "version": "1.0.0",
+  "author": "gon7187",
+  "description": "CPU load and free RAM in percent",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "System stats",
+    "description": "CPU load and free RAM in percent",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

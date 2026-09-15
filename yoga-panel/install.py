@@ -26,6 +26,8 @@ def main():
         SOURCE.parent/'bin/yoga-recovery':HOME/'.local/bin/yoga-recovery',
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
+        SOURCE.parent/'config/omarchy/plugins/gon7187.sysstats/manifest.json':HOME/'.config/omarchy/plugins/gon7187.sysstats/manifest.json',
+        SOURCE.parent/'config/omarchy/plugins/gon7187.sysstats/Panel.qml':HOME/'.config/omarchy/plugins/gon7187.sysstats/Panel.qml',
     }
     if args.dry_run:
         print('Build and install application:',TARGET)
@@ -58,6 +60,9 @@ def main():
         run('systemctl','--user','restart','yoga-brightness-sync.service','yoga-panel.service')
     if shutil.which('omarchy'):
         run('omarchy','hook','install','post-update',str(SOURCE.parent/'config/omarchy/hooks/90-yoga-check'))
+        subprocess.run(['omarchy-shell','shell','rescanPlugins'],check=False)
+        subprocess.run(['omarchy','plugin','enable','gon7187.sysstats'],check=False)
+        subprocess.run(['omarchy','bar','put','gon7187.sysstats','--after','omarchy.weather'],check=False)
     print('Installed. Previous files:',backup)
     print('Open with ~/.local/bin/yoga-panel show')
 
