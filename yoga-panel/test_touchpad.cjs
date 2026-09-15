@@ -17,7 +17,7 @@ function harness() {
         previousCount:0, positions:{}, began:0, travel:0, peakCount:0,
         lastX:0,lastY:0,moveEvents:0,scrollEvents:0,
         lastSampleTime:0,lastTapTime:-1000,lastTapX:0,lastTapY:0,tapDragging:false,dragPointId:-1,
-        workspaceGesture:false,swipeX:0,swipeY:0,scrolling:false,scrollDirections:{x:0,y:0},scrollReversals:{x:0,y:0},
+        workspaceGesture:false,swipeX:0,swipeY:0,scrolling:false,pairX:0,pairY:0,scrollDirections:{x:0,y:0},scrollReversals:{x:0,y:0},
         Date:{now:()=>now},
         root:{inertiaStrength:.65,inertiaDuration:650,clearWord:()=>{},drag:false,pointerSpeed:1.5,pointerAccel:0,scrollSpeed:0.6,send:e=>sent.push({...e}),click:b=>sent.push({click:b})}});
     vm.runInContext(source, c);
@@ -84,7 +84,7 @@ for(const [delta,direction] of [[150,'down'],[-150,'up']]) {
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
-const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
+const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",shiftHeld:false,shiftUsed:false,clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
 vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),keys);
 keys.typeKey('Tab');
 assert.deepEqual(Array.from(keys.last.mods),['logo','shift']);
@@ -92,7 +92,16 @@ assert.equal(keys.logo,false);assert.equal(keys.shift,false);
 keys.logo=true;keys.typeText('3');
 assert.equal(keys.last.text,'3');assert.deepEqual(Array.from(keys.last.mods),['logo']);
 keys.typeText('4');assert.equal(keys.last.mods.length,0,'Super is one-shot');
-console.log('PASS: right click, horizontal and vertical swipes, staggered release, rejected gestures, cancel, Super combinations');
+keys.shiftHeld=false;keys.shiftUsed=false;
+keys.holdShift(true);keys.shift=true;
+keys.typeText('П');keys.typeText('Р');keys.typeKey('Left');
+assert.equal(keys.shift,true,'Held Shift stays active for every key');
+assert.deepEqual(Array.from(keys.last.mods),['shift']);
+keys.holdShift(false);assert.equal(keys.shift,false,'Releasing a used Shift clears it');
+keys.holdShift(true);keys.shift=true;keys.holdShift(false);
+assert.equal(keys.shift,true,'Tapped Shift remains one-shot');
+keys.typeText('П');assert.equal(keys.shift,false);
+console.log('PASS: right click, horizontal and vertical swipes, staggered release, rejected gestures, cancel, Super combinations, held Shift');
 
 h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,120),p(1,200,120)]);
@@ -118,7 +127,16 @@ console.log('PASS: reverse jitter, deliberate reversal, scroll end, no lift-off 
 
 h=harness();h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,102),p(1,200,102)]);h.sample([]);
+assert.deepEqual(h.sent,[{click:273}],'Two px of fingertip settling is a right click, not a scroll');
+h=harness();h.sample([p(0,100,100),p(1,200,100)]);
+h.sample([p(0,100,103),p(1,200,103)]);h.sample([p(0,100,106),p(1,200,106)]);h.sample([]);
+assert(h.sent.some(e=>e.type==='scroll'),'Scroll starts after the dead zone');
 assert(!h.sent.some(e=>e.click),'A small scroll must not also right-click');
+h=harness();h.sample([p(0,100,100)]);h.sample([p(0,100,101),p(1,200,100)]);
+h.sample([p(0,100,102),p(1,200,101.5)]);h.sample([p(1,200,102)]);h.sample([]);
+assert.deepEqual(h.sent.filter(e=>e.type!=='move'),[{click:273}],'Late second finger with settling drift still right-clicks');
+h=harness();h.sample([p(0,100,100)]);for(let i=0;i<24;i++)h.sample([p(0,100,100),p(1,200,100)]);h.sample([]);
+assert.deepEqual(h.sent,[{click:273}],'Unhurried two-finger tap within 450 ms right-clicks');
 
 function flick(h,speed=.09) {
  h.c.root.inertiaEnabled=true;h.c.root.opened=true;h.c.root.scrollSpeed=speed;

@@ -14,6 +14,10 @@ ShellRoot {
     property string keyboardLanguage: ""
     Timer { id: languageGuard; interval: 1500; onTriggered: root.languagePending=false }
     property bool shift: false
+    // A held Shift key applies to every character typed until it is released;
+    // a tap stays one-shot.
+    property bool shiftHeld: false
+    property bool shiftUsed: false
     property bool caps: false
     property bool control: false
     property bool alt: false
@@ -148,7 +152,7 @@ ShellRoot {
         if (key==="BackSpace" && !mods.length && wordPrefix.length) {
             wordPrefix=wordPrefix.slice(0,-1); suggestions=[]; predictionRequest++; predictTimer.restart(); lastTypedAt=Date.now();
         } else clearWord(key==="BackSpace" && !mods.length);
-        control = false; alt = false; logo = false; shift = false;
+        control = false; alt = false; logo = false; releaseShift();
     }
     function typeText(char) {
         pad.stopMomentum();
@@ -160,8 +164,15 @@ ShellRoot {
         if (shift && (logo || control || alt)) mods.push("shift");
         send({type: "text", text: char, mods: mods, autocorrect: autocorrectEnabled, language: russian ? "ru" : "en"});
         if (control || alt || logo) clearWord(); else updateWord(char);
-        shift = false; control = false; alt = false; logo = false;
+        releaseShift(); control = false; alt = false; logo = false;
     }
+    function holdShift(held) {
+        if (held) { shiftHeld=true; shiftUsed=false; return; }
+        shiftHeld=false;
+        if (shiftUsed) shift=false;
+        shiftUsed=false;
+    }
+    function releaseShift() { if (shiftHeld) shiftUsed=true; else shift=false; }
     function click(button) {
         clearWord();
         send({type:"button",button:button,state:1});
@@ -314,12 +325,12 @@ ShellRoot {
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift() }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
                     Repeater {
                         model: Layouts.lower
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift() }
+                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
@@ -386,6 +397,10 @@ ShellRoot {
                     property real swipeX: 0
                     property real swipeY: 0
                     property bool scrolling: false
+                    // Co-directional two-finger drift before scrolling commits.
+                    // Settling fingertips drift a pixel or two during a tap.
+                    property real pairX: 0
+                    property real pairY: 0
                     property var scrollDirections: ({x:0,y:0})
                     property var scrollReversals: ({x:0,y:0})
                     property var reversalSamples: ({x:0,y:0})
@@ -432,7 +447,7 @@ ShellRoot {
                                 else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
                                     root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
-                            } else if (!scrolling && !endedDrag && previousCount && now-began < 350 && travel < 18 && !root.drag && peakCount <= 2) {
+                            } else if (!scrolling && !endedDrag && previousCount && now-began < (peakCount === 2 ? 450 : 350) && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);
                                 lastTapTime=peakCount === 1 ? now : -1000;
                                 lastTapX=lastX; lastTapY=lastY;
@@ -442,7 +457,7 @@ ShellRoot {
                         }
                         if (!previousCount) {
                             interruptMomentumForTouch(); clearVelocity();
-                            began=now; travel=0; peakCount=0;
+                            began=now; travel=0; peakCount=0; pairX=0; pairY=0;
                             if (n===1 && !root.drag && now-lastTapTime < 350 && Math.hypot(points[0].x-lastTapX,points[0].y-lastTapY)<60) {
                                 tapDragging=true; dragPointId=points[0].pointId;
                                 root.send({type:"button",button:272,state:1});
@@ -493,9 +508,17 @@ ShellRoot {
                             travel += first.distance;
                             // A resting palm or stale contact must not turn a
                             // moving finger into a two-finger scroll gesture.
-                            let scrollIntent = !root.drag && n === 2 && second &&
+                            let pairMotion = !root.drag && n === 2 && second &&
                                 second.distance > first.distance*0.25 &&
                                 first.dx*second.dx + first.dy*second.dy > 0;
+                            if (pairMotion && !scrolling) {
+                                pairX+=(first.dx+second.dx)/2; pairY+=(first.dy+second.dy)/2;
+                            }
+                            let scrollIntent = pairMotion && Math.hypot(pairX,pairY) >= 4;
+                            if (pairMotion && !scrolling && !scrollIntent) {
+                                // Undecided between tap and scroll: neither move nor scroll.
+                                previousCount=n; lastX=x; lastY=y; return;
+                            }
                             if (scrollIntent) {
                                 scrolling=true; lastTapTime=-1000;
                                 if (tapDragging) {
@@ -534,7 +557,7 @@ ShellRoot {
                         tapDragging=false; dragPointId=-1; lastTapTime=-1000;
                         previousCount=0; positions={};
                         workspaceGesture=false; swipeX=0; swipeY=0;
-                        scrolling=false;
+                        scrolling=false; pairX=0; pairY=0;
                         scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
                         reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
                     }
