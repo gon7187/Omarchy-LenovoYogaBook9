@@ -269,21 +269,26 @@ ShellRoot {
                 Layout.maximumHeight: 32
                 spacing: 6
                 Text { text: "YOGA"; color: "#b9cbe4"; font.pixelSize: 13; font.letterSpacing: 1 }
-                Item { Layout.fillWidth: true }
-                Text { text: root.status; color: "#89a6c9"; font.pixelSize: 12 }
-                Key { Layout.preferredWidth: 90; Layout.fillHeight: true; radius: 7; textSize: 12; label: "✦ Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
+                Item {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
+                        spacing: 7
+                        Repeater {
+                            model: root.predictionEnabled && !root.settingsOpen ? root.suggestions : []
+                            Key { required property string modelData; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 1; Layout.fillHeight: true; radius: 7; textSize: 15; label: modelData; onActivated: root.completeWord(modelData) }
+                        }
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        visible: root.status!=="Готово" && (!root.predictionEnabled || !root.suggestions.length)
+                        text: root.status; color: "#89a6c9"; font.pixelSize: 12
+                    }
+                }
+                Key { Layout.preferredWidth: 80; Layout.minimumWidth: 80; Layout.maximumWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
                 Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
                 Key { Layout.preferredWidth: 48; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Esc"; onActivated: root.typeKey("Escape") }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
-            }
-            RowLayout {
-                visible: root.predictionEnabled && !root.settingsOpen
-                Layout.fillWidth: true; Layout.preferredHeight: 32; Layout.maximumHeight: 32; spacing: 7
-                Text { visible: root.suggestions.length===0; Layout.fillWidth: true; text: root.wordPrefix.length>=2 ? "Продолжай печатать…" : "Подсказки слов  ·  " + (root.russian ? "Русский" : "English"); color: "#71859f"; font.pixelSize: 13 }
-                Repeater {
-                    model: root.suggestions
-                    Key { required property string modelData; Layout.fillWidth: true; Layout.fillHeight: true; radius: 7; textSize: 17; label: modelData; onActivated: root.completeWord(modelData) }
-                }
             }
             ColumnLayout {
                 id: keyboard

@@ -15,7 +15,11 @@ Rectangle {
     border.color: down || selected ? "#87bcf5" : "#384658"
     border.width: 1
     Text {
-        anchors.centerIn: parent
+        anchors.fill: parent
+        anchors.margins: 6
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
         text: key.label
         color: "#f0f5ff"
         font.pixelSize: key.textSize
