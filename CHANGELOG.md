@@ -3,7 +3,8 @@
 ## 2026-09-16 — закрыть все окна с панели
 
 - `CTRL + ALT + BACKSPACE` → `omarchy-hyprland-window-close-all` в `bindings.lua`:
-  на экранной клавиатуре нет Delete.
+  на экранной клавиатуре не было Delete.
+- Клавиша Del добавлена в нижний ряд между 🎤 и RU/EN (автоповтор).
 
 ## 2026-09-16 — удержание Ctrl, Alt и Super
 
