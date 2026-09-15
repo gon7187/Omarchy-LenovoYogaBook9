@@ -74,3 +74,7 @@ for _, entry in ipairs(yoga_volume_keys) do
   o.bind(keys, description, yoga_volume .. " " .. action,
     { locked = true, repeating = repeating })
 end
+
+-- The on-screen keyboard has no Delete key, so mirror Omarchy's
+-- CTRL + ALT + DELETE ("Close all windows") onto Backspace.
+o.bind("CTRL + ALT + BACKSPACE", "Close all windows", "omarchy-hyprland-window-close-all")
