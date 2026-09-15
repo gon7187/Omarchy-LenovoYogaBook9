@@ -423,6 +423,10 @@ ShellRoot {
                     property real scrollDistance: 0
                     property real momentumStarted: 0
                     property real momentumLast: 0
+                    property real momentumProgress: 0
+                    property real carryVX: 0
+                    property real carryVY: 0
+                    property real carryUntil: 0
                     // Match the display animation clock, not a free-running 16 ms timer.
                     FrameAnimation {
                         id: momentum
@@ -435,7 +439,8 @@ ShellRoot {
                         let n = points.length;
                         histogram[n]++;
                         let now=Date.now();
-                        let elapsed=Math.max(4,Math.min(40,now-lastSampleTime));
+                        let scrollElapsed=Math.max(1,now-lastSampleTime);
+                        let elapsed=Math.max(4,Math.min(40,scrollElapsed));
                         lastSampleTime=now;
                         let endedDrag=false;
                         if (tapDragging && !points.some(p => p.pointId === dragPointId)) {
@@ -445,7 +450,8 @@ ShellRoot {
                         if (!n) {
                             if (scrolling && !startMomentum(now)) root.send({type:"scrollEnd"});
                             scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
-                        reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
+                            reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
+                            if (!scrolling) clearCarry();
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
                                     root.send({type:"workspace",direction:swipeX<0 ? "next" : "previous"});
@@ -459,7 +465,7 @@ ShellRoot {
                             return;
                         }
                         if (!previousCount) {
-                            stopMomentum(); clearVelocity();
+                            interruptMomentumForTouch(); clearVelocity();
                             began=now; travel=0; peakCount=0;
                             if (n===1 && !root.drag && now-lastTapTime < 350 && Math.hypot(points[0].x-lastTapX,points[0].y-lastTapY)<60) {
                                 tapDragging=true; dragPointId=points[0].pointId;
@@ -530,13 +536,14 @@ ShellRoot {
                                     root.send({type:"scroll",x:sx,y:sy});
                                     if (sx*scrollVX<0) scrollVX=0;
                                     if (sy*scrollVY<0) scrollVY=0;
-                                    let blend=1-Math.exp(-elapsed/35);
-                                    scrollVX=scrollVX*(1-blend)+(sx/elapsed)*blend;
-                                    scrollVY=scrollVY*(1-blend)+(sy/elapsed)*blend;
+                                    let blend=1-Math.exp(-scrollElapsed/35);
+                                    scrollVX=scrollVX*(1-blend)+(sx/scrollElapsed)*blend;
+                                    scrollVY=scrollVY*(1-blend)+(sy/scrollElapsed)*blend;
                                     lastScrollTime=now; velocitySamples++; scrollDistance+=Math.hypot(dx,dy);
                                 }
                             } else {
                                 root.clearWord();
+                                clearCarry();
                                 moveEvents++;
                                 let gain=root.pointerSpeed*(1+root.pointerAccel*Math.min(first.distance/elapsed/1.2,2));
                                 root.send({type:"move",x:first.dx*gain,y:first.dy*gain});
@@ -565,7 +572,8 @@ ShellRoot {
                         }
                         // A lifting fingertip often rolls backwards. Stop coasting
                         // on this axis until continued motion confirms a reversal.
-                        if (axis==="x") scrollVX=0; else scrollVY=0;
+                        if (axis==="x") { scrollVX=0; carryVX=0; }
+                        else { scrollVY=0; carryVY=0; }
                         if (!reversalSamples[axis]) reversalStarted[axis]=Date.now();
                         reversalSamples[axis]++;
                         scrollReversals[axis]+=delta;
@@ -580,33 +588,64 @@ ShellRoot {
                     function clearVelocity() {
                         scrollVX=0; scrollVY=0; lastScrollTime=0; velocitySamples=0; scrollDistance=0;
                     }
-                    function stopMomentum() {
+                    function clearCarry() { carryVX=0; carryVY=0; carryUntil=0; }
+                    function interruptMomentumForTouch() {
+                        if (!momentum.running) return;
+                        // Stop visible movement immediately, retain only a short
+                        // opportunity to add velocity to another matching swipe.
+                        let remaining=Math.max(0,1-momentumProgress/root.inertiaDuration);
+                        carryVX=scrollVX*Math.pow(remaining,3);
+                        carryVY=scrollVY*Math.pow(remaining,3);
+                        carryUntil=Date.now()+350;
+                        stopMomentum(true);
+                    }
+                    function stopMomentum(keepCarry) {
+                        if (!keepCarry) clearCarry();
                         if (momentum.running) { momentum.stop(); root.send({type:"scrollEnd"}); }
                     }
                     function startMomentum(now) {
-                        if (!root.inertiaEnabled || workspaceGesture || peakCount>2 || velocitySamples<2 || scrollDistance<12 || now-lastScrollTime>70) return false;
-                        // A restrained tail: scale down release velocity and cap both axes.
-                        scrollVX=Math.max(-0.8,Math.min(0.8,scrollVX*root.inertiaStrength));
-                        scrollVY=Math.max(-0.8,Math.min(0.8,scrollVY*root.inertiaStrength));
-                        if (Math.hypot(scrollVX,scrollVY)<0.0001) return false;
-                        momentumStarted=now; momentumLast=now; momentum.restart(); return true;
+                        if (!root.inertiaEnabled || workspaceGesture || peakCount>2 || velocitySamples<2 || scrollDistance<12 || now-lastScrollTime>70) {
+                            clearCarry(); return false;
+                        }
+                        let vx=scrollVX*root.inertiaStrength, vy=scrollVY*root.inertiaStrength;
+                        let speed=Math.hypot(vx,vy), carried=Math.hypot(carryVX,carryVY);
+                        // Opposite/perpendicular gestures must brake, not inherit
+                        // a previous direction. A stationary touch never resumes it.
+                        if (now<=carryUntil && speed>0 && carried>0 &&
+                                vx*carryVX+vy*carryVY>0.8*speed*carried) {
+                            let retention=0.85*Math.max(0,(carryUntil-now)/350);
+                            vx+=carryVX*retention; vy+=carryVY*retention;
+                        }
+                        clearCarry();
+                        speed=Math.hypot(vx,vy);
+                        if (speed<0.0001) return false;
+                        // Smooth, gain-relative limiting keeps fast swipes distinct
+                        // and repeated flicks bounded, unlike the old 0.8 clamp.
+                        let limit=Math.max(0.02,root.scrollSpeed*root.inertiaStrength*8);
+                        let gain=limit*(-Math.expm1(-speed/limit))/speed;
+                        scrollVX=vx*gain; scrollVY=vy*gain;
+                        momentumStarted=now; momentumLast=now; momentumProgress=0;
+                        momentum.restart(); return true;
                     }
                     function tickMomentum(frameNow) {
                         let now=frameNow === undefined ? Date.now() : frameNow;
                         let elapsed=now-momentumLast;
-                        if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>80) { stopMomentum(); return; }
+                        if (previousCount || !root.opened || !root.inertiaEnabled || elapsed>500) { stopMomentum(); return; }
                         if (elapsed<=0) return;
                         let duration=root.inertiaDuration;
-                        let a=Math.min(1,Math.max(0,(momentumLast-momentumStarted)/duration));
-                        let b=Math.min(1,Math.max(0,(now-momentumStarted)/duration));
+                        // A late frame should neither abort nor replay a large jump.
+                        // Pause the unrendered portion and continue the same curve.
+                        let step=Math.min(elapsed,32);
+                        let a=Math.min(1,momentumProgress/duration);
+                        let b=Math.min(1,(momentumProgress+step)/duration);
                         // Integrate v(t)=v0*(1-t/T)^3: velocity AND its slope
                         // reach zero at the end instead of chopping off a live tail.
                         let distance=duration/4*(Math.pow(1-a,4)-Math.pow(1-b,4));
                         if (distance>0) root.send({type:"scroll",x:scrollVX*distance,y:scrollVY*distance});
-                        momentumLast=now;
+                        momentumLast=now; momentumProgress+=step;
                         if (b>=1) stopMomentum();
                     }
-                    onPressed: { stopMomentum(); pressEvents++; }
+                    onPressed: { interruptMomentumForTouch(); pressEvents++; }
                     onUpdated: { updateEvents++; }
                     // Use the completed event's active list once, not intermediate
                     // pressed/released snapshots while Qt updates its point pool.

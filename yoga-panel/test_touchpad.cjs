@@ -12,7 +12,7 @@ function harness() {
     const sent = [];
     let now=1000;
     const c = vm.createContext({samples:0, histogram:[0,0,0,0,0,0],
-        reversalSamples:{x:0,y:0},reversalStarted:{x:0,y:0},scrollVX:0,scrollVY:0,lastScrollTime:0,velocitySamples:0,scrollDistance:0,momentumStarted:0,momentumLast:0,
+        reversalSamples:{x:0,y:0},reversalStarted:{x:0,y:0},scrollVX:0,scrollVY:0,lastScrollTime:0,velocitySamples:0,scrollDistance:0,momentumStarted:0,momentumLast:0,momentumProgress:0,carryVX:0,carryVY:0,carryUntil:0,
         momentum:{running:false,restart(){this.running=true},stop(){this.running=false}},
         previousCount:0, positions:{}, began:0, travel:0, peakCount:0,
         lastX:0,lastY:0,moveEvents:0,scrollEvents:0,
@@ -133,7 +133,7 @@ h=harness();flick(h);h.c.resetGesture();assert.equal(h.c.momentum.running,false)
 h=harness();h.c.root.inertiaEnabled=true;h.c.root.opened=true;
 h.sample([p(0,100,100),p(1,200,100)]);h.sample([p(0,100,120),p(1,200,120)]);h.sample([p(0,100,140),p(1,200,140)]);h.advance(100);h.sample([]);
 assert.equal(h.c.momentum.running,false,'Pause before release prevents coasting');
-h=harness();flick(h);h.advance(200);h.c.tickMomentum();assert.equal(h.c.momentum.running,false,'A stalled UI cannot emit a jump');
+h=harness();flick(h);h.advance(1000);h.c.tickMomentum();assert.equal(h.c.momentum.running,false,'A stalled UI cannot emit a jump');
 h=harness();h.c.root.scrollSpeed=.09;
 h.sample([p(0,100,100),p(1,200,100)]);h.sample([p(0,100,120),p(1,200,120)]);
 let first=h.sent.at(-1).y;h.c.root.scrollSpeed=.18;h.sample([p(0,100,140),p(1,200,140)]);
@@ -197,3 +197,57 @@ assert(Math.abs(scheduledTail([1000/60])-scheduledTail([8,25,17,16]))<1e-9,
  'Variable display frame times preserve distance and survive wall-clock changes');
 assert(scheduledTail([1000/60])>0,'Animation clock actually produces motion');
 console.log('PASS: display-frame timing, clock jumps, frame-rate independent distance');
+
+function swipe(a, step=20, interval=16, sign=1) {
+ a.c.root.inertiaEnabled=true;a.c.root.opened=true;
+ a.sample([p(0,100,100),p(1,200,100)]);
+ for(let i=1;i<=5;i++){
+  a.advance(interval-16);
+  a.sample([p(0,100,100+sign*step*i),p(1,200,100+sign*step*i)]);
+ }
+ a.sample([]);
+ return Math.hypot(a.c.scrollVX,a.c.scrollVY);
+}
+let slow=harness(),fast=harness();
+for(const a of [slow,fast]){a.c.root.scrollSpeed=.9;a.c.root.inertiaStrength=1.5;}
+let slowV=swipe(slow,20,32),fastV=swipe(fast,20,8);
+assert(fastV>slowV*2,'Fast swipe must launch faster inertia even at high sensitivity');
+h=harness();h.c.root.scrollSpeed=.18;
+let v1=swipe(h);h.advance(32);h.c.tickMomentum();let v2=swipe(h);
+assert(v2>v1*1.2,'Repeated same-direction flick adds remaining momentum');
+console.log('PASS: swipe-speed response and repeated flick acceleration');
+
+// Carry is an opportunity for another scroll, never permission to keep moving
+// under a resting finger or to pull a reversed swipe in the old direction.
+for(const mode of ['opposite','expired','tap','cancel','pointer']) {
+ let a=harness();a.c.root.scrollSpeed=.18;swipe(a);
+ a.advance(16);a.c.tickMomentum();
+ if(mode==='expired'){a.c.interruptMomentumForTouch();a.advance(500);}
+ if(mode==='tap'){a.sample([p(0,100,100)]);assert(!a.c.momentum.running);a.sample([]);}
+ if(mode==='cancel')a.c.resetGesture();
+ if(mode==='pointer'){a.sample([p(0,100,100)]);a.sample([p(0,120,100)]);a.sample([]);}
+ const direction=mode==='opposite'?-1:1;
+ let actual=swipe(a,20,16,direction);
+ let clean=harness();clean.c.root.scrollSpeed=.18;
+ let expected=swipe(clean,20,16,direction);
+ assert(Math.abs(actual-expected)<1e-9,`${mode} must discard carry`);
+}
+h=harness();h.c.root.scrollSpeed=.9;h.c.root.inertiaStrength=1.5;
+let previous=0;
+for(let i=0;i<15;i++){
+ let speed=swipe(h,40,8);
+ assert(speed>=previous-1e-9,'Repeated same-direction flicks increase speed');
+ assert(speed<.9*1.5*8,'Repeated flicks stay bounded');previous=speed;
+}
+
+h=harness();flick(h);h.c.root.inertiaDuration=1500;
+h.advance(16);h.c.tickMomentum();
+let pre=h.sent.length;h.advance(120);h.c.tickMomentum();
+assert(h.c.momentum.running,'A delayed frame must not cut off long inertia');
+assert(h.sent.slice(pre).filter(e=>e.type==='scroll').length===1);
+assert(Math.abs(h.sent.at(-1).y)<=Math.abs(h.c.scrollVY)*32,'No catch-up jump after delayed frame');
+let total=h.sent.filter(e=>e.type==='scroll').slice(4).reduce((sum,e)=>sum+Math.abs(e.y),0);
+while(h.c.momentum.running){h.advance(16);pre=h.sent.length;h.c.tickMomentum();for(const e of h.sent.slice(pre))if(e.type==='scroll')total+=Math.abs(e.y);}
+assert(Math.abs(total-Math.abs(h.c.scrollVY)*1500/4)<1e-8,'Delayed frame preserves the full smooth tail distance');
+assert.equal(h.sent.at(-1).type,'scrollEnd');
+console.log('PASS: braking, carry expiry, tap/cancel/pointer resets, bounded repeat acceleration, delayed long tail');
