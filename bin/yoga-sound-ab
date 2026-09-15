@@ -1,0 +1,37 @@
+#!/bin/bash
+# Listening test for the speakers: play music, run this, note which step
+# sounds best. Each step lasts STEP seconds and is announced by notification.
+# Everything is restored at the end (or on Ctrl+C).
+set -uo pipefail
+
+STEP="${1:-10}"
+id="$(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id' | head -1)"
+[[ -n $id ]] || { echo "yoga_dolby sink not found" >&2; exit 1; }
+profile_before="$(amixer -c 0 cget numid=1 | awk -F= '/: values/{print $2}')"
+
+eq() { # shelf1600 peak2500 peak1500 peak500 bass300
+  local p="" side
+  for side in L R; do
+    p+="\"sh$side:Gain\" $1 \"p1$side:Gain\" $2 \"p2$side:Gain\" $3 \"p3$side:Gain\" $4 \"bass$side:Gain\" $5 "
+  done
+  pw-cli s "$id" Props "{ params = [ $p ] }" >/dev/null
+}
+profile() { amixer -c 0 cset numid=1 "$1" >/dev/null; }
+say() { echo "$1"; notify-send -t $((STEP * 1000)) "Тест звука" "$1"; }
+
+restore() {
+  profile "$profile_before"
+  eq 3 -5 4 3 8
+  "$HOME/.local/bin/yoga-volume" +0 >/dev/null 2>&1
+  say "Готово, настройки возвращены"
+}
+trap 'restore; exit' INT TERM
+
+profile 0
+say "1/6 Без обработки";              eq 0 0 0 0 0;   sleep "$STEP"
+say "2/6 Эквалайзер Windows";         eq 3 -5 4 3 8;  sleep "$STEP"
+say "3/6 Эквалайзер + басы +14 дБ";   eq 3 -5 4 3 14; sleep "$STEP"
+say "4/6 Профиль усилителя 1";        eq 3 -5 4 3 8; profile 1; sleep "$STEP"
+say "5/6 Профиль усилителя 2";        profile 2;      sleep "$STEP"
+say "6/6 Профиль 0 (как было)";       profile 0;      sleep "$STEP"
+restore
