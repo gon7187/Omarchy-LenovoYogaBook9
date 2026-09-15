@@ -22,6 +22,8 @@ Rectangle {
         font.weight: Font.Medium
     }
     TapHandler {
+        // Holding a repeat key tolerates drift within its entire surface.
+        gesturePolicy: key.repeatable ? TapHandler.WithinBounds : TapHandler.ReleaseWithinBounds
         acceptedButtons: Qt.LeftButton
         onPressedChanged: {
             if (pressed) {

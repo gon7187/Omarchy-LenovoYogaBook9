@@ -197,3 +197,14 @@ yoga-recovery restore /путь/к/копии    # явно восстанови
 Дополнительные проверки: `python3 -m unittest test_voice test_voice_shutdown test_recovery`.
 `python3 test_punctuation_input.py` — проверка текста и отсутствия переключений
 раскладки на пунктуации в отдельном поле Wayland.
+
+Повтор Backspace и стрелок продолжается при движении внутри клавиши;
+выход за границу, отпускание и скрытие панели останавливают повтор.
+Сенсорная регрессия проверяется без вмешательства в рабочий стол:
+`QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests`.
+
+На этом Yoga Book также проверена загрузка Parakeet v3 INT8 через установленный
+`/usr/lib/voxtype/voxtype-onnx-avx2`. Локальное переопределение службы
+`~/.config/systemd/user/voxtype.service.d/20-yoga-onnx.conf` выбирает ONNX-движок;
+его конфигурация включена в локальные резервные копии. Установщик панели
+не меняет выбранную пользователем модель или пакетные бинарники Voxtype.

@@ -15,7 +15,7 @@ BACKUPS=HOME/'.local/state/yoga-book/backups'
 PATTERNS=(
     '.config/hypr/*.lua', '.config/yoga-panel/settings.json',
     '.config/voxtype/config.toml', '.config/systemd/user/yoga-*.service',
-    '.config/systemd/user/voxtype.service', '.local/bin/yoga-*',
+    '.config/systemd/user/voxtype.service', '.config/systemd/user/voxtype.service.d/*.conf', '.local/bin/yoga-*',
     '.config/wireplumber/wireplumber.conf.d/*yoga*',
     '.config/omarchy/extensions/omarchy-menu.jsonc',
     '.config/omarchy/hooks/post-update.d/*yoga*',
