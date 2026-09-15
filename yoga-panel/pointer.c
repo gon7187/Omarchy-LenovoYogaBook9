@@ -57,11 +57,19 @@ int main(int argc, char **argv) {
                 zwlr_virtual_pointer_v1_motion(pointer, time,
                     wl_fixed_from_double(x), wl_fixed_from_double(y));
             } else {
-                zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_FINGER);
                 wl_fixed_t sx=scroll_fixed(x,&scroll_remainder_x);
                 wl_fixed_t sy=scroll_fixed(y,&scroll_remainder_y);
-                if (sx) zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, sx);
-                if (sy) zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL, sy);
+                // Hyprland resets the event in axis(), and source applies to
+                // the last axis. Set it AFTER each axis, before frame().
+                // We generate our own inertia: expose continuous motion.
+                if (sx) {
+                    zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, sx);
+                    zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
+                }
+                if (sy) {
+                    zwlr_virtual_pointer_v1_axis(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL, sy);
+                    zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
+                }
             }
         } else if (sscanf(line, "a %u %u %u %u", &ax, &ay, &width, &height) == 4 && width && height && ax <= width && ay <= height) {
             zwlr_virtual_pointer_v1_motion_absolute(pointer,time,ax,ay,width,height);
@@ -71,13 +79,17 @@ int main(int argc, char **argv) {
         } else if (line[0] == 'e') {
             scroll_remainder_x=scroll_remainder_y=0;
             zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
             zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
         } else if (line[0] == 'r') {
             scroll_remainder_x=scroll_remainder_y=0;
             zwlr_virtual_pointer_v1_button(pointer, time, BTN_LEFT, 0);
             zwlr_virtual_pointer_v1_button(pointer, time, BTN_RIGHT, 0);
             zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
             zwlr_virtual_pointer_v1_axis_stop(pointer, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
+            zwlr_virtual_pointer_v1_axis_source(pointer, WL_POINTER_AXIS_SOURCE_CONTINUOUS);
         } else continue;
         zwlr_virtual_pointer_v1_frame(pointer);
         if (wl_display_roundtrip(display) < 0) break;

@@ -296,7 +296,6 @@ ShellRoot {
                 }
                 Key { Layout.preferredWidth: 80; Layout.minimumWidth: 80; Layout.maximumWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
                 Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
-                Key { Layout.preferredWidth: 48; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Esc"; onActivated: root.typeKey("Escape") }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             ColumnLayout {
@@ -312,12 +311,13 @@ ShellRoot {
                 Layout.minimumWidth: 0
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; label: "Esc"; onActivated: root.typeKey("Escape") }
                     Repeater {
                         id: digitKeys
                         model: Layouts.numbers
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2+7; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
