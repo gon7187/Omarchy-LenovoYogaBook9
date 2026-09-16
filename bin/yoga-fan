@@ -1,50 +1,38 @@
 #!/usr/bin/env python3
-"""Fan mode of the Yoga Book 9 following the power profile.
+"""Fan speeds of the Yoga Book 9, read from the embedded controller.
 
-The firmware keeps the fan on its own EC table: switching platform_profile
-(power-profiles-daemon, the battery menu) leaves ideapad_laptop's fan_mode at
-0, Super Silent, in every profile. This maps the profile onto fan_mode:
+No driver exposes them: ideapad_laptop has no fan input, yogafan does not bind
+to this model, and the five ACPI fans (PNP0C0B) only flip NVS variables the EC
+ignores. The DSDT maps EC RAM at 0xFE0B0000 (region EMOR) with FANS and FA2S,
+16-bit RPM of the two fans, at 0x5A2 and 0x5A4.
 
-  low-power   -> 0  Super Silent
-  balanced    -> 4  Efficient Thermal Dissipation (Standard, 1, hit 99 C at full load)
-  performance -> 4  Efficient Thermal Dissipation
+Measured under full load: both fans top out at ~3900 / ~6000 RPM when the
+package reaches ~95 C, identically with fan_mode 0 and 4, so the EC runs them on
+temperature alone and there is nothing to control from here.
 
-Runs as root because fan_mode is root-only. Reads the profile and writes one
-number to the EC, nothing else.
+Runs as root because /dev/mem is root-only. Maps that one page read-only and
+writes "RPM1 RPM2" to /run/yoga-fan every 2 s; never writes to the EC.
 
   yoga-fan            run the daemon (yoga-fan.service)
   yoga-fan install    install this script and the system service (sudo/pkexec)
   yoga-fan remove
 """
-import os, select, subprocess, sys
+import mmap, os, struct, subprocess, sys, time
 
-PROFILE = '/sys/firmware/acpi/platform_profile'
-FAN = '/sys/bus/platform/devices/VPC2004:00/fan_mode'
-MODES = {'low-power': '0', 'balanced': '4', 'performance': '4'}
+OUT = '/run/yoga-fan'
+EC_BASE, FANS = 0xFE0B0000, 0x5A2
 UNIT = '/etc/systemd/system/yoga-fan.service'
 
 
-def read(path):
-    with open(path) as f: return f.read().strip()
-
-
-def apply():
-    want = MODES.get(read(PROFILE))
-    if want is None or read(FAN) == want: return
-    with open(FAN, 'w') as f: f.write(want)
-    print(f'fan_mode {want} for {read(PROFILE)}', flush=True)
-
-
 def run():
-    with open(PROFILE) as f:
-        poller = select.poll()
-        poller.register(f, select.POLLPRI | select.POLLERR)
-        while True:
-            apply()
-            # platform_profile_notify() wakes this at once; the timeout re-asserts
-            # the mode in case the EC drops it across suspend or a Fn+Q switch.
-            poller.poll(10000)
-            f.seek(0); f.read()
+    fd = os.open('/dev/mem', os.O_RDONLY | os.O_SYNC)
+    ec = mmap.mmap(fd, mmap.PAGESIZE, mmap.MAP_SHARED, mmap.PROT_READ, offset=EC_BASE)
+    while True:
+        tmp = OUT + '.tmp'
+        with open(tmp, 'w') as f: f.write('%d %d\n' % struct.unpack_from('<HH', ec, FANS))
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, OUT)
+        time.sleep(2)
 
 
 def priv(*cmd):
@@ -54,7 +42,7 @@ def priv(*cmd):
 
 def install():
     here = os.path.realpath(__file__)
-    unit = ('[Unit]\nDescription=Yoga Book 9 fan mode following the power profile\n\n'
+    unit = ('[Unit]\nDescription=Yoga Book 9 fan speeds from the embedded controller\n\n'
             '[Service]\nExecStart=/usr/local/bin/yoga-fan\nRestart=on-failure\nRestartSec=2\n\n'
             '[Install]\nWantedBy=multi-user.target\n')
     priv('sh', '-c', f'install -Dm755 "{here}" /usr/local/bin/yoga-fan && printf %s "$1" > {UNIT} && '
@@ -66,5 +54,5 @@ if __name__ == '__main__':
     if arg == 'run': run()
     elif arg == 'install': install()
     elif arg == 'remove':
-        priv('sh', '-c', f'systemctl disable --now yoga-fan; rm -f {UNIT} /usr/local/bin/yoga-fan; systemctl daemon-reload')
+        priv('sh', '-c', f'systemctl disable --now yoga-fan; rm -f {UNIT} /usr/local/bin/yoga-fan {OUT}; systemctl daemon-reload')
     else: sys.exit(__doc__)

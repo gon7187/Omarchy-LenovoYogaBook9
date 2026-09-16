@@ -932,7 +932,9 @@ Writing `1` caps charging (Lenovo's implementation stops around 55-60%) to prese
 
 `usb_charging`, `fan_mode` and `camera_power` are exposed on the same device.
 
-`fan_mode` does **not** follow the power profile: the firmware leaves it at `0` (Super Silent) in `low-power`, `balanced` and `performance` alike, so the fan behaved the same whatever the battery menu said. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that watches `platform_profile` and writes `0` (Super Silent) for `low-power` and `4` (Efficient Thermal Dissipation) for `balanced` and `performance`. `balanced` used to get `1` (Standard), which peaked at 99 °C under a 60 s all-core load against 97 °C for `4`; the driver accepts only `0`, `1`, `2` (Dust Cleaning) and `4`, re-asserting every 10 s in case the EC drops it.
+**Fan speed cannot be controlled from Linux.** `fan_mode` is accepted but changes nothing: under a 60 s all-core load in `performance` both fans reach the same ceiling, ~3900 and ~6000 RPM at ~95 °C, with `fan_mode` `0` and `4` alike, and stay there until the package is back near 55 °C. The EC runs them on temperature alone. The five ACPI fans (`PNP0C0B`, bound to `acpitz` active trips) only set NVS variables (`VFN0..4`) the EC ignores, `yogafan` does not bind to this model, and no one has fan control for the 82YQ ([LenovoLegionLinux#329](https://github.com/johnfanv2/LenovoLegionLinux/issues/329)). Lower temperatures come only from lower power limits — `low-power` held ~56 °C under the same load.
+
+The speeds themselves are readable: the DSDT maps EC RAM at `0xFE0B0000` and puts `FANS`/`FA2S`, the RPM of the two fans, at offsets `0x5A2`/`0x5A4`. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that maps that page read-only and writes `RPM1 RPM2` to `/run/yoga-fan` every 2 s; the `gon7187.sysstats` bar tooltip shows it.
 
 ```bash
 bin/yoga-fan install      # sudo or pkexec; `remove` undoes it
