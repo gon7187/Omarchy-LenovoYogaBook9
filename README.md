@@ -525,6 +525,10 @@ All four positions switch automatically. An earlier version excluded present on 
 
 The missing hinge is covered by requiring an orientation to hold for about two seconds before acting — without it, a genuine fold and an incidental tilt look identical.
 
+Turn it on and off with `yoga-autorotate-toggle` (or the Omarchy menu entry), which starts and stops the service. There is deliberately **one** switch: an earlier version also had an `enabled` flag in a config file, so the menu could show auto-rotate ticked while the daemon sat inert, with nothing to explain why.
+
+It reads the layout back from `hyprctl monitors` rather than trusting a recorded value. `hyprctl eval` changes are not persisted, so any Hyprland config reload silently reverts both panels to the stand layout in `monitors.lua`; a daemon trusting its own record would believe it had already applied book mode and never correct it.
+
 ### Tablet — the hinge angle from two gyroscopes
 
 Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (`gyro_3d` at `iio:device0` and `iio:device2`), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of `dev2.x − dev0.x` is the change in hinge angle. Recorded at 100 Hz:
@@ -543,10 +547,6 @@ bin/yoga-hinge install      # sudo or pkexec; `remove` undoes it
 `yoga-autorotate` then picks tablet at ≥250° (leaving below 220°) unless the machine is upside down — tent sits near 305°, and with the start only guessed the hinge cannot tell tent from an inverted tablet, so upside down stays present. Tablet in or out is applied after one reading rather than two, since the hinge already confirms the fold.
 
 In tablet `yoga-mode` disables `eDP-2` and the lower touchscreen and stylus, and rotates `eDP-1` with the machine. Disabling a monitor hands its workspace to the other and makes it the visible one, and enabling it sends every workspace back where it came from — a window opened in tablet mode would reappear on the keyboard panel. `yoga-mode` keeps the workspace the upper panel showed and gathers windowed workspaces onto `eDP-1` on the way out. Without `yoga-hinge`, tablet is simply never chosen.
-
-Turn it on and off with `yoga-autorotate-toggle` (or the Omarchy menu entry), which starts and stops the service. There is deliberately **one** switch: an earlier version also had an `enabled` flag in a config file, so the menu could show auto-rotate ticked while the daemon sat inert, with nothing to explain why.
-
-It reads the layout back from `hyprctl monitors` rather than trusting a recorded value. `hyprctl eval` changes are not persisted, so any Hyprland config reload silently reverts both panels to the stand layout in `monitors.lua`; a daemon trusting its own record would believe it had already applied book mode and never correct it.
 
 ---
 
