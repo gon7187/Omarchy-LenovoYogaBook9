@@ -11,3 +11,7 @@
 -- splash" entry under Open items in the README.
 hl.monitor({ output = "eDP-1", mode = "2880x1800@60", position = "0x0", scale = 2, transform = 2, bitdepth = 10, cm = "hdr" })
 hl.monitor({ output = "eDP-2", mode = "2880x1800@60", position = "0x900", scale = 2, bitdepth = 10, cm = "hdr" })
+
+-- SDR apps in HDR mode: decode them with the piecewise sRGB curve instead of
+-- pure gamma 2.2, which crushes the dark greys of terminals and dark themes.
+hl.config({ render = { cm_sdr_eotf = "srgb" } })
