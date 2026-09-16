@@ -78,8 +78,3 @@ end
 -- The on-screen keyboard has no Delete key, so mirror Omarchy's
 -- CTRL + ALT + DELETE ("Close all windows") onto Backspace.
 o.bind("CTRL + ALT + BACKSPACE", "Close all windows", "omarchy-hyprland-window-close-all")
-
--- The network panel is cloned to gon7187.network (TCP latency behind the VPN),
--- so the stock shortcut would still open the old one showing "Timeout".
-hl.unbind("SUPER + CTRL + W")
-o.bind("SUPER + CTRL + W", "Network", "omarchy-shell shell toggle gon7187.network")

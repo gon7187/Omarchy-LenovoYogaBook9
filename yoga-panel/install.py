@@ -25,8 +25,6 @@ def main():
         SOURCE/'systemd/yoga-panel.service':HOME/'.config/systemd/user/yoga-panel.service',
         SOURCE.parent/'bin/yoga-recovery':HOME/'.local/bin/yoga-recovery',
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
-        SOURCE.parent/'bin/yoga-network-status':HOME/'.local/bin/yoga-network-status',
-        SOURCE.parent/'bin/yoga-network-speedtest':HOME/'.local/bin/yoga-network-speedtest',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',

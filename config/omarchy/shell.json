@@ -51,7 +51,7 @@
           "id": "omarchy.bluetooth"
         },
         {
-          "id": "gon7187.network"
+          "id": "omarchy.network"
         },
         {
           "id": "omarchy.audio"
@@ -65,15 +65,5 @@
       ]
     }
   },
-  "plugins": [
-    {
-      "id": "gon7187.speedtest"
-    }
-  ],
-  "disabledPlugins": [
-    "omarchy.speedtest"
-  ],
-  "cloneSourceRestores": [
-    "gon7187.speedtest"
-  ]
+  "plugins": []
 }
