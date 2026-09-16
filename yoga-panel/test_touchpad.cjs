@@ -68,7 +68,7 @@ h.sample([p(0,100,100)]); h.sample([p(0,100,100),p(1,200,100)]);
 h.sample([p(0,100,100)]); h.sample([]);
 assert.deepEqual(h.sent,[{click:273}],'Staggered two-finger tap produces only right click');
 const three=(x,y=100)=>[p(0,x,y),p(1,x+100,y),p(2,x+200,y)];
-for(const [delta,direction] of [[-140,'previous'],[140,'next']]) {
+for(const [delta,direction] of [[-140,'next'],[140,'previous']]) {
  h=harness();h.sample(three(300));h.sample(three(300+delta));
  h.sample([p(0,300+delta,100),p(1,400+delta,100)]);h.sample([]);
  assert.deepEqual(h.sent,[{type:'workspace',direction}],'Swipe emits once with no pointer movement, scroll or click');

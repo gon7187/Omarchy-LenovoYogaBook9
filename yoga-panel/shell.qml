@@ -477,7 +477,7 @@ ShellRoot {
                             if (!scrolling) clearCarry();
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
-                                    root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
+                                    root.send({type:"workspace",direction:swipeX>0 ? "previous" : "next"});
                                 else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
                                     root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
                                 else if (peakCount>=4 && now-began < 2000 && pinchStart>0 && pinchMin<=pinchStart*0.6)
