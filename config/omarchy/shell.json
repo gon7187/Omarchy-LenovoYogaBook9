@@ -65,5 +65,15 @@
       ]
     }
   },
-  "plugins": []
+  "plugins": [
+    {
+      "id": "gon7187.speedtest"
+    }
+  ],
+  "disabledPlugins": [
+    "omarchy.speedtest"
+  ],
+  "cloneSourceRestores": [
+    "gon7187.speedtest"
+  ]
 }
