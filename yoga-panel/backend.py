@@ -20,6 +20,16 @@ def emit(value):
         print(json.dumps(value) if isinstance(value,dict) else value,flush=True)
 
 VIRTUAL='hl-virtual-keyboard-'
+LAYOUT_LOG=Path.home()/'.local/state/yoga-panel/layout.log'
+
+def log_layout(*parts):
+    """Layout switch diagnostics: device names and keymaps only, never typed input."""
+    try:
+        LAYOUT_LOG.parent.mkdir(parents=True,exist_ok=True)
+        # ponytail: crude size cap, drop the whole file past 1 MB
+        if LAYOUT_LOG.exists() and LAYOUT_LOG.stat().st_size>1<<20: LAYOUT_LOG.unlink()
+        with LAYOUT_LOG.open('a') as f: f.write(time.strftime('%F %T')+f'.{int(time.time()*1000)%1000:03d} '+' '.join(map(str,parts))+'\n')
+    except OSError: pass
 
 def active_language():
     """Read the active keyboard rather than a stale auxiliary-device event."""
@@ -32,6 +42,7 @@ def active_language():
         # No real main keyboard: a switch for all devices shows on most of them, a hotplugged one alone does not.
         if not keyboard and real: keyboard=max(real,key=lambda k:sum(o.get('active_keymap')==k.get('active_keymap') for o in real))
         layout=keyboard.get('active_keymap','') if keyboard else ''
+        log_layout('  devices:',' | '.join(f"{k.get('name')}{'*' if k.get('main') else ''}={k.get('active_keymap')}" for k in devices),'-> picked',keyboard.get('name') if keyboard else None)
         if 'Russian' in layout: return 'ru'
         if 'English' in layout: return 'en'
     except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError):
@@ -57,8 +68,10 @@ def layout_monitor():
                                 last_focus=focus
                         elif event.startswith('activelayout>>'):
                             device,_,layout=event.strip().partition('>>')[2].partition(',')
+                            log_layout('event activelayout',device,layout,'(ignored virtual)' if device.startswith(VIRTUAL) else '')
                             if device.startswith(VIRTUAL): continue
                             language=active_language()
+                            log_layout('  emit language',language)
                             if language: emit({'language':language})
         except OSError:
             time.sleep(2)
@@ -204,6 +217,7 @@ def main():
                 elif kind in ('language','keyboardGroup'):
                     index={'en':'0','ru':'1'}.get(e.get('language'))
                     if index is None: raise ValueError('Invalid language')
+                    log_layout('panel',kind,e.get('language'),'(button)' if kind=='language' else '(following system)')
                     keyboard.stdin.write('g '+index+'\n'); keyboard.stdin.flush()
                     if kind == 'language':
                         result=subprocess.run(['hyprctl','switchxkblayout','all',index],capture_output=True,text=True,timeout=3,check=True)
