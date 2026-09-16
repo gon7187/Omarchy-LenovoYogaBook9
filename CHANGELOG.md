@@ -1,5 +1,13 @@
 # Изменения форка
 
+## 2026-09-16 — яркость в HDR
+
+- В HDR (PQ) панели игнорируют подсветку, клавиши и авто-яркость перестали работать.
+  `bin/yoga-brightness-sync` теперь переводит уровень `intel_backlight` в `sdrbrightness`
+  Hyprland (100% = `hdr_max_sdrbrightness` из `yoga-autobrightness.conf`, по умолчанию 1.6)
+  и раз в 2 с восстанавливает его после смены режима или `hyprctl reload`.
+- `bin/yoga-mode` больше не сбрасывает HDR при смене режима: `bitdepth = 10, cm = "hdr"` в правилах.
+
 ## 2026-09-16 — HDR на обеих панелях
 
 - Обе OLED-панели по EDID умеют HDR (10 бит, BT2020, SMPTE ST2084, пик ~617 нит), но
