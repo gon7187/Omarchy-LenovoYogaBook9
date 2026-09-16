@@ -17,7 +17,7 @@ function harness() {
         previousCount:0, positions:{}, began:0, travel:0, peakCount:0,
         lastX:0,lastY:0,moveEvents:0,scrollEvents:0,
         lastSampleTime:0,lastTapTime:-1000,lastTapX:0,lastTapY:0,tapDragging:false,dragPointId:-1,
-        workspaceGesture:false,swipeX:0,swipeY:0,scrolling:false,pairX:0,pairY:0,scrollDirections:{x:0,y:0},scrollReversals:{x:0,y:0},
+        workspaceGesture:false,focusSwipe:false,swipeX:0,swipeY:0,scrolling:false,pairX:0,pairY:0,scrollDirections:{x:0,y:0},scrollReversals:{x:0,y:0},
         Date:{now:()=>now},
         root:{inertiaStrength:.65,inertiaDuration:650,clearWord:()=>{},drag:false,pointerSpeed:1.5,pointerAccel:0,scrollSpeed:0.6,send:e=>sent.push({...e}),click:b=>sent.push({click:b})}});
     vm.runInContext(source, c);
@@ -81,6 +81,12 @@ for(const [delta,direction] of [[150,'down'],[-150,'up']]) {
  h=harness();h.sample(three(300));h.sample(three(300,100+delta));
  h.sample([p(0,300,100+delta),p(1,400,100+delta)]);h.sample([]);
  assert.deepEqual(h.sent,[{type:'minimize',direction}],'Vertical swipe minimizes or restores once, without scroll or click');
+}
+for(const [delta,direction] of [[160,'r'],[-160,'l']]) {
+ h=harness();h.sample([p(0,300,100),p(1,300,200)]);
+ for(let i=1;i<=8;i++) h.sample([p(0,300+delta*i/8,100),p(1,300+delta*i/8,200)]);
+ h.sample([]);
+ assert.deepEqual(h.sent.filter(e=>e.type!=='scrollEnd'),[{type:'focus',direction}],'Sideways two-finger stroke moves focus once, without scroll');
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
