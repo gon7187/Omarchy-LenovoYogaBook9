@@ -279,6 +279,14 @@ def main():
                 pass
             continue
 
+        # 0 lux is "no sample yet", not darkness: right after boot the claim
+        # powers the ALS up and LightLevel reads 0 until the first sample,
+        # which seeded the smoother at 0 and dropped the panels to MIN_PCT.
+        # This sensor reads ~30 lux even fully covered.
+        # ponytail: a sensor that genuinely reports 0 would freeze auto-brightness; use a first-sample timeout then.
+        if lux <= 0:
+            continue
+
         # Seed on the first reading; smoothing from zero would ramp the screen
         # up from the floor at every start.
         level = math.log10(max(lux, 0.0) + 1)
