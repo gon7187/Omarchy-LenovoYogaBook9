@@ -655,7 +655,9 @@ Panel {
     var connection = ""
     if (info.type === "wifi") connection = info.ssid || "Wi-Fi"
     else if (info.type === "ethernet") connection = "Ethernet"
-    bar.shell.summon("gon7187.speedtest", connection ? JSON.stringify({ connection: connection }) : "{}")
+    // Must stay the stock id: the shell only lets a clone summon stock ids and
+    // resolves them to the enabled clone; "gon7187.speedtest" is silently refused.
+    bar.shell.summon("omarchy.speedtest", connection ? JSON.stringify({ connection: connection }) : "{}")
   }
 
   function dnsCommand(provider) {
