@@ -1,5 +1,9 @@
 # Изменения форка
 
+## 2026-09-16 — HDR отправлен в pybe
+
+- [PR #17](https://github.com/pybe/Omarchy-LenovoYogaBook9/pull/17): HDR на обеих панелях, яркость через `sdrbrightness`, sRGB для SDR (ветка `hdr`).
+
 ## 2026-09-16 — светлее SDR в HDR
 
 - Терминал и тёмные темы в HDR выглядели тёмными даже на полной яркости. `config/hypr/monitors.lua`:
