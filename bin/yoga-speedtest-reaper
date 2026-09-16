@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Kill the traffic workers Omarchy's speed test leaves behind.
+#
+# Closing the speed test panel mid-run kills omarchy-network-speedtest with
+# SIGKILL, so its cleanup trap never runs: the eight worker subshells are
+# reparented to the user manager and keep downloading or uploading until
+# something kills them (measured: 7-14 processes after every early close).
+# A live test's workers have the script as parent; only a worker whose parent
+# is the user manager -- this unit's parent -- is an orphan.
+#
+# ponytail: 2 s polling, cheap enough for a pgrep; an orphan runs at most that long.
+
+manager=$PPID
+while sleep 2; do
+  for pid in $(pgrep -P "$manager" -f '^/bin/bash /usr/share/omarchy/bin/omarchy-network-speedtest'); do
+    # Collect the curl/dd children first: once the worker dies they are
+    # reparented too and pgrep -P would no longer find them.
+    children=$(pgrep -P "$pid")
+    # shellcheck disable=SC2086 # one pid per word
+    kill "$pid" $children 2>/dev/null
+  done
+done

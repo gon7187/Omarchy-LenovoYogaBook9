@@ -1,0 +1,12 @@
+[Unit]
+Description=Kill speed test workers orphaned by closing Omarchy's speed test panel
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/yoga-speedtest-reaper
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
