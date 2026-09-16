@@ -574,7 +574,8 @@ ShellRoot {
                                 // ponytail: 150 px per window, tune on the pad if it feels off.
                                 if (n===2) swipeX+=moving.reduce((sum,p)=>sum+p.dx,0)/2;
                                 if (Math.abs(swipeX)>=150) {
-                                    root.send({type:"focus",direction:swipeX>0 ? "r" : "l"});
+                                    // Natural like the scroll: fingers left bring the right-hand window.
+                                    root.send({type:"focus",direction:swipeX>0 ? "l" : "r"});
                                     swipeX-=Math.sign(swipeX)*150;
                                 }
                             } else if (scrolling && n===2) {

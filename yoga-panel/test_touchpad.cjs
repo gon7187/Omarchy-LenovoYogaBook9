@@ -82,7 +82,7 @@ for(const [delta,direction] of [[150,'down'],[-150,'up']]) {
  h.sample([p(0,300,100+delta),p(1,400,100+delta)]);h.sample([]);
  assert.deepEqual(h.sent,[{type:'minimize',direction}],'Vertical swipe minimizes or restores once, without scroll or click');
 }
-for(const [delta,direction] of [[160,'r'],[-160,'l']]) {
+for(const [delta,direction] of [[160,'l'],[-160,'r']]) {
  h=harness();h.sample([p(0,300,100),p(1,300,200)]);
  for(let i=1;i<=8;i++) h.sample([p(0,300+delta*i/8,100),p(1,300+delta*i/8,200)]);
  h.sample([]);
