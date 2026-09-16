@@ -114,6 +114,7 @@ ShellRoot {
         if (!word.startsWith(original)) for (let i=0;i<original.length;i++) send({type:"key",key:"BackSpace",mods:[]});
         for (let ch of suffix) send({type:"text",text:ch,mods:[]});
     }
+    function toggleOverview() { overview.toggle(); }
     function requestLanguage() {
         languageRequest++; languagePending=true;
         keyboardLanguage=russian ? "ru" : "en";
@@ -240,6 +241,12 @@ ShellRoot {
         function toggle(): void { if (root.opened) root.closePanel(); else root.opened = true; }
         function openPanel(): void { root.opened = true; }
         function hide(): void { root.closePanel(); }
+        // Touchscreen gestures recognised by the Hyprland plugin; same actions as the pad's.
+        function gesture(name: string): void {
+            if (name === "previous" || name === "next") root.send({type:"workspace",direction:name});
+            else if (name === "minimize" || name === "restore") root.send({type:"minimize",direction:name === "minimize" ? "down" : "up"});
+            else if (name === "overview") root.toggleOverview();
+        }
         function status(): string { return root.opened ? "open" : "closed"; }
         function predictionStatus(): string { return JSON.stringify({enabled:root.predictionEnabled,autocorrect:root.autocorrectEnabled,ready:root.suggestions.length,prefixLength:root.wordPrefix.length,requestId:root.predictionRequest,language:root.russian ? "ru" : "en"}); }
         function setWords(enabled: bool): void { root.predictionEnabled=enabled; }
@@ -251,6 +258,7 @@ ShellRoot {
             return JSON.stringify([digitKeys.itemAt(1), letterKeys.itemAt(0), spaceKey].map(k => k.mapToGlobal(k.width/2,k.height/2)));
         }
     }
+    Overview { id: overview }
     PanelWindow {
         id: panel
         screen: root.bottom
@@ -407,6 +415,9 @@ ShellRoot {
                     property bool workspaceGesture: false
                     property real swipeX: 0
                     property real swipeY: 0
+                    // Four or five fingers drawn together open the window overview.
+                    property real pinchStart: 0
+                    property real pinchMin: 0
                     property bool scrolling: false
                     // Co-directional two-finger drift before scrolling commits.
                     // Settling fingertips drift a pixel or two during a tap.
@@ -457,6 +468,8 @@ ShellRoot {
                                     root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
                                 else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
                                     root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
+                                else if (peakCount>=4 && now-began < 2000 && pinchStart>0 && pinchMin<=pinchStart*0.6)
+                                    root.toggleOverview();
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
                             } else if (!scrolling && !endedDrag && previousCount && now-began < (peakCount === 2 ? 450 : 350) && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);
@@ -481,7 +494,7 @@ ShellRoot {
                         let startingSwipe = n >= 3 && !workspaceGesture;
                         if (startingSwipe) {
                             stopMomentum(); clearVelocity();
-                            workspaceGesture=true; swipeX=0; swipeY=0; lastTapTime=-1000;
+                            workspaceGesture=true; swipeX=0; swipeY=0; pinchStart=0; pinchMin=0; lastTapTime=-1000;
                             if (tapDragging) {
                                 root.send({type:"button",button:272,state:0}); tapDragging=false;
                             }
@@ -498,6 +511,12 @@ ShellRoot {
                         positions=next;
                         if (workspaceGesture && n<3 && Math.max(Math.abs(swipeX),Math.abs(swipeY))<30)
                             workspaceGesture=false;
+                        if (workspaceGesture && n>=4) {
+                            let spread=points.reduce((a,p) => a+Math.hypot(p.x-x,p.y-y),0)/n;
+                            // Measure from the moment the last finger lands.
+                            if (n>previousCount) { pinchStart=spread; pinchMin=spread; }
+                            else pinchMin=Math.min(pinchMin,spread);
+                        }
                         if (workspaceGesture) {
                             // Accumulate only movement while all three fingers
                             // are present; lifting them cannot move or click.
