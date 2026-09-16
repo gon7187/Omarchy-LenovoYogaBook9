@@ -1,0 +1,10 @@
+[font]
+base-size = 10
+
+# Bar only, ~25% over stock; these are pre-scaled by base-size/12.
+[bar]
+size-horizontal = 32
+icon-slot = 33
+icon-canvas = 20
+icon-font = 16
+status-slot = 26

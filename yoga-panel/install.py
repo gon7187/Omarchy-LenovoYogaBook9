@@ -30,6 +30,8 @@ def main():
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
         SOURCE.parent/'config/hypr/yoga-titlebars.lua':HOME/'.config/hypr/yoga-titlebars.lua',
+        SOURCE.parent/'config/omarchy/shell.toml':HOME/'.config/omarchy/shell.toml',
+        SOURCE.parent/'config/foot/foot.ini':HOME/'.config/foot/foot.ini',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
            for path in (SOURCE.parent/'config/omarchy/plugins').glob('*/*') if path.is_file()},
     }
