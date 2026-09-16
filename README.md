@@ -932,7 +932,7 @@ Writing `1` caps charging (Lenovo's implementation stops around 55-60%) to prese
 
 `usb_charging`, `fan_mode` and `camera_power` are exposed on the same device.
 
-`fan_mode` does **not** follow the power profile: the firmware leaves it at `0` (Super Silent) in `low-power`, `balanced` and `performance` alike, so the fan behaved the same whatever the battery menu said. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that watches `platform_profile` and writes `0` / `1` (Standard) / `4` (Efficient Thermal Dissipation) respectively, re-asserting every 10 s in case the EC drops it.
+`fan_mode` does **not** follow the power profile: the firmware leaves it at `0` (Super Silent) in `low-power`, `balanced` and `performance` alike, so the fan behaved the same whatever the battery menu said. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that watches `platform_profile` and writes `0` (Super Silent) for `low-power` and `4` (Efficient Thermal Dissipation) for `balanced` and `performance`. `balanced` used to get `1` (Standard), which peaked at 99 °C under a 60 s all-core load against 97 °C for `4`; the driver accepts only `0`, `1`, `2` (Dust Cleaning) and `4`, re-asserting every 10 s in case the EC drops it.
 
 ```bash
 bin/yoga-fan install      # sudo or pkexec; `remove` undoes it

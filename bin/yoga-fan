@@ -6,7 +6,7 @@ The firmware keeps the fan on its own EC table: switching platform_profile
 0, Super Silent, in every profile. This maps the profile onto fan_mode:
 
   low-power   -> 0  Super Silent
-  balanced    -> 1  Standard
+  balanced    -> 4  Efficient Thermal Dissipation (Standard, 1, hit 99 C at full load)
   performance -> 4  Efficient Thermal Dissipation
 
 Runs as root because fan_mode is root-only. Reads the profile and writes one
@@ -20,7 +20,7 @@ import os, select, subprocess, sys
 
 PROFILE = '/sys/firmware/acpi/platform_profile'
 FAN = '/sys/bus/platform/devices/VPC2004:00/fan_mode'
-MODES = {'low-power': '0', 'balanced': '1', 'performance': '4'}
+MODES = {'low-power': '0', 'balanced': '4', 'performance': '4'}
 UNIT = '/etc/systemd/system/yoga-fan.service'
 
 
