@@ -48,7 +48,8 @@ MANUAL_TOLERANCE = 2      # rounding slack when checking for a manual change
 MANUAL_PAUSE_SECONDS = 600
 
 # After a suspend the ISH can leave the ALS wedged: LightLevel freezes on its
-# last value for hours and the raw sysfs read returns 0 ("No report with id").
+# last value for hours. (The raw sysfs read is no tell: it returns 0 while
+# iio-sensor-proxy holds the buffer, healthy or not.)
 # Holding the claim keeps it wedged; releasing it long enough for
 # iio-sensor-proxy to power the sensor down, then claiming again, revives it.
 # A healthy sensor sits on one reading for up to a minute, so only a much
