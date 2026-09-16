@@ -83,6 +83,10 @@ ShellRoot {
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
+    // Tablet mode turns eDP-2 off; the keyboard then docks at the bottom of eDP-1
+    // (without the touchpad) and the Hyprland plugin shows it for text fields.
+    readonly property var upper: Quickshell.screens.find(s => s.name === "eDP-1") ?? null
+    readonly property bool tablet: bottom === null && upper !== null
     readonly property string base: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "") + "/"
 
     function send(e) {
@@ -261,11 +265,16 @@ ShellRoot {
     Overview { id: overview }
     PanelWindow {
         id: panel
-        screen: root.bottom
-        visible: root.bottom !== null && root.opened
-        anchors { top: true; bottom: true; left: true; right: true }
+        screen: root.tablet ? root.upper : root.bottom
+        visible: (root.bottom !== null || root.tablet) && root.opened
+        anchors { top: !root.tablet; bottom: true; left: true; right: true }
+        // Keyboard rows are sized from the screen, not from this window, which in
+        // tablet mode is only as tall as the keyboard itself.
+        readonly property real areaHeight: screen ? screen.height : height
+        implicitHeight: root.tablet ? Math.min(380, areaHeight * 0.44) + 32 + 10 + 24 : 0
         color: "#101722"
-        exclusionMode: ExclusionMode.Ignore
+        // Docked in tablet mode, windows shrink above it so the text field stays visible.
+        exclusionMode: root.tablet ? ExclusionMode.Auto : ExclusionMode.Ignore
         WlrLayershell.namespace: "yoga-input-panel"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -298,18 +307,18 @@ ShellRoot {
                     }
                 }
                 Key { Layout.preferredWidth: 80; Layout.minimumWidth: 80; Layout.maximumWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
-                Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
+                Key { visible: !root.tablet; Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             ColumnLayout {
                 id: keyboard
-                visible: !root.settingsOpen
+                visible: !root.settingsOpen || root.tablet
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(380, panel.height * 0.44)
-                Layout.maximumHeight: Math.min(380, panel.height * 0.44)
+                Layout.preferredHeight: Math.min(380, panel.areaHeight * 0.44)
+                Layout.maximumHeight: Math.min(380, panel.areaHeight * 0.44)
                 Layout.minimumHeight: 280
                 spacing: 7
-                readonly property real keyHeight: (Math.min(380,panel.height*0.44)-28)/5
+                readonly property real keyHeight: (Math.min(380,panel.areaHeight*0.44)-28)/5
                 readonly property real unit: (panel.width - 32 - 14*7)/15
                 Layout.minimumWidth: 0
                 RowLayout {
@@ -375,7 +384,7 @@ ShellRoot {
                 }
             }
             PanelSettings {
-                visible: root.settingsOpen
+                visible: root.settingsOpen && !root.tablet
                 settings: root
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(420, panel.height * 0.50)
@@ -383,6 +392,7 @@ ShellRoot {
                 Layout.maximumHeight: Math.min(420, panel.height * 0.50)
             }
             Rectangle {
+                visible: !root.tablet
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 radius: 15
