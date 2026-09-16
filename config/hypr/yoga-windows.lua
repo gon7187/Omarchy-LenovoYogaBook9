@@ -20,3 +20,8 @@ hl.on("window.open", function(window)
   }))
   hl.dispatch(hl.dsp.focus({ window = "address:" .. window.address }))
 end)
+
+-- The layout is tiling-only by default, so the pad pointer had no way to resize
+-- a window. Grab the gap between windows with the pad's tap-and-drag instead;
+-- the wider grab area makes a border hittable without pixel-precise aim.
+hl.config({ general = { resize_on_border = true, extend_border_grab_area = 20 } })
