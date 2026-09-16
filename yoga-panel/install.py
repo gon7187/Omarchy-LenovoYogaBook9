@@ -29,6 +29,7 @@ def main():
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
+        SOURCE.parent/'config/hypr/yoga-titlebars.lua':HOME/'.config/hypr/yoga-titlebars.lua',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
            for path in (SOURCE.parent/'config/omarchy/plugins').glob('*/*') if path.is_file()},
     }
@@ -46,9 +47,12 @@ def main():
         shutil.copytree(SOURCE,app,ignore=shutil.ignore_patterns('build','__pycache__','*.pyc'))
         run('bash','build.sh',cwd=app)
         run('bash','build-gesture.sh',cwd=app)
+        # Title bars are optional: no network for the pinned source must not block an install.
+        if subprocess.run(['bash','build-hyprbars.sh'],cwd=app).returncode: print('hyprbars not built; windows keep no title bars')
         subprocess.run(['systemctl','--user','stop','yoga-panel.service'],check=False)
         for old_app in {TARGET,args.previous_app} - {None}:
-            subprocess.run(['hyprctl','plugin','unload',str(old_app/'build/yoga-panel-gesture.so')],check=False)
+            for library in ('yoga-panel-gesture.so','hyprbars.so'):
+                subprocess.run(['hyprctl','plugin','unload',str(old_app/'build'/library)],check=False)
         backup.mkdir(parents=True)
         if TARGET.exists(): shutil.move(str(TARGET),str(backup/'app'))
         shutil.move(str(app),str(TARGET))
@@ -62,7 +66,8 @@ def main():
             if destination.parent.name=='bin': destination.chmod(0o755)
     hyprland=HOME/'.config/hypr/hyprland.lua'
     for module,comment in (('hypr.minimize','Three-finger swipe down/up: minimize/restore all windows on the workspace.'),
-                           ('hypr.yoga-windows','Windows opened while the lower-screen keyboard is up go to the upper screen.')):
+                           ('hypr.yoga-windows','Windows opened while the lower-screen keyboard is up go to the upper screen.'),
+                           ('hypr.yoga-titlebars','Compact touch title bars: drag to move, close button.')):
         if hyprland.exists() and 'require("'+module+'")' not in hyprland.read_text():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
