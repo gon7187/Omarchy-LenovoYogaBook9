@@ -20,6 +20,7 @@ Both backlights are set directly rather than via omarchy-brightness-display,
 which resolves its target from the focused monitor -- meaningless for a daemon.
 """
 
+import math
 import os
 import signal
 import subprocess
@@ -42,45 +43,103 @@ SECONDARY = "card1-eDP-2-backlight"
 POLL_SECONDS = 2
 MIN_PCT = 10
 MAX_PCT = 100
-STEP_THRESHOLD = 3        # ignore smaller changes so it does not hunt
+STEP_THRESHOLD = 5        # ignore smaller changes so it does not hunt
 MANUAL_TOLERANCE = 2      # rounding slack when checking for a manual change
 MANUAL_PAUSE_SECONDS = 600
 
-# Logarithmic, because perceived brightness tracks log illuminance, and fitted
-# to the range a room actually spans rather than the sensor's full scale. This
-# panel reads ~70 lux under normal indoor light and ~30 with the sensor
-# covered; a curve stretched to daylight puts those a few percent apart and the
-# feature goes unnoticed -- which is worse than failing, because it looks
-# broken. Anchored at 30 lux -> 20% and 300 lux -> 85%.
-CURVE_OFFSET = -78.0
-CURVE_SCALE = 65.8
+# Walk to a new level instead of jumping to it. A single write is a visible
+# snap, which is what makes an automatic change feel like a fault; 1% per step
+# over about this long reads as the room changing. Each step is two
+# brightnessctl calls (~7 ms), so the floor keeps a long ramp from stretching.
+RAMP_SECONDS = 0.7
+RAMP_MIN_STEP = 0.02
+RAMP_MAX_STEP = 0.08
+
+# Smooth the sensor as well as the output. In a still room this ALS sits on a
+# reading for 20-60 s and then hops by a quarter (measured: 50, 39, 53, 42
+# lux over three minutes), which on the steep indoor stretch of the curve is a
+# 12% swing -- every hop was a visible step. Averaged in log space, like the
+# curve, so the room going dark and the light coming on settle equally fast.
+# Replayed against that recording, 0.25 at a 5% threshold moves once where
+# 0.5 at 3% moved six times, and still follows lights coming on in ~25 s.
+LUX_SMOOTHING = 0.25
+
+# Smoothing means a large change arrives as several ticks of ramp rather than
+# one. The OSD should mark that the screen is moving, once -- popping it on
+# every tick of a glide is worse than the jump it was added to explain.
+OSD_QUIET_SECONDS = 5
+
+# Brightness per lux, as anchor points interpolated in log10 space, because
+# perceived brightness tracks log illuminance. Anchors rather than a fitted
+# offset/scale pair: this is the part that gets retuned by eye, and a table
+# says what it does at a glance. Override with a `curve` line in the config.
+#
+# Fitted to this room: the sensor reads ~30 lux covered and anywhere from 40
+# to 60 under the same ordinary indoor light (it drifts, and differs between
+# boots), a few hundred by a window. That whole indoor band should land near
+# 60% -- the earlier logarithmic fit gave it 28-39%, legible but dim. At 20 lux
+# and below it stays at the floor, as before, because a dark room was right.
+DEFAULT_CURVE = ((20, 10), (30, 25), (40, 55), (60, 65), (150, 82), (600, 100))
 
 
-def show_osd_enabled():
-    """Whether to raise the on-screen slider on an automatic change.
-
-    Read fresh each time rather than cached at startup, so toggling it takes
-    effect immediately instead of needing the service restarted. Defaults to
-    on: a brightness change with no visible cause reads as a glitch.
-    """
+def config_values():
+    """Parse the config on every read, so an edit applies without a restart."""
+    values = {}
     try:
         for line in CONFIG_PATH.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             key, _, value = line.partition("=")
-            if key.strip() == "show_osd":
-                return value.strip().lower() in ("1", "true", "yes", "on")
+            values[key.strip()] = value.strip()
     except OSError:
         pass
-    return True
+    return values
 
 
-def lux_to_pct(lux):
-    import math
+def curve_points(values):
+    """Anchor points as `lux:pct, lux:pct, ...`, sorted, at least two.
 
-    pct = CURVE_OFFSET + CURVE_SCALE * math.log10(lux + 1)
-    return int(max(MIN_PCT, min(MAX_PCT, pct)))
+    A malformed line falls back to the default and says so on stderr rather
+    than leaving the screen at whatever the typo computed to.
+    """
+    raw = values.get("curve")
+    if not raw:
+        return DEFAULT_CURVE
+    try:
+        points = []
+        for item in raw.split(","):
+            lux, _, pct = item.partition(":")
+            points.append((float(lux), max(MIN_PCT, min(MAX_PCT, float(pct)))))
+        points.sort()
+        if len(points) < 2 or points[0][0] < 0 or points[0][0] == points[-1][0]:
+            raise ValueError("need two or more distinct lux anchors")
+        return tuple(points)
+    except ValueError as error:
+        print(f"Ignoring curve in {CONFIG_PATH}: {error}", file=sys.stderr, flush=True)
+        return DEFAULT_CURVE
+
+
+def show_osd_enabled(values):
+    """Whether to raise the on-screen slider on an automatic change.
+
+    Defaults to on: a brightness change with no visible cause reads as a glitch.
+    """
+    return values.get("show_osd", "true").lower() in ("1", "true", "yes", "on")
+
+
+def lux_to_pct(lux, points=DEFAULT_CURVE):
+    position = math.log10(max(lux, 0.0) + 1)
+    previous_lux, previous_pct = points[0]
+    if position <= math.log10(previous_lux + 1):
+        return int(previous_pct)
+    for next_lux, next_pct in points[1:]:
+        low, high = math.log10(previous_lux + 1), math.log10(next_lux + 1)
+        if position <= high:
+            share = (position - low) / (high - low)
+            return int(round(previous_pct + share * (next_pct - previous_pct)))
+        previous_lux, previous_pct = next_lux, next_pct
+    return int(points[-1][1])
 
 
 def current_pct():
@@ -94,12 +153,16 @@ def current_pct():
         return None
 
 
-def set_pct(pct):
+def write_pct(pct):
     for device in (PRIMARY, SECONDARY):
         subprocess.run(
             ["brightnessctl", "-d", device, "set", f"{pct}%"],
             capture_output=True, timeout=5,
         )
+
+
+def set_pct(target, current, show_osd):
+    """Fade from `current` to `target`, raising the OSD once for the whole move."""
     # brightnessctl writes sysfs directly and does not raise Omarchy's OSD --
     # that comes from omarchy-osd, called explicitly by the brightness keys.
     # Without it an automatic change is invisible and reads as a glitch.
@@ -108,15 +171,22 @@ def set_pct(pct):
     # the user manager's PATH. Unguarded, its absence raises FileNotFoundError
     # out of here and kills the daemon on the first adjustment -- which looks
     # like "auto-brightness works for a few seconds after login, then stops".
-    if not show_osd_enabled():
-        return
-    try:
-        subprocess.Popen(
-            ["omarchy-osd", "-i", "brightness", "-p", str(pct)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except OSError:
-        pass
+    if show_osd:
+        try:
+            subprocess.Popen(
+                ["omarchy-osd", "-i", "brightness", "-p", str(target)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            pass
+
+    distance = abs(target - current)
+    step = 1 if target > current else -1
+    delay = max(RAMP_MIN_STEP, min(RAMP_MAX_STEP, RAMP_SECONDS / max(distance, 1)))
+    for level in range(current + step, target, step):
+        write_pct(level)
+        time.sleep(delay)
+    write_pct(target)
 
 
 class Sensor:
@@ -179,6 +249,8 @@ def main():
 
     last_set = None
     paused_until = 0.0
+    last_adjusted = 0.0
+    smoothed = None
 
     while True:
         time.sleep(POLL_SECONDS)
@@ -207,7 +279,13 @@ def main():
                 pass
             continue
 
-        target = lux_to_pct(lux)
+        # Seed on the first reading; smoothing from zero would ramp the screen
+        # up from the floor at every start.
+        level = math.log10(max(lux, 0.0) + 1)
+        smoothed = level if smoothed is None else smoothed + LUX_SMOOTHING * (level - smoothed)
+
+        values = config_values()
+        target = lux_to_pct(10 ** smoothed - 1, curve_points(values))
 
         # An unreadable backlight must not mean "write unconditionally": that
         # fires every tick forever, pops the OSD every tick, and permanently
@@ -216,8 +294,10 @@ def main():
             continue
 
         if abs(target - current) >= STEP_THRESHOLD:
-            set_pct(target)
+            quiet = now - last_adjusted > OSD_QUIET_SECONDS
+            set_pct(target, current, show_osd_enabled(values) and quiet)
             last_set = target
+            last_adjusted = time.monotonic()
 
 
 if __name__ == "__main__":

@@ -398,18 +398,25 @@ systemctl --user enable --now yoga-autorotate
 omarchy menu refresh
 ```
 
-Three details that matter more than the sensor reading itself:
+Four details that matter more than the sensor reading itself:
 
 - **It sets both backlights directly** rather than calling `omarchy-brightness-display`, which resolves its target from the *focused monitor* — meaningless for a background daemon.
-- **The curve is logarithmic, and fitted to the range a room actually spans.** This is the part worth getting right. The panel reads roughly **70 lux for normal indoor lighting and 30 with the sensor covered** — a much narrower band than the sensor's full scale. A curve stretched to daylight puts those two states only eight percentage points apart, and the whole feature goes unnoticed; the first attempt here did exactly that. Anchoring instead at 30 lux → 20% and 300 lux → 85% makes ordinary changes in a room obvious while still reaching 100% outdoors. A gentler fit was tried first and was measurably correct yet too subtle to perceive — the worst outcome, since it looks broken and is not:
+- **The curve is logarithmic, and fitted to the range a room actually spans.** This is the part worth getting right. The panel reads roughly **40–60 lux for normal indoor lighting and 30 with the sensor covered** — a much narrower band than the sensor's full scale. A curve stretched to daylight puts those two states only a few percentage points apart, and the whole feature goes unnoticed; the first attempt here did exactly that, and a gentler fit after it was measurably correct yet too subtle to perceive — the worst outcome, since it looks broken and is not.
+
+  It is now a table of `lux:percent` anchors interpolated in log space rather than a fitted offset/scale pair, because this is the part that gets retuned by eye, and anchors say what they do at a glance. Override the default with a `curve` line in `~/.config/yoga-autobrightness.conf`; a malformed one is ignored with a note in the journal rather than left to compute something dark.
 
   | lux | brightness |
   |---|---|
-  | 0 | 10% |
-  | 30 (sensor covered) | 34% |
-  | 70 (normal indoor) | 51% |
-  | 300 | 79% |
-  | 1500+ | 100% |
+  | 0–20 | 10% |
+  | 30 (sensor covered) | 25% |
+  | 40–60 (normal indoor) | 55–65% |
+  | 100 | 74% |
+  | 150 | 82% |
+  | 300 | 91% |
+  | 600+ | 100% |
+
+  The dark end is deliberately where it was — a dark room was already right. The indoor band is what moved: it gave 28–39%, legible but dim, and now gives about 60%. It is a band rather than a point because the sensor itself reads anywhere from 40 to 60 lux under the same ceiling light, drifting within a session and differing between boots. The top reaches 100% at 600 lux instead of flattening out at 85%.
+- **It fades rather than jumps.** A single write is a visible snap, which is most of what makes an automatic change feel like a fault. The daemon walks 1% at a time over roughly 0.7s, and smooths the sensor as well as the output. That second part matters more than it sounds: in a still room this ALS holds a reading for 20–60 s and then hops by about a quarter (50 → 39 → 53 → 42 lux in three minutes), and on the steep indoor stretch of the curve each hop was a 12% step. Readings are averaged in log space with a 5% dead band, which on that recording moves the screen once instead of six times and still follows the lights coming on in about 25 s. That also means a large change arrives over several two-second ticks, so the OSD is raised once for the whole glide rather than on every tick.
 - **It stands down when you adjust brightness by hand.** If the panel is not where the daemon last left it, someone else moved it, so it pauses for ten minutes rather than fighting you. A threshold also stops it hunting over small fluctuations — the ALS drifts a few lux at rest.
 
 ### Three traps, all of which look like broken hardware
