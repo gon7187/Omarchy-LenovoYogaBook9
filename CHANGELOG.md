@@ -4,7 +4,7 @@
 
 - Терминал и тёмные темы в HDR выглядели тёмными даже на полной яркости. `config/hypr/monitors.lua`:
   `render.cm_sdr_eotf = "srgb"` вместо чистой гаммы 2.2, которая давит тёмно-серые.
-  `bin/yoga-brightness-sync`: 100% подсветки теперь = `sdrbrightness 2.0` (было 1.6).
+  `bin/yoga-brightness-sync`: 100% подсветки теперь = `sdrbrightness 3.0` (было 1.6).
 
 ## 2026-09-16 — яркость в HDR
 

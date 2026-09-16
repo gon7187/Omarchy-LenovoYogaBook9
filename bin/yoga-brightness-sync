@@ -14,7 +14,7 @@ import time
 
 CONFIG_PATH = Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'yoga-autobrightness.conf'
 # sdrbrightness at 100% backlight. Calibration knob: hdr_max_sdrbrightness in the config.
-DEFAULT_HDR_MAX = 2.0
+DEFAULT_HDR_MAX = 3.0
 # Backlight 0% is dim, not black; keep HDR from going black at the bottom too.
 HDR_FLOOR = 0.05
 
