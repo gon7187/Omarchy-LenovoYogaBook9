@@ -130,8 +130,8 @@ BarWidget {
       ? (root.cpuPercent < 0 ? "…" : root.cpuPercent + "%") + "\n" + (root.ramFreePercent < 0 ? "…" : root.ramFreePercent + "%")
         + (root.cpuTemp < 0 ? "" : "\n" + root.cpuTemp + "°")
       : "CPU " + (root.cpuPercent < 0 ? "…" : root.cpuPercent + "%")
-        + (root.cpuTemp < 0 ? "" : " " + root.cpuTemp + "°C")
         + "  RAM " + (root.ramFreePercent < 0 ? "…" : root.ramFreePercent + "%")
+        + (root.cpuTemp < 0 ? "" : "  " + root.cpuTemp + "°C")
         + (root.fanRpm.length ? "  FAN " + root.fanRpm.map(v => (v / 1000).toFixed(1)).join("/") + "k" : "")
     tooltipText: "CPU загрузка: " + Math.max(root.cpuPercent, 0) + "%\n"
       + (root.cpuTemp < 0 ? "" : "CPU + видеоядро Iris Xe: " + root.cpuTemp + " °C (самое горячее ядро " + root.coreMaxTemp + " °C)\n")
