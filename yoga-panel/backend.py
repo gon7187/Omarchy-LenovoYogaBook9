@@ -21,8 +21,6 @@ def emit(value):
 
 VIRTUAL='hl-virtual-keyboard-'
 
-def log(message): print('yoga-panel: '+message,file=sys.stderr,flush=True)
-
 def active_language():
     """Read the active keyboard rather than a stale auxiliary-device event."""
     try:
@@ -48,7 +46,6 @@ def layout_monitor():
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as stream:
                 stream.connect(str(path))
                 last_focus=None
-                app=''
                 language=active_language()
                 if language: emit({'language':language})
                 with stream.makefile() as events:
@@ -58,14 +55,10 @@ def layout_monitor():
                             if focus != last_focus:
                                 emit({'focusChanged':True})
                                 last_focus=focus
-                        elif event.startswith('activewindow>>'):
-                            app=event.strip().partition('>>')[2].partition(',')[0]  # class only, never the title
                         elif event.startswith('activelayout>>'):
                             device,_,layout=event.strip().partition('>>')[2].partition(',')
                             if device.startswith(VIRTUAL): continue
-                            previous,language=language,active_language()
-                            # Diagnostics for unexplained switches: which device and app preceded a change.
-                            if language != previous: log(f'system layout {previous} -> {language}: event {device}={layout}, app {app or "-"}')
+                            language=active_language()
                             if language: emit({'language':language})
         except OSError:
             time.sleep(2)
@@ -212,7 +205,6 @@ def main():
                     index={'en':'0','ru':'1'}.get(e.get('language'))
                     if index is None: raise ValueError('Invalid language')
                     keyboard.stdin.write('g '+index+'\n'); keyboard.stdin.flush()
-                    log(f"panel {'switch' if kind == 'language' else 'follows system'} -> {e.get('language')}")
                     if kind == 'language':
                         result=subprocess.run(['hyprctl','switchxkblayout','all',index],capture_output=True,text=True,timeout=3,check=True)
                         if result.stdout.strip()!='ok': raise ValueError('Layout switch failed')
