@@ -27,8 +27,6 @@ def main():
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
         SOURCE.parent/'bin/yoga-mode':HOME/'.local/bin/yoga-mode',
-        SOURCE.parent/'bin/yoga-display-power':HOME/'.local/bin/yoga-display-power',
-        SOURCE.parent/'config/systemd/user/yoga-display-power.service':HOME/'.config/systemd/user/yoga-display-power.service',
         SOURCE.parent/'bin/yoga-speedtest-reaper':HOME/'.local/bin/yoga-speedtest-reaper',
         SOURCE.parent/'config/systemd/user/yoga-speedtest-reaper.service':HOME/'.config/systemd/user/yoga-speedtest-reaper.service',
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
@@ -43,7 +41,7 @@ def main():
     if args.dry_run:
         print('Build and install application:',TARGET)
         for destination in destinations.values(): print('Install:',destination)
-        print('Back up existing files; enable panel, brightness synchronization and speed test reaper and display power services; install Omarchy post-update check.')
+        print('Back up existing files; enable panel, brightness synchronization and speed test reaper services; install Omarchy post-update check.')
         return
     for command in ['g++','gcc','pkg-config','wayland-scanner','quickshell','hyprctl','brightnessctl']:
         if not shutil.which(command): raise SystemExit('Missing dependency: '+command)
@@ -79,7 +77,7 @@ def main():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
     run('systemctl','--user','daemon-reload')
-    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service','yoga-display-power.service')
+    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service')
     if not args.no_start:
         run('systemctl','--user','restart','yoga-brightness-sync.service','yoga-speedtest-reaper.service','yoga-panel.service')
     if shutil.which('omarchy'):

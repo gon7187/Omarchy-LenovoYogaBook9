@@ -88,7 +88,7 @@ def restore(target):
         os.replace(temporary,destination)
     subprocess.run(['systemctl','--user','daemon-reload'],check=True)
     units=json.loads((target/'enabled-units.json').read_text())
-    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-display-power.service','voxtype.service'}
+    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','voxtype.service'}
     units=[unit for unit in units if unit in allowed]
     if units:
         subprocess.run(['systemctl','--user','enable',*units],check=True)

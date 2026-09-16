@@ -1,8 +1,8 @@
 # Изменения форка
 
-## 2026-09-16 — в энергосбережении экраны без HDR
+## 2026-09-16 — HDR выключен по умолчанию, включается переключателем
 
-`bin/yoga-mode`, `bin/yoga-display-power`, `config/systemd/user/yoga-display-power.service`, `config/hypr/monitors.lua`: замер от батареи при одинаковой видимой яркости показал, что HDR в простое берёт ~0.7 W (9.2/9.1 W против 8.4 W в SDR). Теперь в профиле `power-saver` оба экрана переходят в 8 бит `srgb`, в остальных профилях остаются в HDR. `yoga-display-power` следит за `ActiveProfile` через D-Bus и вызывает `yoga-mode refresh`, который переприменяет текущую раскладку, только если режим цвета не совпал с профилем. `monitors.lua` читает `platform_profile` сам, поэтому `hyprctl reload` режим не сбрасывает. `install.py` ставит скрипты и включает юнит.
+`bin/yoga-mode`, `config/hypr/monitors.lua`, `config/omarchy/plugins/gon7187.monitor/Panel.qml`: замер от батареи при одинаковой видимой яркости показал, что HDR в простое берёт ~0.7 W (9.2/9.1 W против 8.4 W в SDR). Теперь экраны по умолчанию работают в 8 бит `srgb`, а HDR включается переключателем «HDR» в панели «Экран» на баре. `yoga-mode hdr on|off|toggle` хранит выбор в `~/.local/state/yoga-hdr`, поэтому он переживает перезагрузку, `hyprctl reload` (его читает `monitors.lua`) и смену раскладки. Первая версия того же дня, с привязкой к профилю `power-saver` и сервисом `yoga-display-power`, удалена.
 
 ## 2026-09-16 — лог переключения раскладки выключен
 

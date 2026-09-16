@@ -20,6 +20,8 @@ Panel {
   property bool brightnessAvailable: false
   property bool autoBrightnessEnabled: false
   property bool autoBrightnessBusy: false
+  property bool hdrEnabled: false
+  property bool hdrBusy: false
   property string internalMonitor: ""
   property string externalMonitor: ""
   property string focusedMonitor: ""
@@ -234,6 +236,13 @@ Panel {
   function refresh() {
     if (!stateProc.running) stateProc.running = true
     if (!autoBrightnessStateProc.running) autoBrightnessStateProc.running = true
+    if (!hdrStateProc.running) hdrStateProc.running = true
+  }
+
+  function toggleHdr() {
+    if (hdrToggleProc.running) return
+    root.hdrBusy = true
+    hdrToggleProc.running = true
   }
 
   function toggleAutoBrightness() {
@@ -431,6 +440,26 @@ Panel {
     }
   }
 
+  // HDR is off by default (~0.7 W at idle); yoga-mode keeps the flag and
+  // re-applies the current layout, so rotation modes follow it too.
+  Process {
+    id: hdrStateProc
+    command: ["/home/gon7187/.local/bin/yoga-mode", "hdr"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.hdrEnabled = text.trim() === "on"
+    }
+  }
+
+  Process {
+    id: hdrToggleProc
+    command: ["/home/gon7187/.local/bin/yoga-mode", "hdr", "toggle"]
+    onExited: function(exitCode) {
+      root.hdrBusy = false
+      root.refresh()
+    }
+  }
+
   Timer {
     id: brightnessDebounce
     interval: 180
@@ -619,6 +648,39 @@ Panel {
               PanelToolTip {
                 visible: autoBrightnessSwitch.containsMouse
                 text: root.autoBrightnessEnabled ? "Выключить автояркость" : "Включить автояркость"
+                fontFamily: root.bar.fontFamily
+              }
+            }
+          }
+
+          // ---------- HDR ----------
+          PanelSeparator { foreground: root.bar.foreground }
+
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(hdrHeader.implicitHeight, hdrSwitch.implicitHeight)
+
+            PanelSectionHeader {
+              id: hdrHeader
+              text: "HDR"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            ToggleSwitch {
+              id: hdrSwitch
+              checked: root.hdrEnabled
+              busy: root.hdrBusy
+              foreground: root.bar.foreground
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              onToggled: root.toggleHdr()
+
+              PanelToolTip {
+                visible: hdrSwitch.containsMouse
+                text: root.hdrEnabled ? "Выключить HDR (экономия ~0.7 Вт)" : "Включить HDR"
                 fontFamily: root.bar.fontFamily
               }
             }

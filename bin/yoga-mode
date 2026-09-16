@@ -29,11 +29,10 @@ MODE="2880x1800@60"
 PARK="10000x0"
 
 # HDR costs ~0.7 W at idle on these panels (measured on battery, same visible
-# brightness), so the power-saver profile drops them to 8-bit sRGB.
-# yoga-display-power re-applies the layout when the profile changes.
-wanted_cm() { [[ $(cat /sys/firmware/acpi/platform_profile 2>/dev/null) == low-power ]] && echo srgb || echo hdr; }
-CM_NAME="$(wanted_cm)"
-if [[ $CM_NAME == srgb ]]; then CM='bitdepth = 8, cm = "srgb"'; else CM='bitdepth = 10, cm = "hdr"'; fi
+# brightness), so it is off unless switched on from the bar's display panel.
+# The flag persists across reboots; monitors.lua reads the same file.
+HDR_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/yoga-hdr"
+if [[ $(cat "$HDR_FILE" 2>/dev/null) == on ]]; then CM_NAME=hdr; CM='bitdepth = 10, cm = "hdr"'; else CM_NAME=srgb; CM='bitdepth = 8, cm = "srgb"'; fi
 
 # Propagate failure: a mode that did not apply must not be recorded as current,
 # or the menu ticks the wrong row, `cycle` steps from a false state, and
@@ -203,16 +202,23 @@ cycle)
   *)         exec "$0" stand ;;
   esac
   ;;
-# Re-apply the current layout only if the colour mode does not match the power
-# profile, so balanced <-> performance does not blink the panels.
+# Re-apply the current layout only if the colour mode does not match the flag,
+# so a no-op refresh does not blink the panels.
 refresh)
   have="$(hyprctl monitors -j | python3 -c "import json,sys
 print(next((m['colorManagementPreset'] for m in json.load(sys.stdin) if m['name']=='eDP-1'),''))")"
   [[ $have == "$CM_NAME" ]] || YOGA_MODE_QUIET=1 exec "$0" "$(current)"
   ;;
+hdr)
+  case "${2:-status}" in
+  on | off) mkdir -p "${HDR_FILE%/*}" && echo "$2" > "$HDR_FILE" && exec "$0" refresh ;;
+  toggle) [[ $CM_NAME == hdr ]] && exec "$0" hdr off || exec "$0" hdr on ;;
+  *) [[ $CM_NAME == hdr ]] && echo on || echo off ;;
+  esac
+  ;;
 status) current ;;
 *)
-  echo "usage: ${0##*/} [stand|book|book-flip|present|tablet[-upside|-left|-right]|cycle|refresh|status]" >&2
+  echo "usage: ${0##*/} [stand|book|book-flip|present|tablet[-upside|-left|-right]|cycle|refresh|hdr [on|off|toggle]|status]" >&2
   exit 1
   ;;
 esac

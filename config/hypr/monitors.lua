@@ -10,12 +10,12 @@
 -- the image looks right while the pointer travels backwards. See the "boot
 -- splash" entry under Open items in the README.
 
--- The power-saver profile (platform_profile low-power) drops HDR: ~0.7 W at
--- idle. bin/yoga-display-power switches it live; this covers hyprctl reload.
-local profile = io.open("/sys/firmware/acpi/platform_profile")
-local saver = profile and profile:read("l") == "low-power"
-if profile then profile:close() end
-local depth, cm = saver and 8 or 10, saver and "srgb" or "hdr"
+-- HDR costs ~0.7 W at idle, so it is off unless the bar's display panel
+-- switched it on (yoga-mode hdr on writes the flag; this covers hyprctl reload).
+local flag = io.open((os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/yoga-hdr")
+local hdr = flag and flag:read("l") == "on"
+if flag then flag:close() end
+local depth, cm = hdr and 10 or 8, hdr and "hdr" or "srgb"
 hl.monitor({ output = "eDP-1", mode = "2880x1800@60", position = "0x0", scale = 2, transform = 2, bitdepth = depth, cm = cm })
 hl.monitor({ output = "eDP-2", mode = "2880x1800@60", position = "0x900", scale = 2, bitdepth = depth, cm = cm })
 
