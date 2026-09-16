@@ -45,7 +45,9 @@ apply() {
 lower_input() {
   local dev
   for dev in touchscreen stylus; do
-    apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-$dev-bottom\", enabled = $1 })" || return 1
+    # hl.device replaces the device's whole rule: without output it forgets the
+    # eDP-2 mapping from input.lua, and touches stop reaching the lower panel.
+    apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-$dev-bottom\", output = \"eDP-2\", enabled = $1 })" || return 1
   done
 }
 
