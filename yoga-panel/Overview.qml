@@ -62,20 +62,14 @@ PanelWindow {
             // Sized from the screen, not from the grid, or height and columns feed each other.
             readonly property real areaWidth: parent.width - 64
             readonly property real areaHeight: parent.height - 64
-            // Cards stop shrinking at minCard; past that the strip grows to the
-            // right and scrolls sideways (two-finger pad scroll or a touch flick).
-            readonly property real minCard: 400
-            readonly property int columns: Math.max(1, Math.min(Math.floor(areaWidth / minCard), Math.ceil(Math.sqrt(count * areaWidth / Math.max(1, areaHeight)))))
-            readonly property int rows: Math.max(1, Math.min(Math.ceil(count / columns), Math.floor(areaHeight / (areaWidth / columns * 0.75))))
+            readonly property int columns: Math.max(1, Math.ceil(Math.sqrt(count * areaWidth / Math.max(1, areaHeight))))
+            readonly property int rows: Math.max(1, Math.ceil(count / columns))
             width: areaWidth
             height: Math.min(areaHeight, cellHeight * rows)
             anchors.centerIn: parent
             cellWidth: areaWidth / columns
             cellHeight: Math.min(cellWidth * 0.75, areaHeight / rows)
-            flow: GridView.FlowTopToBottom
-            flickableDirection: Flickable.HorizontalFlick
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentWidth > width
+            interactive: contentHeight > height
             model: overview.windows
 
             delegate: Item {
