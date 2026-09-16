@@ -27,6 +27,8 @@ def main():
         SOURCE.parent/'bin/yoga-brightness-sync':HOME/'.local/bin/yoga-brightness-sync',
         SOURCE.parent/'config/systemd/user/yoga-brightness-sync.service':HOME/'.config/systemd/user/yoga-brightness-sync.service',
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
+        SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
+        SOURCE.parent/'config/hypr/yoga-titlebars.lua':HOME/'.config/hypr/yoga-titlebars.lua',
     }
     if args.dry_run:
         print('Build and install application:',TARGET)
@@ -42,9 +44,12 @@ def main():
         shutil.copytree(SOURCE,app,ignore=shutil.ignore_patterns('build','__pycache__','*.pyc'))
         run('bash','build.sh',cwd=app)
         run('bash','build-gesture.sh',cwd=app)
+        # Title bars are optional: no network for the pinned source must not block an install.
+        if subprocess.run(['bash','build-hyprbars.sh'],cwd=app).returncode: print('hyprbars not built; windows keep no title bars')
         subprocess.run(['systemctl','--user','stop','yoga-panel.service'],check=False)
         for old_app in {TARGET,args.previous_app} - {None}:
-            subprocess.run(['hyprctl','plugin','unload',str(old_app/'build/yoga-panel-gesture.so')],check=False)
+            for library in ('yoga-panel-gesture.so','hyprbars.so'):
+                subprocess.run(['hyprctl','plugin','unload',str(old_app/'build'/library)],check=False)
         backup.mkdir(parents=True)
         if TARGET.exists(): shutil.move(str(TARGET),str(backup/'app'))
         shutil.move(str(app),str(TARGET))
@@ -57,9 +62,12 @@ def main():
             shutil.copy2(source,destination)
             if destination.parent.name=='bin': destination.chmod(0o755)
     hyprland=HOME/'.config/hypr/hyprland.lua'
-    if hyprland.exists() and 'require("hypr.minimize")' not in hyprland.read_text():
-        with hyprland.open('a') as config:
-            config.write('\n-- Three-finger swipe down/up: minimize/restore all windows on the workspace.\nrequire("hypr.minimize")\n')
+    for module,comment in (('hypr.minimize','Three-finger swipe down/up: minimize/restore all windows on the workspace.'),
+                           ('hypr.yoga-windows','Windows opened while the lower-screen keyboard is up go to the upper screen.'),
+                           ('hypr.yoga-titlebars','Compact touch title bars: drag to move, close button.')):
+        if hyprland.exists() and 'require("'+module+'")' not in hyprland.read_text():
+            with hyprland.open('a') as config:
+                config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
     run('systemctl','--user','daemon-reload')
     run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service')
     if not args.no_start:

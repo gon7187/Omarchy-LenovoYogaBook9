@@ -28,6 +28,16 @@ class DefaultsAndLanguage(unittest.TestCase):
         devices['keyboards'][1]['active_keymap']='English (US)'
         with patch('backend.subprocess.check_output',return_value=json.dumps(devices)):
             self.assertEqual(backend.active_language(),'en')
+    def test_virtual_keyboards_do_not_decide_language(self):
+        devices={'keyboards':[{'name':'video-bus','main':False,'active_keymap':'Russian'},
+                              {'name':'at-translated-set-2-keyboard','main':False,'active_keymap':'Russian'},
+                              {'name':'ingenic-gadget-serial-and-keyboard-keyboard','main':False,'active_keymap':'English (US)'},
+                              {'name':'hl-virtual-keyboard-fcitx5','main':True,'active_keymap':'English (US)'}]}
+        with patch('backend.subprocess.check_output',return_value=json.dumps(devices)):
+            self.assertEqual(backend.active_language(),'ru')
+        devices['keyboards'][2]['main']=True
+        with patch('backend.subprocess.check_output',return_value=json.dumps(devices)):
+            self.assertEqual(backend.active_language(),'en')
     def test_missing_active_keyboard_does_not_guess_english(self):
         with patch('backend.subprocess.check_output',return_value='{"keyboards":[]}'):
             self.assertIsNone(backend.active_language())

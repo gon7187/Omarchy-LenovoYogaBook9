@@ -14,10 +14,10 @@ ShellRoot {
     property string keyboardLanguage: ""
     Timer { id: languageGuard; interval: 1500; onTriggered: root.languagePending=false }
     property bool shift: false
-    // A held Shift key applies to every character typed until it is released;
-    // a tap stays one-shot.
-    property bool shiftHeld: false
-    property bool shiftUsed: false
+    // A held modifier key (Shift, Ctrl, Alt, Super) applies to every key typed
+    // until it is released; a tap stays one-shot.
+    property var held: ({})
+    property var used: ({})
     property bool caps: false
     property bool control: false
     property bool alt: false
@@ -83,6 +83,10 @@ ShellRoot {
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
+    // Tablet mode turns eDP-2 off; the keyboard then docks at the bottom of eDP-1
+    // (without the touchpad) and the Hyprland plugin shows it for text fields.
+    readonly property var upper: Quickshell.screens.find(s => s.name === "eDP-1") ?? null
+    readonly property bool tablet: bottom === null && upper !== null
     readonly property string base: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "") + "/"
 
     function send(e) {
@@ -114,6 +118,7 @@ ShellRoot {
         if (!word.startsWith(original)) for (let i=0;i<original.length;i++) send({type:"key",key:"BackSpace",mods:[]});
         for (let ch of suffix) send({type:"text",text:ch,mods:[]});
     }
+    function toggleOverview() { overview.toggle(); }
     function requestLanguage() {
         languageRequest++; languagePending=true;
         keyboardLanguage=russian ? "ru" : "en";
@@ -152,7 +157,7 @@ ShellRoot {
         if (key==="BackSpace" && !mods.length && wordPrefix.length) {
             wordPrefix=wordPrefix.slice(0,-1); suggestions=[]; predictionRequest++; predictTimer.restart(); lastTypedAt=Date.now();
         } else clearWord(key==="BackSpace" && !mods.length);
-        control = false; alt = false; logo = false; releaseShift();
+        releaseMods();
     }
     function typeText(char) {
         pad.stopMomentum();
@@ -164,15 +169,25 @@ ShellRoot {
         if (shift && (logo || control || alt)) mods.push("shift");
         send({type: "text", text: char, mods: mods, autocorrect: autocorrectEnabled, language: russian ? "ru" : "en"});
         if (control || alt || logo) clearWord(); else updateWord(char);
-        releaseShift(); control = false; alt = false; logo = false;
+        releaseMods();
     }
-    function holdShift(held) {
-        if (held) { shiftHeld=true; shiftUsed=false; return; }
-        shiftHeld=false;
-        if (shiftUsed) shift=false;
-        shiftUsed=false;
+    function setMod(name, value) {
+        if (name === "shift") shift = value;
+        else if (name === "control") control = value;
+        else if (name === "alt") alt = value;
+        else if (name === "logo") logo = value;
     }
-    function releaseShift() { if (shiftHeld) shiftUsed=true; else shift=false; }
+    function holdMod(name, down) {
+        if (down) { held[name] = true; used[name] = false; return; }
+        held[name] = false;
+        if (used[name]) setMod(name, false);
+        used[name] = false;
+    }
+    function releaseMods() {
+        for (const name of ["shift", "control", "alt", "logo"]) {
+            if (held[name]) used[name] = true; else setMod(name, false);
+        }
+    }
     function click(button) {
         clearWord();
         send({type:"button",button:button,state:1});
@@ -230,6 +245,12 @@ ShellRoot {
         function toggle(): void { if (root.opened) root.closePanel(); else root.opened = true; }
         function openPanel(): void { root.opened = true; }
         function hide(): void { root.closePanel(); }
+        // Touchscreen gestures recognised by the Hyprland plugin; same actions as the pad's.
+        function gesture(name: string): void {
+            if (name === "previous" || name === "next") root.send({type:"workspace",direction:name});
+            else if (name === "minimize" || name === "restore") root.send({type:"minimize",direction:name === "minimize" ? "down" : "up"});
+            else if (name === "overview") root.toggleOverview();
+        }
         function status(): string { return root.opened ? "open" : "closed"; }
         function predictionStatus(): string { return JSON.stringify({enabled:root.predictionEnabled,autocorrect:root.autocorrectEnabled,ready:root.suggestions.length,prefixLength:root.wordPrefix.length,requestId:root.predictionRequest,language:root.russian ? "ru" : "en"}); }
         function setWords(enabled: bool): void { root.predictionEnabled=enabled; }
@@ -241,13 +262,19 @@ ShellRoot {
             return JSON.stringify([digitKeys.itemAt(1), letterKeys.itemAt(0), spaceKey].map(k => k.mapToGlobal(k.width/2,k.height/2)));
         }
     }
+    Overview { id: overview }
     PanelWindow {
         id: panel
-        screen: root.bottom
-        visible: root.bottom !== null && root.opened
-        anchors { top: true; bottom: true; left: true; right: true }
+        screen: root.tablet ? root.upper : root.bottom
+        visible: (root.bottom !== null || root.tablet) && root.opened
+        anchors { top: !root.tablet; bottom: true; left: true; right: true }
+        // Keyboard rows are sized from the screen, not from this window, which in
+        // tablet mode is only as tall as the keyboard itself.
+        readonly property real areaHeight: screen ? screen.height : height
+        implicitHeight: root.tablet ? Math.min(380, areaHeight * 0.44) + 32 + 10 + 24 : 0
         color: "#101722"
-        exclusionMode: ExclusionMode.Ignore
+        // Docked in tablet mode, windows shrink above it so the text field stays visible.
+        exclusionMode: root.tablet ? ExclusionMode.Auto : ExclusionMode.Ignore
         WlrLayershell.namespace: "yoga-input-panel"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -280,18 +307,18 @@ ShellRoot {
                     }
                 }
                 Key { Layout.preferredWidth: 80; Layout.minimumWidth: 80; Layout.maximumWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
-                Key { Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
+                Key { visible: !root.tablet; Layout.preferredWidth: 110; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Клавиатура" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
                 Key { Layout.preferredWidth: 36; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             ColumnLayout {
                 id: keyboard
-                visible: !root.settingsOpen
+                visible: !root.settingsOpen || root.tablet
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(380, panel.height * 0.44)
-                Layout.maximumHeight: Math.min(380, panel.height * 0.44)
+                Layout.preferredHeight: Math.min(380, panel.areaHeight * 0.44)
+                Layout.maximumHeight: Math.min(380, panel.areaHeight * 0.44)
                 Layout.minimumHeight: 280
                 spacing: 7
-                readonly property real keyHeight: (Math.min(380,panel.height*0.44)-28)/5
+                readonly property real keyHeight: (Math.min(380,panel.areaHeight*0.44)-28)/5
                 readonly property real unit: (panel.width - 32 - 14*7)/15
                 Layout.minimumWidth: 0
                 RowLayout {
@@ -325,18 +352,18 @@ ShellRoot {
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                     Repeater {
                         model: Layouts.lower
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdShift(down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt() }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: root.russian ? "Русский  ·  пробел" : "English  ·  space"; onActivated: root.typeText(" ") }
                     MicKey {
                         id: micKey
@@ -345,6 +372,7 @@ ShellRoot {
                         onFinished: { root.clearWord(); root.send({type:"voice",action:"stop"}); }
                         onAborted: root.send({type:"voice",action:"cancel"})
                     }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Del"; textSize: 18; repeatable: true; onActivated: root.typeKey("Delete") }
                     Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: root.russian ? "RU / en" : "ru / EN"; activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "←"; repeatable: true; onActivated: root.typeKey("Left") }
                     ColumnLayout {
@@ -356,7 +384,7 @@ ShellRoot {
                 }
             }
             PanelSettings {
-                visible: root.settingsOpen
+                visible: root.settingsOpen && !root.tablet
                 settings: root
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(420, panel.height * 0.50)
@@ -364,6 +392,7 @@ ShellRoot {
                 Layout.maximumHeight: Math.min(420, panel.height * 0.50)
             }
             Rectangle {
+                visible: !root.tablet
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 radius: 15
@@ -396,6 +425,9 @@ ShellRoot {
                     property bool workspaceGesture: false
                     property real swipeX: 0
                     property real swipeY: 0
+                    // Four or five fingers drawn together open the window overview.
+                    property real pinchStart: 0
+                    property real pinchMin: 0
                     property bool scrolling: false
                     // Co-directional two-finger drift before scrolling commits.
                     // Settling fingertips drift a pixel or two during a tap.
@@ -446,6 +478,8 @@ ShellRoot {
                                     root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
                                 else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
                                     root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
+                                else if (peakCount>=4 && now-began < 2000 && pinchStart>0 && pinchMin<=pinchStart*0.6)
+                                    root.toggleOverview();
                                 workspaceGesture=false; swipeX=0; swipeY=0; lastTapTime=-1000;
                             } else if (!scrolling && !endedDrag && previousCount && now-began < (peakCount === 2 ? 450 : 350) && travel < 18 && !root.drag && peakCount <= 2) {
                                 root.click(peakCount === 2 ? 273 : 272);
@@ -470,7 +504,7 @@ ShellRoot {
                         let startingSwipe = n >= 3 && !workspaceGesture;
                         if (startingSwipe) {
                             stopMomentum(); clearVelocity();
-                            workspaceGesture=true; swipeX=0; swipeY=0; lastTapTime=-1000;
+                            workspaceGesture=true; swipeX=0; swipeY=0; pinchStart=0; pinchMin=0; lastTapTime=-1000;
                             if (tapDragging) {
                                 root.send({type:"button",button:272,state:0}); tapDragging=false;
                             }
@@ -487,6 +521,12 @@ ShellRoot {
                         positions=next;
                         if (workspaceGesture && n<3 && Math.max(Math.abs(swipeX),Math.abs(swipeY))<30)
                             workspaceGesture=false;
+                        if (workspaceGesture && n>=4) {
+                            let spread=points.reduce((a,p) => a+Math.hypot(p.x-x,p.y-y),0)/n;
+                            // Measure from the moment the last finger lands.
+                            if (n>previousCount) { pinchStart=spread; pinchMin=spread; }
+                            else pinchMin=Math.min(pinchMin,spread);
+                        }
                         if (workspaceGesture) {
                             // Accumulate only movement while all three fingers
                             // are present; lifting them cannot move or click.

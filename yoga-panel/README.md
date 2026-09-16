@@ -21,6 +21,10 @@ The UI labels are in Russian; both layouts are printed on every key.
   Backspace keep the selected group. The RU/EN key fires once when the tap
   completes; sliding touches are cancelled. Switch acknowledgements guard
   against late events, including after dictation.
+  Layout events from virtual keyboards (`hl-virtual-keyboard-*`: fcitx5, wtype,
+  the panel's own) are ignored: fcitx5 with a us-only profile re-uploads its
+  keymap at random and resets its group to English, and Hyprland often reports
+  it as the main keyboard, which flipped the panel to English on its own.
 - Ctrl, Alt, Shift and **Super 🚀** are one-shot: press the modifier, then the
   key. They combine (Super → Shift → Tab) and reset after input.
   Super → 3 switches to workspace 3.
@@ -53,9 +57,56 @@ The UI labels are in Russian; both layouts are printed on every key.
   which the installer copies to `~/.config/hypr/` and requires from
   `hyprland.lua`. The same gesture works on the firmware's emulated touchpad
   through Hyprland.
+- Four- or five-finger pinch (fingers drawn together): window overview, see below.
 - **⚙ Settings**: pointer speed and acceleration, scroll speed, inertia.
   Saved to `~/.config/yoga-panel/settings.json`. Zero acceleration means
   constant speed.
+
+### Touchscreen gestures
+
+The same gestures work on both touchscreens themselves, recognised by the
+Hyprland plugin (`gesture.hpp`, tested by `test_gesture.cpp`):
+
+- three-finger swipe right / left / down / up — next / previous workspace,
+  hide / bring back windows, exactly as on the pad;
+- three-finger tap — open the panel;
+- four-to-six-finger pinch — window overview.
+
+Once several fingers are clearly a gesture, the app under them receives a touch
+cancel, so a swipe does not also scroll or draw there. One- and two-finger input
+is never touched. `hyprctl yoga-gesture-last` prints what the plugin saw in the
+last contact (finger count, movement, duration, how far the fingers closed) for
+when a gesture is missed.
+
+### Window overview
+
+`Overview.qml`: every window as a live thumbnail on the upper screen. Tap a card
+to go to that window, its ✕ to close it, empty space or the pinch again to leave.
+Windows hidden with the three-finger swipe are listed too; tapping one brings it
+back to the current workspace. Commands go through `hyprctl eval`, since
+`hyprctl dispatch` does not exist under the Lua config.
+
+### Title bars for touch
+
+Windows get compact 24 px title bars with a close button: drag a window by its
+bar with a finger (it becomes floating), tap ✕ to close it. This is `hyprbars`
+from hyprland-plugins. `hyprpm` needs root, so `build-hyprbars.sh` reads the
+plugins commit pinned for the running Hyprland in `hyprpm.toml`, builds the
+`.so` locally (sources cached in `~/.cache/yoga-panel`) and `ensure-plugin.py`
+loads it next to the gesture plugin. Title bars are optional: if that build
+fails (no network after a Hyprland update) the panel still starts. Look and the
+button live in `config/hypr/yoga-titlebars.lua`, which only runs once the
+plugin is loaded, so it is never a config error.
+
+### Tablet mode
+
+With `eDP-2` turned off (folded 360°, see `yoga-mode tablet`) the panel docks
+at the bottom of `eDP-1` as keyboard and suggestions only, and reserves its
+space so windows shrink above it. The plugin checks every 200 ms whether the
+focused app has a text field active (Hyprland has no event for it) and shows the
+keyboard for it, hiding it again about 0.6 s after the field is gone — only if
+it showed it. Terminals do not announce text input; open the keyboard there
+with a three-finger tap.
 
 ### Opening the panel and brightness
 
@@ -209,6 +260,11 @@ Swipes only switch the upper `eDP-1`: right goes 1 → 3 → 4 → … → 10 �
 the reverse. Workspace 2 is reserved for the lower screen, and workspaces already
 on other monitors are skipped. Focus moves to the upper monitor before an empty
 workspace is created. With `eDP-1` disconnected the gesture does nothing.
+
+A window launched while the panel is up would open under it: touching the panel
+focuses `eDP-2`. `config/hypr/yoga-windows.lua` (required from `hyprland.lua` by
+the installer) sends every new window on `eDP-2` to the upper screen while the
+panel is visible; with the panel hidden the lower screen behaves normally.
 
 ## Disable / uninstall
 
