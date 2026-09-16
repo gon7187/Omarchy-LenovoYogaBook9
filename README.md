@@ -956,7 +956,7 @@ Still genuinely missing: the `SEN3` thermal sensor is unreadable.
 
 ## Confirmed working — don't go looking for problems here
 
-- **Camera** is a plain UVC device (`04f2:b7c5`), not IPU6, so it works with no setup.
+- **Camera** is a plain UVC device (`04f2:b7c5`), not IPU6, so it works with no setup. Black frames mean the hardware privacy shutter is closed (`v4l2-ctl -d /dev/video0 -C privacy` → `1`); there is also an IR camera on `/dev/video2`.
 - **Power profiles** work via ACPI `platform_profile` (`low-power balanced performance`) with `power-profiles-daemon` active. The scary-looking `lenovo_wmi_gamezone ... platform_profile probe failed` in dmesg has no practical effect.
 - **Bluetooth**, **PipeWire**, and the **battery** (100% of design capacity) are all healthy. No failed systemd units, system or user.
 
