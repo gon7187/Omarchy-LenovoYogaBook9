@@ -24,6 +24,8 @@ priv() { if [[ $EUID -eq 0 ]]; then "$@"; elif [[ -t 0 ]]; then sudo "$@"; else 
 apply() {
   install -Dm644 "$SRC" "$LOCK/TouchKeys.qml"
   grep -q TouchKeys "$LOCK/LockView.qml" || sed -i '0,/^    BorderSurface {/s//    TouchKeys { view: root }\n\n&/' "$LOCK/LockView.qml"
+  # Upstream reshaping LockView.qml would silently leave no keys; say so in the pacman output.
+  grep -q TouchKeys "$LOCK/LockView.qml" || { echo "yoga-lock-keyboard: LockView.qml changed, patch not applied" >&2; exit 1; }
 }
 
 case "${1:-check}" in

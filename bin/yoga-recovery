@@ -54,7 +54,7 @@ def snapshot():
     # System-owned customization is recorded, never automatically installed as root.
     service=Path('/etc/systemd/system/yoga-sensor-keepalive.service')
     if service.is_file():shutil.copy2(service,target/'system-sensor-keepalive.reference')
-    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules'),('system-lock-pam.reference','/etc/pam.d/omarchy-lock-password')):
+    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules'),('system-lock-pam.reference','/etc/pam.d/omarchy-lock-password'),('system-lock-keyboard-hook.reference','/etc/pacman.d/hooks/yoga-lock-keyboard.hook'),('system-lock-keyboard-qml.reference','/usr/local/share/yoga-lock-keyboard/TouchKeys.qml'),('system-sddm-relogin.reference','/etc/sddm.conf.d/zz-yoga-relogin.conf')):
         if Path(path).is_file():shutil.copy2(path,target/name)
     print(target)
     return target
@@ -111,13 +111,15 @@ def check():
     result=subprocess.run(['hyprctl','plugin','list','-j'],capture_output=True,text=True)
     if result.returncode or not any(p.get('name')=='yoga-panel-gesture' for p in json.loads(result.stdout or '[]')):
         failures.append('Yoga touch plugin is not loaded')
+    # The lock screen asks for the real password; without the touch keys this laptop cannot answer it.
+    if 'TouchKeys' not in Path('/usr/share/omarchy/shell/plugins/lock/LockView.qml').read_text(errors='replace'):failures.append('Lock screen lost its touch keyboard: run yoga-lock-keyboard install')
     result=subprocess.run(['hyprctl','configerrors'],capture_output=True,text=True)
     if result.returncode or result.stdout.strip():failures.append('Hyprland configuration: '+(result.stdout+result.stderr).strip())
     if failures:
         print('\n'.join(failures),file=sys.stderr)
         print('After a system update, log out and back in so the panel can rebuild against the new Hyprland. Backups: '+str(BACKUPS),file=sys.stderr)
         return 1
-    print('OK: panel, brightness sync, dictation, input libraries and touch plugin')
+    print('OK: panel, brightness sync, dictation, input libraries, touch plugin and lock-screen keyboard')
     return 0
 
 def main():
