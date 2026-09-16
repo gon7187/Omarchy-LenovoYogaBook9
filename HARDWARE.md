@@ -117,8 +117,9 @@ topology               = intel/sof-tplg/sof-hda-generic-2ch.tplg
 
 Camera is a plain UVC device (`04f2:b7c5`) exposing `/dev/video0..3`, and needs
 no setup: `/dev/video0` is RGB (MJPG up to 2592x1944), `/dev/video2` is the IR
-camera (GREY 640x360, emitter works without `linux-enable-ir-emitter`), so Howdy
-face unlock is possible. Both stream pure black frames while the hardware privacy
+camera (GREY 640x360, emitter lights without `linux-enable-ir-emitter`). The IR
+emitter saturates a face at any `exposure_time_absolute`, down to `2`, so Howdy
+finds no face there; face unlock was dropped. Both stream pure black frames while the hardware privacy
 shutter is closed; `v4l2-ctl -d /dev/video0 -C privacy` reads `1` then, and
 `camera_power` on `VPC2004:00` does not open it.
 
