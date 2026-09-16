@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Fan mode of the Yoga Book 9 following the power profile.
+
+The firmware keeps the fan on its own EC table: switching platform_profile
+(power-profiles-daemon, the battery menu) leaves ideapad_laptop's fan_mode at
+0, Super Silent, in every profile. This maps the profile onto fan_mode:
+
+  low-power   -> 0  Super Silent
+  balanced    -> 1  Standard
+  performance -> 4  Efficient Thermal Dissipation
+
+Runs as root because fan_mode is root-only. Reads the profile and writes one
+number to the EC, nothing else.
+
+  yoga-fan            run the daemon (yoga-fan.service)
+  yoga-fan install    install this script and the system service (sudo/pkexec)
+  yoga-fan remove
+"""
+import os, select, subprocess, sys
+
+PROFILE = '/sys/firmware/acpi/platform_profile'
+FAN = '/sys/bus/platform/devices/VPC2004:00/fan_mode'
+MODES = {'low-power': '0', 'balanced': '1', 'performance': '4'}
+UNIT = '/etc/systemd/system/yoga-fan.service'
+
+
+def read(path):
+    with open(path) as f: return f.read().strip()
+
+
+def apply():
+    want = MODES.get(read(PROFILE))
+    if want is None or read(FAN) == want: return
+    with open(FAN, 'w') as f: f.write(want)
+    print(f'fan_mode {want} for {read(PROFILE)}', flush=True)
+
+
+def run():
+    with open(PROFILE) as f:
+        poller = select.poll()
+        poller.register(f, select.POLLPRI | select.POLLERR)
+        while True:
+            apply()
+            # platform_profile_notify() wakes this at once; the timeout re-asserts
+            # the mode in case the EC drops it across suspend or a Fn+Q switch.
+            poller.poll(10000)
+            f.seek(0); f.read()
+
+
+def priv(*cmd):
+    if os.geteuid() != 0: cmd = ('sudo' if sys.stdin.isatty() else 'pkexec',) + cmd
+    subprocess.run(cmd, check=True)
+
+
+def install():
+    here = os.path.realpath(__file__)
+    unit = ('[Unit]\nDescription=Yoga Book 9 fan mode following the power profile\n\n'
+            '[Service]\nExecStart=/usr/local/bin/yoga-fan\nRestart=on-failure\nRestartSec=2\n\n'
+            '[Install]\nWantedBy=multi-user.target\n')
+    priv('sh', '-c', f'install -Dm755 "{here}" /usr/local/bin/yoga-fan && printf %s "$1" > {UNIT} && '
+         'systemctl daemon-reload && systemctl enable yoga-fan && systemctl restart yoga-fan', 'sh', unit)
+
+
+if __name__ == '__main__':
+    arg = sys.argv[1] if len(sys.argv) > 1 else 'run'
+    if arg == 'run': run()
+    elif arg == 'install': install()
+    elif arg == 'remove':
+        priv('sh', '-c', f'systemctl disable --now yoga-fan; rm -f {UNIT} /usr/local/bin/yoga-fan; systemctl daemon-reload')
+    else: sys.exit(__doc__)
