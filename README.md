@@ -462,6 +462,7 @@ yoga-mode stand        # stacked landscape — the everyday layout
 yoga-mode book         # turned 90°, two portrait screens side by side
 yoga-mode book-flip    # book, turned the other way
 yoga-mode present      # mirrored, upper panel facing the person opposite
+yoga-mode tablet       # folded 360°, lower panel and its touch off (-left/-right/-upside)
 yoga-mode cycle        # step through them
 ```
 
@@ -522,7 +523,26 @@ systemctl --user daemon-reload && systemctl --user enable --now yoga-autorotate
 
 All four positions switch automatically. An earlier version excluded present on the mistaken belief it was undetectable, which also required a guard suspending auto-switching while present was active — that would have trapped the machine in present mode once present became detectable. Both are gone.
 
-The missing hinge is covered by requiring an orientation to hold for about four seconds before acting — without it, a genuine fold and an incidental tilt look identical.
+The missing hinge is covered by requiring an orientation to hold for about two seconds before acting — without it, a genuine fold and an incidental tilt look identical.
+
+### Tablet — the hinge angle from two gyroscopes
+
+Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (`gyro_3d` at `iio:device0` and `iio:device2`), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of `dev2.x − dev0.x` is the change in hinge angle. Recorded at 100 Hz:
+
+```
+laptop -> tablet   +254°      tablet -> laptop   -242°
+laptop -> tent     +198°      tent   -> laptop   -200°      drift ~1° per fold
+```
+
+[`bin/yoga-hinge`](bin/yoga-hinge) is a small root service (IIO buffers are root-only) that integrates this and writes the angle to `/run/yoga-hinge`. Only the starting angle is unknown: service start and every lid reopen assume a typical 120°, a closed lid is 0°, and the 0–360° end stops clamp accumulated error. Relative rates under 3°/s are ignored so bias cannot creep in at rest. About 1% of one core.
+
+```bash
+bin/yoga-hinge install      # sudo or pkexec; `remove` undoes it
+```
+
+`yoga-autorotate` then picks tablet at ≥250° (leaving below 220°) unless the machine is upside down — tent sits near 305°, and with the start only guessed the hinge cannot tell tent from an inverted tablet, so upside down stays present. Tablet in or out is applied after one reading rather than two, since the hinge already confirms the fold.
+
+In tablet `yoga-mode` disables `eDP-2` and the lower touchscreen and stylus, and rotates `eDP-1` with the machine. Disabling a monitor hands its workspace to the other and makes it the visible one, and enabling it sends every workspace back where it came from — a window opened in tablet mode would reappear on the keyboard panel. `yoga-mode` keeps the workspace the upper panel showed and gathers windowed workspaces onto `eDP-1` on the way out. Without `yoga-hinge`, tablet is simply never chosen.
 
 Turn it on and off with `yoga-autorotate-toggle` (or the Omarchy menu entry), which starts and stops the service. There is deliberately **one** switch: an earlier version also had an `enabled` flag in a config file, so the menu could show auto-rotate ticked while the daemon sat inert, with nothing to explain why.
 
