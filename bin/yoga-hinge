@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Hinge angle of the Yoga Book 9 from its two gyroscopes.
+
+The firmware's hinge sensor reads 0 permanently, but each half carries its own
+gyroscope (iio gyro_3d dev0 and dev2), both with X along the hinge and mounted
+mirrored. Folding turns one half against the other, so the integral of
+dev2.x - dev0.x is the change in hinge angle; turning the whole machine moves
+both alike and cancels. Measured: laptop -> tablet +254, laptop -> tent +198,
+drift about 1 degree per fold.
+
+Only the start is unknown, so the angle is anchored to the lid switch: closed is
+0, and an open lid right after that (a resume) is taken as a typical laptop
+angle, as is service start. The 0..360 end stops clamp any accumulated error.
+
+Runs as root because IIO buffers are root-only. Reads motion sensors, nothing
+else; writes one number to /run/yoga-hinge for yoga-autorotate.
+
+  yoga-hinge            run the daemon (yoga-hinge.service)
+  yoga-hinge install    install this script and the system service (sudo/pkexec)
+  yoga-hinge remove
+"""
+import glob, os, select, struct, subprocess, sys, time
+
+OUT = '/run/yoga-hinge'
+IIO = '/sys/bus/iio/devices/iio:device%d/'
+GYROS = (0, 2)
+RATE = 100                       # Hz; what the fold measurements were taken at
+SCALE = 1.74e-7 * 57.29578       # raw -> degrees/s (in_anglvel_scale is rad/s)
+DEADBAND = 3.0                   # deg/s of relative rate ignored, so bias cannot creep in at rest
+OPEN_GUESS = 120.0
+UNIT = '/etc/systemd/system/yoga-hinge.service'
+
+
+def write(path, value):
+    with open(path, 'w') as f: f.write(str(value))
+
+
+def lid_closed():
+    for state in glob.glob('/proc/acpi/button/lid/*/state'):
+        with open(state) as f:
+            if 'closed' in f.read(): return True
+    return False
+
+
+def start(dev):
+    base = IIO % dev
+    write(base + 'buffer/enable', 0)
+    for axis in 'xyz': write(base + f'scan_elements/in_anglvel_{axis}_en', 1)
+    write(base + 'scan_elements/in_timestamp_en', 1)
+    write(base + 'in_anglvel_sampling_frequency', RATE)
+    write(base + 'buffer/length', 256)
+    write(base + 'buffer/enable', 1)
+    return os.open(f'/dev/iio:device{dev}', os.O_RDONLY | os.O_NONBLOCK)
+
+
+def stop(dev):
+    try:
+        write(IIO % dev + 'buffer/enable', 0)
+        write(IIO % dev + 'in_anglvel_sampling_frequency', 10)
+    except OSError: pass
+
+
+def run():
+    fds = {start(dev): dev for dev in GYROS}
+    rate = {dev: 0.0 for dev in GYROS}
+    last_ts = {dev: None for dev in GYROS}
+    angle, reported, was_closed, next_lid = OPEN_GUESS, None, False, 0.0
+    try:
+        while True:
+            ready, _, _ = select.select(list(fds), [], [], 1.0)
+            for fd in ready:
+                dev = fds[fd]
+                data = os.read(fd, 24 * 64)
+                # Frame: x, y, z (s32), padding, timestamp (s64 ns).
+                for off in range(0, len(data) - 23, 24):
+                    x, _y, _z, _pad, ts = struct.unpack_from('<iiiiq', data, off)
+                    rate[dev] = x * SCALE
+                    if dev == GYROS[1] and last_ts[dev] is not None:
+                        dt = (ts - last_ts[dev]) / 1e9
+                        relative = rate[GYROS[1]] - rate[GYROS[0]]
+                        # A gap (suspend, dropped buffer) must not integrate one stale rate over it.
+                        if 0 < dt < 0.1 and abs(relative) > DEADBAND:
+                            angle = min(360.0, max(0.0, angle + relative * dt))
+                    last_ts[dev] = ts
+            now = time.monotonic()
+            if now >= next_lid:
+                next_lid = now + 1.0
+                closed = lid_closed()
+                if closed: angle = 0.0
+                elif was_closed: angle = OPEN_GUESS
+                was_closed = closed
+            if reported is None or abs(angle - reported) >= 2:
+                tmp = OUT + '.tmp'
+                write(tmp, round(angle))
+                os.chmod(tmp, 0o644)
+                os.replace(tmp, OUT)
+                reported = angle
+    finally:
+        for dev in GYROS: stop(dev)
+
+
+def priv(*cmd):
+    if os.geteuid() != 0: cmd = ('sudo' if sys.stdin.isatty() else 'pkexec',) + cmd
+    subprocess.run(cmd, check=True)
+
+
+def install():
+    here = os.path.realpath(__file__)
+    unit = ('[Unit]\nDescription=Yoga Book 9 hinge angle from the two gyroscopes\n\n'
+            '[Service]\nExecStart=/usr/local/bin/yoga-hinge\nRestart=on-failure\nRestartSec=2\n\n'
+            '[Install]\nWantedBy=multi-user.target\n')
+    priv('sh', '-c', f'install -Dm755 "{here}" /usr/local/bin/yoga-hinge && printf %s "$1" > {UNIT} && '
+         'systemctl daemon-reload && systemctl enable yoga-hinge && systemctl restart yoga-hinge', 'sh', unit)
+
+
+if __name__ == '__main__':
+    arg = sys.argv[1] if len(sys.argv) > 1 else 'run'
+    if arg == 'run': run()
+    elif arg == 'install': install()
+    elif arg == 'remove':
+        priv('sh', '-c', f'systemctl disable --now yoga-hinge; rm -f {UNIT} /usr/local/bin/yoga-hinge {OUT}; systemctl daemon-reload')
+    else: sys.exit(__doc__)
