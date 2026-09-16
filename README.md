@@ -934,7 +934,7 @@ Writing `1` caps charging (Lenovo's implementation stops around 55-60%) to prese
 
 **Fan speed cannot be controlled from Linux.** `fan_mode` is accepted but changes nothing: under a 60 s all-core load in `performance` both fans reach the same ceiling, ~3900 and ~6000 RPM at ~95 °C, with `fan_mode` `0` and `4` alike, and stay there until the package is back near 55 °C. The EC runs them on temperature alone. The five ACPI fans (`PNP0C0B`, bound to `acpitz` active trips) only set NVS variables (`VFN0..4`) the EC ignores, `yogafan` does not bind to this model, and no one has fan control for the 82YQ ([LenovoLegionLinux#329](https://github.com/johnfanv2/LenovoLegionLinux/issues/329)). Lower temperatures come only from lower power limits — `low-power` held ~56 °C under the same load.
 
-The speeds themselves are readable: the DSDT maps EC RAM at `0xFE0B0000` and puts `FANS`/`FA2S`, the RPM of the two fans, at offsets `0x5A2`/`0x5A4`. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that maps that page read-only and writes `RPM1 RPM2` to `/run/yoga-fan` every 2 s; the `gon7187.sysstats` bar tooltip shows it.
+The speeds themselves are readable: the DSDT maps EC RAM at `0xFE0B0000` and puts `FANS`/`FA2S`, the RPM of the two fans, at offsets `0x5A2`/`0x5A4`. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that maps that page read-only and writes `RPM1 RPM2` to `/run/yoga-fan` every 2 s; the `gon7187.sysstats` bar widget shows it as `FAN 2.5/2.6k`.
 
 ```bash
 bin/yoga-fan install      # sudo or pkexec; `remove` undoes it

@@ -41,7 +41,7 @@ python3 yoga-panel/install.py          # rebuilds, backs up, restarts the units
 ~/.local/bin/yoga-panel show
 ```
 
-After editing `bin/` or a whole-file config (`config/hypr/minimize.lua`, `yoga-windows.lua`, `config/omarchy/shell.json`, the `gon7187.*` bar plugins, systemd units), `install.py` copies most of them too; for anything it does not carry, copy it to its destination yourself and reload what owns it (`systemctl --user daemon-reload`, `hyprctl reload`, `omarchy-shell shell rescanPlugins`).
+After editing `bin/` or a whole-file config (`config/hypr/minimize.lua`, `yoga-windows.lua`, `config/omarchy/shell.json`, the `gon7187.*` bar plugins, systemd units), `install.py` copies most of them too; for anything it does not carry, copy it to its destination yourself and reload what owns it (`systemctl --user daemon-reload`, `hyprctl reload`, `omarchy-restart-shell`). `omarchy-shell shell rescanPlugins` logs "reloading" for a changed bar plugin but keeps the cached old QML — restart the shell to see an edit.
 
 **`config/hypr/bindings.lua`, `monitors.lua` and `autostart.lua` are snippets, not whole files** — their live counterparts are longer and include Omarchy's own content. Merge by hand in both directions; never copy them over `~/.config/hypr/`.
 
