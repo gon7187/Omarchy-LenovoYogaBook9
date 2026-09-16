@@ -19,13 +19,20 @@ def emit(value):
     with OUTPUT_LOCK:
         print(json.dumps(value) if isinstance(value,dict) else value,flush=True)
 
+VIRTUAL='hl-virtual-keyboard-'
+
 def log(message): print('yoga-panel: '+message,file=sys.stderr,flush=True)
 
 def active_language():
     """Read the active keyboard rather than a stale auxiliary-device event."""
     try:
         devices=json.loads(subprocess.check_output(['hyprctl','devices','-j'],text=True,timeout=2))['keyboards']
-        keyboard=next((k for k in devices if k.get('main')),None)
+        # Virtual keyboards own their keymap: fcitx5 re-uploads a us-only one at random
+        # and resets its group to English, yet Hyprland often calls it the main keyboard.
+        real=[k for k in devices if not k.get('name','').startswith(VIRTUAL)]
+        keyboard=next((k for k in real if k.get('main')),None)
+        # No real main keyboard: a switch for all devices shows on most of them, a hotplugged one alone does not.
+        if not keyboard and real: keyboard=max(real,key=lambda k:sum(o.get('active_keymap')==k.get('active_keymap') for o in real))
         layout=keyboard.get('active_keymap','') if keyboard else ''
         if 'Russian' in layout: return 'ru'
         if 'English' in layout: return 'en'
@@ -55,7 +62,7 @@ def layout_monitor():
                             app=event.strip().partition('>>')[2].partition(',')[0]  # class only, never the title
                         elif event.startswith('activelayout>>'):
                             device,_,layout=event.strip().partition('>>')[2].partition(',')
-                            if 'yoga-keyboard' in device: continue
+                            if device.startswith(VIRTUAL): continue
                             previous,language=language,active_language()
                             # Diagnostics for unexplained switches: which device and app preceded a change.
                             if language != previous: log(f'system layout {previous} -> {language}: event {device}={layout}, app {app or "-"}')
