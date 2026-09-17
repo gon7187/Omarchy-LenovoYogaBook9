@@ -20,6 +20,7 @@ Both backlights are set directly rather than via omarchy-brightness-display,
 which resolves its target from the focused monitor -- meaningless for a daemon.
 """
 
+import glob
 import math
 import os
 import signal
@@ -189,12 +190,39 @@ def set_pct(target, current, show_osd):
     write_pct(target)
 
 
+def als_asleep():
+    """True once runtime PM has actually powered the ALS down.
+
+    A claim within ~4 s of the previous release -- a daemon restart -- reaches
+    the sensor while it is still powered (autosuspend is 3 s), and the ISH then
+    stalls the power-on by 9-30 s, taking iio-sensor-proxy's main loop and
+    every D-Bus call to it down with it. Measured on this machine: a claim from
+    "suspended" answers with a fresh reading in about a second. The HID sensor
+    device sits two levels above iio:deviceN in sysfs.
+    """
+    for name in glob.glob("/sys/bus/iio/devices/iio:device*/name"):
+        try:
+            if Path(name).read_text().strip() != "als":
+                continue
+            status = Path(name).resolve().parent.parent / "power" / "runtime_status"
+            return status.read_text().strip() == "suspended"
+        except OSError:
+            return True
+    return True
+
+
 class Sensor:
     """Holds the light claim for as long as this object lives."""
 
     def __init__(self):
         self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
         self.claimed = False
+        # Bounded: another client holding a claim keeps the sensor active for
+        # good, and then claiming at once is right.
+        for _ in range(60):
+            if als_asleep():
+                break
+            time.sleep(0.1)
         # iio-sensor-proxy is a system service; a user unit cannot order
         # against it, so at login it may not be on the bus yet. Retry rather
         # than die and rely on the restart loop to paper over it.
@@ -264,7 +292,8 @@ def main():
             if abs(current - last_set) > MANUAL_TOLERANCE:
                 paused_until = now + MANUAL_PAUSE_SECONDS
                 last_set = current
-                print(f"manual change to {current}%, pausing {MANUAL_PAUSE_SECONDS}s", flush=True)
+                print(f"manual change to {current}%, pausing {MANUAL_PAUSE_SECONDS}s",
+                      flush=True)
 
         if now < paused_until:
             continue
@@ -304,7 +333,8 @@ def main():
 
         if abs(target - current) >= STEP_THRESHOLD:
             # One line per move, so the journal shows what the daemon saw.
-            print(f"{lux:.1f} lux, smoothed {10 ** smoothed - 1:.1f} -> {target}% (was {current}%)", flush=True)
+            print(f"{lux:.1f} lux, smoothed {10 ** smoothed - 1:.1f} -> {target}%"
+                  f" (was {current}%)", flush=True)
             quiet = now - last_adjusted > OSD_QUIET_SECONDS
             set_pct(target, current, show_osd_enabled(values) and quiet)
             last_set = target
