@@ -274,7 +274,7 @@ ShellRoot {
         // Keyboard rows are sized from the screen, not from this window, which in
         // tablet mode is only as tall as the keyboard itself.
         readonly property real areaHeight: screen ? screen.height : height
-        implicitHeight: root.tablet ? Math.min(380, areaHeight * 0.44) + 32 + 10 + 24 : 0
+        implicitHeight: root.tablet ? keyboard.keyboardHeight + 32 + 10 + 24 : 0
         color: Theme.background
         // Docked in tablet mode, windows shrink above it so the text field stays visible.
         exclusionMode: root.tablet ? ExclusionMode.Auto : ExclusionMode.Ignore
@@ -317,12 +317,16 @@ ShellRoot {
                 id: keyboard
                 visible: !root.settingsOpen || root.tablet
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(380, panel.areaHeight * 0.44)
-                Layout.maximumHeight: Math.min(380, panel.areaHeight * 0.44)
+                Layout.preferredHeight: keyboardHeight
+                Layout.maximumHeight: keyboardHeight
                 Layout.minimumHeight: 280
                 spacing: 7
-                readonly property real keyHeight: (Math.min(380,panel.areaHeight*0.44)-28)/5
-                readonly property real unit: (panel.width - 32 - 14*7)/15
+                // Integer sizes: the layout engine rounds every preferred size UP, so a
+                // fractional unit overflows the row by a pixel per key and the rows end
+                // past the touchpad edge. The remainder goes to the last key of each row.
+                readonly property int keyHeight: Math.floor((Math.min(380,panel.areaHeight*0.44)-28)/5)
+                readonly property int keyboardHeight: keyHeight*5+28
+                readonly property int unit: Math.floor((panel.width - 32 - 14*7)/15)
                 Layout.minimumWidth: 0
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
@@ -332,7 +336,7 @@ ShellRoot {
                         model: Layouts.numbers
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.fillWidth: true; Layout.fillHeight: true; label: "⌫"; repeatable: true; onActivated: root.typeKey("BackSpace") }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
@@ -342,7 +346,7 @@ ShellRoot {
                         model: Layouts.upper
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    LetterKey { symbols: Layouts.pair("\\","\\","|","/"); russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                    LetterKey { symbols: Layouts.pair("\\","\\","|","/"); russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillWidth: true; Layout.fillHeight: true; onActivated: root.typeText(character) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
@@ -351,7 +355,7 @@ ShellRoot {
                         model: Layouts.middle
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Enter ↵"; onActivated: root.typeKey("Return") }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillWidth: true; Layout.fillHeight: true; label: "Enter ↵"; onActivated: root.typeKey("Return") }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
@@ -360,7 +364,7 @@ ShellRoot {
                         model: Layouts.lower
                         LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillWidth: true; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
