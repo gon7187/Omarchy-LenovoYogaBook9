@@ -85,6 +85,9 @@ def valid_settings(data):
     inertia=data.get('inertiaEnabled',DEFAULTS['inertiaEnabled'])
     if type(inertia) is not bool: raise ValueError('Invalid inertia setting')
     result['inertiaEnabled']=inertia
+    oled=data.get('oledTheme',DEFAULTS['oledTheme'])
+    if type(oled) is not bool: raise ValueError('Invalid theme setting')
+    result['oledTheme']=oled
     return result
 
 def load_settings():

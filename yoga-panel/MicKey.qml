@@ -7,9 +7,9 @@ Rectangle {
     signal finished()
     signal aborted()
     radius: 8
-    color: holding ? "#ad3848" : "#202a38"
-    border.color: holding ? "#ff9da9" : "#384658"
-    Text { anchors.centerIn: parent; text: "🎤"; font.pixelSize: 26; color: "#f0f5ff" }
+    color: holding ? Theme.mic : Theme.key
+    border.color: holding ? Theme.micBorder : Theme.keyBorder
+    Text { anchors.centerIn: parent; text: "🎤"; font.pixelSize: 26; color: Theme.text }
     function cancel() { if (holding) { holding=false; aborted(); } }
     onVisibleChanged: if (!visible) cancel()
     Component.onDestruction: cancel()

@@ -7,8 +7,8 @@ ColumnLayout {
     spacing: 12
     RowLayout {
         Layout.fillWidth: true; Layout.preferredHeight: 32; Layout.minimumHeight: 32; Layout.maximumHeight: 32
-        Text { text: "Под себя"; color: "#f0f6ff"; font.pixelSize: 23; font.weight: Font.DemiBold }
-        Text { text: "Сохраняется автоматически"; color: "#8296ae"; font.pixelSize: 12; Layout.leftMargin: 12 }
+        Text { text: "Под себя"; color: Theme.text; font.pixelSize: 23; font.weight: Font.DemiBold }
+        Text { text: "Сохраняется автоматически"; color: Theme.textMuted; font.pixelSize: 12; Layout.leftMargin: 12 }
         Item { Layout.fillWidth: true }
         Key { label: "Сбросить тачпад"; textSize: 12; radius: 8; Layout.preferredWidth: 150; Layout.fillHeight: true; onActivated: { settings.pointerSpeed=2.4; settings.pointerAccel=.1; settings.scrollSpeed=.9; settings.inertiaEnabled=true; settings.inertiaStrength=1.5; settings.inertiaDuration=650; } }
     }
@@ -19,7 +19,7 @@ ColumnLayout {
             SettingsSlider { label: "Скорость"; value: settings.pointerSpeed; minimum: .5; maximum: 5; step: .1; displayValue: value.toFixed(1)+"×"; onAdjusted: value => settings.pointerSpeed=value }
             SettingsSlider { label: "Ускорение"; value: settings.pointerAccel; minimum: 0; maximum: 2; step: .1; displayValue: value.toFixed(1); onAdjusted: value => settings.pointerAccel=value }
             Item { Layout.fillHeight: true }
-            Text { text: "Быстрый жест перемещает курсор дальше.\n0 — движение без ускорения."; color: "#8296ae"; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Text { text: "Быстрый жест перемещает курсор дальше.\n0 — движение без ускорения."; color: Theme.textMuted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         }
         SettingsCard {
             title: "Прокрутка"; subtitle: "Два пальца · плавное завершение жеста"
@@ -32,11 +32,12 @@ ColumnLayout {
             title: "Ввод"; subtitle: "Подсказки и исправление слов"
             SettingsSwitch { label: "Подсказки слов"; checked: settings.predictionEnabled; onToggled: value => settings.predictionEnabled=value }
             SettingsSwitch { label: "Исправлять по пробелу"; checked: settings.autocorrectEnabled; onToggled: value => settings.autocorrectEnabled=value }
-            Text { text: "Backspace сразу после исправления\nвозвращает исходное слово."; color: "#8296ae"; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            SettingsSwitch { label: "Тема OLED: чёрный фон, контуры"; checked: settings.oledTheme; onToggled: value => settings.oledTheme=value }
+            Text { text: "Backspace сразу после исправления\nвозвращает исходное слово."; color: Theme.textMuted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Item { Layout.fillHeight: true }
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 62; radius: 10; color: "#202f40"
-                Text { anchors.fill: parent; anchors.margins: 12; text: "Тачпад внизу активен —\nпроверяй ощущения прямо здесь."; color: "#acc6df"; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                Layout.fillWidth: true; Layout.preferredHeight: 62; radius: 10; color: Theme.surface; border.color: Theme.surfaceBorder
+                Text { anchors.fill: parent; anchors.margins: 12; text: "Тачпад внизу активен —\nпроверяй ощущения прямо здесь."; color: Theme.textMuted; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
             }
         }
     }

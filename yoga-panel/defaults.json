@@ -6,5 +6,6 @@
   "inertiaDuration": 650.0,
   "predictionEnabled": false,
   "autocorrectEnabled": true,
-  "inertiaEnabled": true
+  "inertiaEnabled": true,
+  "oledTheme": false
 }
