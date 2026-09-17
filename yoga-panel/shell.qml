@@ -436,6 +436,8 @@ ShellRoot {
                     property real pinchStart: 0
                     property real pinchMin: 0
                     property bool scrolling: false
+                    // A mostly sideways two-finger stroke moves window focus instead of scrolling.
+                    property bool focusSwipe: false
                     // Co-directional two-finger drift before scrolling commits.
                     // Settling fingertips drift a pixel or two during a tap.
                     property real pairX: 0
@@ -482,7 +484,7 @@ ShellRoot {
                             if (!scrolling) clearCarry();
                             if (workspaceGesture) {
                                 if (peakCount===3 && now-began < 1800 && Math.abs(swipeX)>=100 && Math.abs(swipeX)>Math.abs(swipeY)*1.5)
-                                    root.send({type:"workspace",direction:swipeX>0 ? "next" : "previous"});
+                                    root.send({type:"workspace",direction:swipeX>0 ? "previous" : "next"});
                                 else if (peakCount===3 && now-began < 1800 && Math.abs(swipeY)>=100 && Math.abs(swipeY)>Math.abs(swipeX)*1.5)
                                     root.send({type:"minimize",direction:swipeY>0 ? "down" : "up"});
                                 else if (peakCount>=4 && now-began < 2000 && pinchStart>0 && pinchMin<=pinchStart*0.6)
@@ -493,7 +495,7 @@ ShellRoot {
                                 lastTapTime=peakCount === 1 ? now : -1000;
                                 lastTapX=lastX; lastTapY=lastY;
                             }
-                            previousCount=0; positions={}; scrolling=false;
+                            previousCount=0; positions={}; scrolling=false; focusSwipe=false; swipeX=0;
                             return;
                         }
                         if (!previousCount) {
@@ -566,13 +568,24 @@ ShellRoot {
                                 // Undecided between tap and scroll: neither move nor scroll.
                                 previousCount=n; lastX=x; lastY=y; return;
                             }
+                            if (scrollIntent && !scrolling && Math.abs(pairX)>Math.abs(pairY)*2) {
+                                focusSwipe=true; swipeX=pairX;
+                            }
                             if (scrollIntent) {
                                 scrolling=true; lastTapTime=-1000;
                                 if (tapDragging) {
                                     root.send({type:"button",button:272,state:0}); tapDragging=false;
                                 }
                             }
-                            if (scrolling && n===2) {
+                            if (focusSwipe) {
+                                // ponytail: 150 px per window, tune on the pad if it feels off.
+                                if (n===2) swipeX+=moving.reduce((sum,p)=>sum+p.dx,0)/2;
+                                if (Math.abs(swipeX)>=150) {
+                                    // Natural like the scroll: fingers left bring the right-hand window.
+                                    root.send({type:"focus",direction:swipeX>0 ? "l" : "r"});
+                                    swipeX-=Math.sign(swipeX)*150;
+                                }
+                            } else if (scrolling && n===2) {
                                 root.clearWord();
                                 scrollEvents++;
                                 let dx=filterScroll(moving.reduce((sum,p)=>sum+p.dx,0)/2,"x");
@@ -604,7 +617,7 @@ ShellRoot {
                         tapDragging=false; dragPointId=-1; lastTapTime=-1000;
                         previousCount=0; positions={};
                         workspaceGesture=false; swipeX=0; swipeY=0;
-                        scrolling=false; pairX=0; pairY=0;
+                        scrolling=false; focusSwipe=false; pairX=0; pairY=0;
                         scrollDirections={x:0,y:0}; scrollReversals={x:0,y:0};
                         reversalSamples={x:0,y:0}; reversalStarted={x:0,y:0};
                     }

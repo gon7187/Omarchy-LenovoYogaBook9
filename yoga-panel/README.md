@@ -48,9 +48,14 @@ The UI labels are in Russian; both layouts are printed on every key.
   milliseconds apart. Two fingers moving more than 4 px scroll. Scroll mode
   holds until the fingers lift; small reverse movement at lift-off is filtered
   and a Wayland `axis_stop` is sent.
+- A mostly sideways two-finger stroke (twice as much sideways as vertical)
+  switches window focus instead of scrolling, natural like a scroll: fingers
+  left bring the window on the right (`Super+→`), right the window on the
+  left; every 150 px moves one more window. There is no horizontal
+  scrolling in applications from the pad.
 - Tap, then touch again and move: select / drag. Lifting or cancelling releases
   the button.
-- Three-finger swipe right / left: next / previous workspace on the upper
+- Three-finger swipe left / right: next / previous workspace on the upper
   screen only, skipping workspace 2 (reserved for the lower screen).
 - Three-finger swipe down: hide every window on the upper screen's workspace;
   swipe up: bring them back. This goes through `config/hypr/minimize.lua`,
@@ -71,7 +76,8 @@ Hyprland plugin (`gesture.hpp`, tested by `test_gesture.cpp`):
   A black pixel on the OLED lower screen is unlit, so an open keyboard
   draws almost nothing. Both palettes live in `Theme.qml`.
 - three-finger swipe right / left / down / up — next / previous workspace,
-  hide / bring back windows, exactly as on the pad;
+  hide / bring back windows (on the screen swipe right is next; the pad
+  follows its scroll direction, so there swipe left is next);
 - three-finger tap — open the panel;
 - four-to-six-finger pinch — window overview.
 
@@ -259,7 +265,7 @@ on update; "Reset touchpad" restores the motion values only.
 
 ## Workspaces and the lower screen
 
-Swipes only switch the upper `eDP-1`: right goes 1 → 3 → 4 → … → 10 → 1, left
+Swipes only switch the upper `eDP-1`: left goes 1 → 3 → 4 → … → 10 → 1, right
 the reverse. Workspace 2 is reserved for the lower screen, and workspaces already
 on other monitors are skipped. Focus moves to the upper monitor before an empty
 workspace is created. With `eDP-1` disconnected the gesture does nothing.

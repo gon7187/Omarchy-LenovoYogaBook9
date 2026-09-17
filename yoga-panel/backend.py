@@ -220,6 +220,9 @@ def main():
                     result = subprocess.run(workspace_command(e['direction']),capture_output=True,text=True,timeout=3,check=True)
                     if result.stdout.strip() != 'ok':
                         raise ValueError('Workspace dispatch failed')
+                elif kind == 'focus':
+                    if e['direction'] not in ('l','r'): raise ValueError('Invalid focus direction')
+                    subprocess.run(['hyprctl','eval','hl.dispatch(hl.dsp.focus({ direction = "'+e['direction']+'" }))'],capture_output=True,text=True,timeout=3,check=True)
                 elif kind in ('key', 'text'):
                     keyboard_args(e)  # Validate before serializing into private transport.
                     mod = sum({'ctrl':1,'alt':2,'logo':4,'shift':8}[m] for m in set(e.get('mods', [])))
