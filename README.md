@@ -531,7 +531,7 @@ It reads the layout back from `hyprctl monitors` rather than trusting a recorded
 
 ### Tablet — the hinge angle from two gyroscopes
 
-Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (`gyro_3d` at `iio:device0` and `iio:device2`), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of `dev2.x − dev0.x` is the change in hinge angle. Recorded at 100 Hz:
+Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (two `gyro_3d` devices — their `iio:deviceN` numbers are probe order and change between boots, so `yoga-hinge` finds them by name, never by number), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of `second.x − first.x` (in the sensor hub's enumeration order, `HID-SENSOR-200076.N` — the iio number does not follow it) is the change in hinge angle. Recorded at 100 Hz:
 
 ```
 laptop -> tablet   +254°      tablet -> laptop   -242°

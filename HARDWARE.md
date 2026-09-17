@@ -81,6 +81,8 @@ gyro_3d    iio:device3
 hinge      iio:device4
 ```
 
+The numbers are probe order and differ between boots: this same machine has also come up with `gyro_3d` at 0 and 2, and at 0 and 1 with `als` at 2. Match on `name`, never on `iio:deviceN` — `yoga-hinge` once hardcoded 0 and 2 and, on a boot where 2 was the ALS, kept switching the light sensor's buffer off (see `CHANGELOG.md`, 2026-09-17).
+
 The hinge device exposes three separate angles:
 
 ```

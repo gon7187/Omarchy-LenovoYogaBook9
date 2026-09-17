@@ -47,16 +47,6 @@ STEP_THRESHOLD = 5        # ignore smaller changes so it does not hunt
 MANUAL_TOLERANCE = 2      # rounding slack when checking for a manual change
 MANUAL_PAUSE_SECONDS = 600
 
-# After a suspend the ISH can leave the ALS wedged: LightLevel freezes on its
-# last value for hours. (The raw sysfs read is no tell: it returns 0 while
-# iio-sensor-proxy holds the buffer, healthy or not.)
-# Holding the claim keeps it wedged; releasing it long enough for
-# iio-sensor-proxy to power the sensor down, then claiming again, revives it.
-# A healthy sensor sits on one reading for up to a minute, so only a much
-# longer freeze triggers that -- a genuinely constant room just pays a short gap.
-STALE_SECONDS = 180
-RECLAIM_GAP_SECONDS = 4
-
 # Walk to a new level instead of jumping to it. A single write is a visible
 # snap, which is what makes an automatic change feel like a fault; 1% per step
 # over about this long reads as the room changing. Each step is two
@@ -261,8 +251,6 @@ def main():
     paused_until = 0.0
     last_adjusted = 0.0
     smoothed = None
-    last_lux = None
-    lux_since = time.monotonic()
 
     while True:
         time.sleep(POLL_SECONDS)
@@ -276,6 +264,7 @@ def main():
             if abs(current - last_set) > MANUAL_TOLERANCE:
                 paused_until = now + MANUAL_PAUSE_SECONDS
                 last_set = current
+                print(f"manual change to {current}%, pausing {MANUAL_PAUSE_SECONDS}s", flush=True)
 
         if now < paused_until:
             continue
@@ -296,18 +285,6 @@ def main():
         # which seeded the smoother at 0 and dropped the panels to MIN_PCT.
         # This sensor reads ~30 lux even fully covered.
         # ponytail: a sensor that genuinely reports 0 would freeze auto-brightness; use a first-sample timeout then.
-        if lux != last_lux:
-            last_lux, lux_since = lux, now
-        elif now - lux_since > STALE_SECONDS:
-            sensor.release()
-            time.sleep(RECLAIM_GAP_SECONDS)
-            try:
-                sensor.claim()
-            except GLib.Error:
-                pass
-            last_lux, lux_since = None, time.monotonic()
-            continue
-
         if lux <= 0:
             continue
 
@@ -326,6 +303,8 @@ def main():
             continue
 
         if abs(target - current) >= STEP_THRESHOLD:
+            # One line per move, so the journal shows what the daemon saw.
+            print(f"{lux:.1f} lux, smoothed {10 ** smoothed - 1:.1f} -> {target}% (was {current}%)", flush=True)
             quiet = now - last_adjusted > OSD_QUIET_SECONDS
             set_pct(target, current, show_osd_enabled(values) and quiet)
             last_set = target

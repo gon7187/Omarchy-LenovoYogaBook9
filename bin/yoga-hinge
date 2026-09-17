@@ -2,9 +2,9 @@
 """Hinge angle of the Yoga Book 9 from its two gyroscopes.
 
 The firmware's hinge sensor reads 0 permanently, but each half carries its own
-gyroscope (iio gyro_3d dev0 and dev2), both with X along the hinge and mounted
+gyroscope (the two iio gyro_3d devices), both with X along the hinge and mounted
 mirrored. Folding turns one half against the other, so the integral of
-dev2.x - dev0.x is the change in hinge angle; turning the whole machine moves
+second.x - first.x is the change in hinge angle; turning the whole machine moves
 both alike and cancels. Measured: laptop -> tablet +254, laptop -> tent +198,
 drift about 1 degree per fold.
 
@@ -23,7 +23,6 @@ import glob, os, select, struct, subprocess, sys, time
 
 OUT = '/run/yoga-hinge'
 IIO = '/sys/bus/iio/devices/iio:device%d/'
-GYROS = (0, 2)
 RATE = 100                       # Hz; what the fold measurements were taken at
 SCALE = 1.74e-7 * 57.29578       # raw -> degrees/s (in_anglvel_scale is rad/s)
 DEADBAND = 3.0                   # deg/s of relative rate ignored, so bias cannot creep in at rest
@@ -40,6 +39,29 @@ def lid_closed():
         with open(state) as f:
             if 'closed' in f.read(): return True
     return False
+
+
+def find_gyros():
+    """The two gyro_3d devices, in the sensor hub's enumeration order.
+
+    Never hardcode the numbers: iio:deviceN is probe order and differs between
+    boots (seen as 0/2, 2/3 and 0/1). A fixed (0, 2) once pointed the second
+    gyro at the ALS, and every start wrote buffer/enable=0 into the light
+    sensor, which froze auto-brightness. Order by the hub's platform id
+    (HID-SENSOR-200076.N, allocated in report-descriptor order), not by the
+    iio number, which does not follow it: here accel .14 came up as device3
+    beside gyros .15/.16 as device0/1. Which half comes first has been seen on
+    one boot only -- if tablet mode stops triggering after a reboot, the sign
+    of the integrated angle flipped.
+    """
+    found = []
+    for path in glob.glob('/sys/bus/iio/devices/iio:device*/name'):
+        with open(path) as f: name = f.read().strip()
+        if name != 'gyro_3d': continue
+        dev = int(path.split('iio:device')[1].split('/')[0])
+        hub = os.path.realpath(path).split('HID-SENSOR-200076.')
+        found.append((int(hub[1].split('.')[0]) if len(hub) > 1 else dev, dev))
+    return tuple(dev for _, dev in sorted(found))
 
 
 def start(dev):
@@ -61,11 +83,18 @@ def stop(dev):
 
 
 def run():
-    fds = {start(dev): dev for dev in GYROS}
-    rate = {dev: 0.0 for dev in GYROS}
-    last_ts = {dev: None for dev in GYROS}
+    gyros, waited = find_gyros(), 0
+    while len(gyros) != 2:
+        # The ISH brings the sensors up after boot. Wait rather than exit: a
+        # failure exit restarts every 2 s forever, a clean exit never retries.
+        if waited == 60: print(f'yoga-hinge: still waiting for two gyro_3d devices, found {gyros}', file=sys.stderr)
+        time.sleep(2); waited += 2; gyros = find_gyros()
+    rate = {dev: 0.0 for dev in gyros}
+    last_ts = {dev: None for dev in gyros}
     angle, reported, was_closed, next_lid = OPEN_GUESS, None, False, 0.0
     try:
+        # Inside the try: if the second start() fails, the first gyro is still stopped.
+        fds = {start(dev): dev for dev in gyros}
         while True:
             ready, _, _ = select.select(list(fds), [], [], 1.0)
             for fd in ready:
@@ -75,9 +104,9 @@ def run():
                 for off in range(0, len(data) - 23, 24):
                     x, _y, _z, _pad, ts = struct.unpack_from('<iiiiq', data, off)
                     rate[dev] = x * SCALE
-                    if dev == GYROS[1] and last_ts[dev] is not None:
+                    if dev == gyros[1] and last_ts[dev] is not None:
                         dt = (ts - last_ts[dev]) / 1e9
-                        relative = rate[GYROS[1]] - rate[GYROS[0]]
+                        relative = rate[gyros[1]] - rate[gyros[0]]
                         # A gap (suspend, dropped buffer) must not integrate one stale rate over it.
                         if 0 < dt < 0.1 and abs(relative) > DEADBAND:
                             angle = min(360.0, max(0.0, angle + relative * dt))
@@ -96,7 +125,7 @@ def run():
                 os.replace(tmp, OUT)
                 reported = angle
     finally:
-        for dev in GYROS: stop(dev)
+        for dev in gyros: stop(dev)
 
 
 def priv(*cmd):
