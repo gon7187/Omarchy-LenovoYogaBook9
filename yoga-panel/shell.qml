@@ -69,6 +69,8 @@ ShellRoot {
     property real pointerAccel: 0.1
     property real scrollSpeed: 0.9
     property bool inertiaEnabled: true
+    property bool oledTheme: false
+    onOledThemeChanged: { Theme.oled=oledTheme; if (settingsLoaded) saveSettings.restart(); }
     property real inertiaStrength: 1.5
     property real inertiaDuration: 650
     onInertiaStrengthChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
@@ -79,7 +81,7 @@ ShellRoot {
     onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -231,6 +233,7 @@ ShellRoot {
                             root.inertiaStrength=s.inertiaStrength ?? 1.5; root.inertiaDuration=s.inertiaDuration ?? 650;
                             root.predictionEnabled=s.predictionEnabled ?? false;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
+                            root.oledTheme=s.oledTheme ?? false;
                             root.settingsLoaded=true;
                         }
                     } catch(e) { root.status="Не удалось загрузить настройки"; }
@@ -272,7 +275,7 @@ ShellRoot {
         // tablet mode is only as tall as the keyboard itself.
         readonly property real areaHeight: screen ? screen.height : height
         implicitHeight: root.tablet ? Math.min(380, areaHeight * 0.44) + 32 + 10 + 24 : 0
-        color: "#101722"
+        color: Theme.background
         // Docked in tablet mode, windows shrink above it so the text field stays visible.
         exclusionMode: root.tablet ? ExclusionMode.Auto : ExclusionMode.Ignore
         WlrLayershell.namespace: "yoga-input-panel"
@@ -289,7 +292,7 @@ ShellRoot {
                 Layout.minimumHeight: 32
                 Layout.maximumHeight: 32
                 spacing: 6
-                Text { text: "YOGA"; color: "#b9cbe4"; font.pixelSize: 13; font.letterSpacing: 1 }
+                Text { text: "YOGA"; color: Theme.textDim; font.pixelSize: 13; font.letterSpacing: 1 }
                 Item {
                     Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true
                     RowLayout {
@@ -303,7 +306,7 @@ ShellRoot {
                     Text {
                         anchors.centerIn: parent
                         visible: root.status!=="Готово" && (!root.predictionEnabled || !root.suggestions.length)
-                        text: root.status; color: "#89a6c9"; font.pixelSize: 12
+                        text: root.status; color: Theme.textMuted; font.pixelSize: 12
                     }
                 }
                 Key { Layout.preferredWidth: 80; Layout.minimumWidth: 80; Layout.maximumWidth: 80; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
@@ -396,8 +399,8 @@ ShellRoot {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 radius: 15
-                color: "#151f2c"
-                border.color: "#344356"
+                color: Theme.surface
+                border.color: Theme.surfaceBorder
                 MultiPointTouchArea {
                     id: pad
                     anchors.fill: parent

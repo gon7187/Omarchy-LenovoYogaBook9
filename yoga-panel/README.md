@@ -67,6 +67,9 @@ The UI labels are in Russian; both layouts are printed on every key.
 The same gestures work on both touchscreens themselves, recognised by the
 Hyprland plugin (`gesture.hpp`, tested by `test_gesture.cpp`):
 
+- **Settings → Input → OLED theme**: pure black fills with thin key outlines.
+  A black pixel on the OLED lower screen is unlit, so an open keyboard
+  draws almost nothing. Both palettes live in `Theme.qml`.
 - three-finger swipe right / left / down / up — next / previous workspace,
   hide / bring back windows, exactly as on the pad;
 - three-finger tap — open the panel;

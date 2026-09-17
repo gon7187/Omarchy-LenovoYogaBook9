@@ -11,8 +11,8 @@ Rectangle {
     signal activated()
     onVisibleChanged: if (!visible) reset()
     radius: 11
-    color: down ? "#446b96" : selected ? "#284e75" : "#202a38"
-    border.color: down || selected ? "#87bcf5" : "#384658"
+    color: down ? Theme.keyDown : selected ? Theme.keySelected : Theme.key
+    border.color: down || selected ? Theme.keyActiveBorder : Theme.keyBorder
     border.width: 1
     Text {
         anchors.fill: parent
@@ -21,7 +21,7 @@ Rectangle {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         text: key.label
-        color: "#f0f5ff"
+        color: Theme.text
         font.pixelSize: key.textSize
         font.weight: Font.Medium
     }

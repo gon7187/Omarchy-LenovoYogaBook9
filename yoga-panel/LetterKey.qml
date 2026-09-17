@@ -15,7 +15,7 @@ Key {
         anchors.left: parent.left; anchors.top: parent.top
         anchors.leftMargin: 13; anchors.topMargin: 7
         text: key.symbols.en.toUpperCase()
-        color: key.russianActive ? "#8190a5" : "#f1f5fc"
+        color: key.russianActive ? Theme.textDim : Theme.text
         font.pixelSize: 25; font.weight: Font.Medium
     }
     Text {
@@ -23,7 +23,7 @@ Key {
         anchors.right: parent.right; anchors.bottom: parent.bottom
         anchors.rightMargin: 13; anchors.bottomMargin: 7
         text: key.symbols.ru.toUpperCase()
-        color: key.russianActive ? "#a5d6ff" : "#617d99"
+        color: key.russianActive ? Theme.accent : Theme.accentDim
         font.pixelSize: 25; font.weight: Font.Medium
     }
     Text {
@@ -31,13 +31,13 @@ Key {
         anchors.left: parent.left; anchors.bottom: parent.bottom
         anchors.leftMargin: 16; anchors.bottomMargin: 9
         text: key.symbols.en
-        color: "#f1f5fc"; font.pixelSize: 32; font.weight: Font.Medium
+        color: Theme.text; font.pixelSize: 32; font.weight: Font.Medium
     }
     Text {
         visible: !/^[a-z]$/i.test(key.symbols.en)
         anchors.right: parent.right; anchors.top: parent.top
         anchors.rightMargin: 10; anchors.topMargin: 5
         text: key.russianActive ? key.symbols.ruShift : key.symbols.enShift
-        color: key.shifted ? "#f1f5fc" : "#a5b5cb"; font.pixelSize: 21
+        color: key.shifted ? Theme.text : Theme.textDim; font.pixelSize: 21
     }
 }
