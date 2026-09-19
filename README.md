@@ -18,6 +18,8 @@ Omarchy installs and runs fine on this machine, but the dual-screen hardware hit
 | Panels | 2x Samsung 2880x1800@60, `eDP-1` (upper) and `eDP-2` (lower) |
 | Boot | limine + UKI, plymouth, LUKS2 root, SDDM with autologin |
 
+Currently running (2026-09-19): Omarchy 4.0.4-1, Hyprland 0.56.2, kernel `linux-omarchy` 7.2.5-3. Everything still in daily use works on these versions, but not every finding below was re-verified after the upgrade.
+
 Panel identification matters throughout, and it is not guessable — **`eDP-1` is the upper screen and `eDP-2` is the lower one.** Confirm it on your own unit before applying anything, by changing one backlight and watching which screen reacts:
 
 ```bash
@@ -155,7 +157,7 @@ Binding to an output fixes both problems at once: input goes to the right screen
 
 ---
 
-## Quirk 5 — no bass: the woofers are never fed
+## Quirk 4 — no bass: the woofers are never fed
 
 ### What you see
 
@@ -250,16 +252,7 @@ Whether this changes the sound is **untested** — the driver loads firmware onl
 
 ### Tone correction on top
 
-Feeding the woofers fixes the missing bass, but these are small drivers in a thin chassis and still sound light. [`config/pipewire/60-bass-boost.conf`](config/pipewire/60-bass-boost.conf) adds a fixed low shelf and a small upper-mid trim using PipeWire's **built-in** biquad filters — no plugins, no application running, loaded at startup:
-
-```bash
-install -Dm644 config/pipewire/60-bass-boost.conf \
-  ~/.config/pipewire/pipewire.conf.d/60-bass-boost.conf
-systemctl --user restart pipewire pipewire-pulse wireplumber
-wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="bass_boost_sink")|.id')
-```
-
-Edit the `Gain` values and restart PipeWire to taste. Keep it modest — large boosts on small drivers give distortion, not depth.
+These are small drivers in a thin chassis and still sound light. An earlier version of this file shipped a hand-tuned `60-bass-boost.conf` here; it has been replaced by the correction Lenovo's own driver applies, described next, built from PipeWire's **built-in** biquad filters — no plugins, no application running, loaded at startup.
 
 ### Speaker correction from Lenovo's own driver
 
@@ -616,9 +609,9 @@ done
 hyprctl reload
 hyprctl configerrors   # must print nothing
 
-# Quirk 5 — speaker EQ; the volume keys drive it with the hardware at 100%.
+# Quirk 4 — speaker EQ; the volume keys drive it with the hardware at 100%.
 # (51-yoga-bass-speakers.conf is for legacy snd_hda_intel only; on SOF it
-# does nothing — see the correction in Quirk 5.)
+# does nothing — see the correction in Quirk 4.)
 install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
   ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
 install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
@@ -728,7 +721,7 @@ The two settings are coupled, and there is no combination that satisfies both:
 
 There is no escape hatch. aquamarine exposes `AQ_DRM_DEVICES`, `AQ_FORCE_LINEAR_BLIT`, `AQ_LIBINPUT_NO_PLUGINS`, `AQ_MGPU_NO_EXPLICIT`, `AQ_NO_ATOMIC`, `AQ_NO_MODIFIERS` and `AQ_TRACEUH` — none disable orientation handling — and Hyprland has no config option for it either.
 
-Tried on this machine and backed out. An unusable pointer on the main panel is worse than a cosmetic boot logo, especially since the passphrase prompt needs a USB keyboard regardless.
+Tried on this machine and backed out. An unusable pointer on the main panel is worse than a cosmetic boot logo. With TPM unlock in place (see below) there is no passphrase prompt left to read, so the inversion now only affects the splash.
 
 **The lower panel is not switched on yet when the prompt appears.** Observed boot sequence on this machine:
 
@@ -777,7 +770,9 @@ No configuration fixes this. You need a USB keyboard to boot, or you need to rem
 sddm-helper: pam_unix(sddm-autologin:session): session opened for user <you>
 ```
 
-**Solved on this machine — see [SECUREBOOT.md](SECUREBOOT.md).** Secure Boot was re-enabled with self-enrolled keys and the disk now unlocks from the TPM, so there is no passphrase prompt and no keyboard needed at boot. The prompt can be removed by enrolling the TPM, and the hardware supports it — TPM 2.0 at `/dev/tpm0`, LUKS2 with a single pbkdf2 keyslot and no TPM token. It requires switching the initramfs from the `encrypt` hook to `sd-encrypt`. **Weigh this carefully if Secure Boot is disabled**, as it is here: PCR-bound unlocking is materially weaker when unsigned code can boot and satisfy the same policy. Not done on this machine.
+**Solved on this machine — see [SECUREBOOT.md](SECUREBOOT.md).** Secure Boot was re-enabled with self-enrolled keys and the disk now unlocks from the TPM, so there is no passphrase prompt and no keyboard needed at boot. The hardware supports it — TPM 2.0 at `/dev/tpm0`, LUKS2 — and it requires switching the initramfs from the `encrypt` hook to `sd-encrypt`, with the passphrase kept as a fallback keyslot.
+
+**Do not do this with Secure Boot disabled**: PCR-bound unlocking is materially weaker when unsigned code can boot and satisfy the same policy. Even with it enabled, the unlock binds PCR 7 only, which does not cover the kernel command line (issue #8), so it protects a stolen drive far better than a stolen machine.
 
 ### Stylus palm rejection is paired to the wrong panel
 
@@ -822,7 +817,13 @@ libinput logs the `kernel bug: clickpad advertising right button` notice *after*
 tas2781-hda i2c-TIAS2781:00: tas2781_apply_calib: V1 CRC error
 ```
 
-The TAS2781 smart amp rejects its calibration blob at every boot. Audio works, but an uncalibrated smart amp runs conservative, so expect thin and quiet output. The loaded topology is also the generic fallback rather than anything machine-specific:
+The TAS2781 smart amp rejects its calibration at every boot on a stock install. Audio works, but an uncalibrated smart amp runs conservative.
+
+**The cause is a zeroed checksum, and it is repairable.** The calibration lives in the UEFI variable `CALI_DATA-1f52d2a1-bb3a-457d-bc09-43a3f4310a92`: 128 bytes holding real data for two amps in the kernel's V1 layout — four 20-byte slots, a timestamp at byte 80 and a CRC at byte 84. Both the timestamp and the CRC are zero as shipped. The kernel checks `crc32(~0, data, 84) ^ ~0` against the CRC field (`tas2781_apply_calib` in `sound/hda/codecs/side-codecs/tas2781_hda.c`), so it discards the data.
+
+On this machine the correct CRC was written into the variable on 2026-08-25, with the original kept at `/root/CALI_DATA.original.bin`. The `V1 CRC error` has not appeared in any kernel log since. Whether that audibly changed the sound was never cleanly compared. PR #14 proposes the same repair as a script with a backup and a `restore` command.
+
+The loaded topology is also the generic fallback rather than anything machine-specific:
 
 ```
 loading topology: intel/sof-tplg/sof-hda-generic-2ch.tplg
@@ -830,7 +831,7 @@ snd_hda_codec_alc269 ehdaudio0D0: autoconfig for ALC287: line_outs=2 type:speake
 snd_hda_codec_alc269 ehdaudio0D0:    speaker_outs=0
 ```
 
-### Sensors work; auto-rotation still unwired
+### Sensors
 
 `iio-sensor-proxy` is not installed by default. Once installed, everything reports correctly:
 
@@ -842,11 +843,11 @@ snd_hda_codec_alc269 ehdaudio0D0:    speaker_outs=0
 | Sensor | Notes |
 |---|---|
 | `als` | Working — drives auto-brightness, see below |
-| `accel_3d` | Present, reports orientation |
-| `gyro_3d` (x2) | Present |
-| `hinge` | Exposes **three** angles: `in_angl0_raw` (hinge), `in_angl1_raw` (screen), `in_angl2_raw` (keyboard) |
+| `accel_3d` | Working — drives auto-rotation, see [Display modes](#display-modes) |
+| `gyro_3d` (x2) | Present, one per half |
+| `hinge` | Exposes **three** angles (`in_angl0_raw` hinge, `in_angl1_raw` screen, `in_angl2_raw` keyboard), all reading `0` permanently |
 
-**Auto-brightness is done** — see below. **Auto-rotation is not**, and needs care: the accelerometer reports orientation `normal` while `eDP-1` carries `transform = 2` because the panel is mounted 180° out. Rotation logic that ignores that offset will land 180° wrong. The three-angle hinge sensor is the obvious signal for switching display modes on a machine that folds.
+Both auto-brightness and auto-rotation are done — see [Auto-brightness](#auto-brightness-from-the-ambient-light-sensor) and [Auto-rotation](#auto-rotation). The hinge sensor is dead (issue #11), so a tablet fold cannot be told from ordinary laptop use by orientation alone; PR #18 proposes deriving the hinge angle from the two gyroscopes instead.
 
 ### Battery charge limiting — available, but not where you would look
 
