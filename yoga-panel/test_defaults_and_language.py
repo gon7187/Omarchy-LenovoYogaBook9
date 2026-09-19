@@ -12,7 +12,7 @@ class DefaultsAndLanguage(unittest.TestCase):
         self.assertEqual(backend.valid_settings({}),defaults)
         qml=(base/'shell.qml').read_text()
         for name,value in defaults.items():
-            raw=re.search(r'property (?:real|bool) '+name+r': ([^\n]+)',qml)[1]
+            raw=re.search(r'property (?:real|bool|string) '+name+r': ([^\n]+)',qml)[1]
             self.assertEqual(json.loads(raw),value,name)
         reset=(base/'PanelSettings.qml').read_text()
         for name in ['pointerSpeed','pointerAccel','scrollSpeed','inertiaStrength','inertiaDuration']:

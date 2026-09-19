@@ -5,7 +5,7 @@ vm.runInContext(fs.readFileSync(`${__dirname}/KeyboardLayout.js`,'utf8').replace
 assert(Layouts.secondary,'Fn action map must exist');
 const sent=[];
 const ctx=vm.createContext({Layouts,fn:false,fnLocked:false,held:{},used:{},shift:false,control:false,alt:false,logo:false,
- russian:true,autocorrectEnabled:false,predictionEnabled:false,padEnabled:true,settingsOpen:false,oledTheme:false,drag:false,
+ russian:true,autocorrectEnabled:false,predictionEnabled:false,padEnabled:true,settingsOpen:false,themeName:"system",drag:false,
  pad:{stopMomentum(){},resetGesture(){}},clearWord(){},updateWord(){},lastTypedAt:0,send:e=>sent.push(e),toggleOverview(){this.overviewOpened=true}});
 Object.defineProperty(ctx,'fnActive',{get(){return ctx.fn!==ctx.fnLocked;}});
 vm.runInContext(qml.slice(qml.indexOf('    function runAction('),qml.indexOf('    function click(button)')),ctx);
@@ -24,7 +24,7 @@ ctx.alt=true;ctx.typeKey('F4');assert.equal(keyEvents().at(-1).key,'F4');assert.
 ctx.fn=true;ctx.control=true;ctx.typeKey('Left');assert.equal(keyEvents().at(-1).key,'Home');assert.deepEqual(Array.from(keyEvents().at(-1).mods),['ctrl']);
 ctx.fn=true;ctx.typeKey('Up');assert.equal(keyEvents().at(-1).key,'Prior');
 ctx.fn=true;ctx.typeKey('Down');assert.equal(keyEvents().at(-1).key,'Next');
-ctx.fn=true;ctx.typeText(' ');assert.equal(ctx.oledTheme,true);
+ctx.fn=true;ctx.typeText(' ');assert.equal(ctx.themeName,'oled-black');
 ctx.fn=true;ctx.typeText('\\');assert.equal(keyEvents().at(-1).action,'audio');
 ctx.fn=true;ctx.typeText('q');assert.equal(keyEvents().at(-1).text,'q');assert.equal(ctx.fn,false);
 ctx.fn=true;ctx.typeKey('F10');assert.equal(ctx.padEnabled,false);

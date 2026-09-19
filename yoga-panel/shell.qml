@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -60,6 +61,32 @@ ShellRoot {
     property bool drag: false
     property bool settingsOpen: false
     property bool settingsLoaded: false
+    property bool appearanceOpen: false
+    property string themeName: "system"
+    property string iconStyle: "theme"
+    property real panelOpacity: 1.0
+    property bool oledShift: true
+    property bool oledDim: true
+    property var appearance: ({themes:[],current:{name:"oled-black",colors:{}}})
+    function applyAppearance() {
+        let current=appearance.current;
+        let chosen=themeName==="system" ? current : appearance.themes.find(t=>t.name===themeName) || current;
+        Theme.palette=chosen.colors; Theme.name=chosen.name;
+    }
+    onAppearanceChanged: applyAppearance()
+    onThemeNameChanged: { applyAppearance(); if (settingsLoaded) saveSettings.restart(); }
+    onIconStyleChanged: { Theme.iconStyle=iconStyle; if (settingsLoaded) saveSettings.restart(); }
+    onPanelOpacityChanged: { Theme.surfaceOpacity=panelOpacity; if (settingsLoaded) saveSettings.restart(); }
+    onOledShiftChanged: if (settingsLoaded) saveSettings.restart()
+    onOledDimChanged: if (settingsLoaded) saveSettings.restart()
+    Connections { target: Theme; function onActivity() { care.wake(); } }
+    OledCare {
+        id: care
+        running: root.opened
+        shiftEnabled: root.oledShift
+        dimEnabled: root.oledDim
+        busy: Theme.heldKeys>0 || micKey.holding || pad.previousCount>0 || root.settingsOpen || root.voiceSession
+    }
     property bool predictionEnabled: false
     property bool autocorrectEnabled: true
     onAutocorrectEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
@@ -74,7 +101,7 @@ ShellRoot {
     property real scrollSpeed: 0.9
     property bool inertiaEnabled: true
     property bool oledTheme: false
-    onOledThemeChanged: { Theme.oled=oledTheme; if (settingsLoaded) saveSettings.restart(); }
+    onOledThemeChanged: { if (settingsLoaded) saveSettings.restart(); }
     property real inertiaStrength: 1.5
     property real inertiaDuration: 650
     onInertiaStrengthChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
@@ -85,7 +112,7 @@ ShellRoot {
     onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration,themeName:root.themeName,iconStyle:root.iconStyle,panelOpacity:root.panelOpacity,oledShift:root.oledShift,oledDim:root.oledDim}})
     }
     property string status: "Подключение…"
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
@@ -161,7 +188,7 @@ ShellRoot {
             pad.resetGesture(); send({type:"release"}); drag=false; padEnabled=!padEnabled;
         } else if (action==="words") predictionEnabled=!predictionEnabled;
         else if (action==="panel-settings") { pad.resetGesture(); settingsOpen=!settingsOpen; }
-        else if (action==="theme") oledTheme=!oledTheme;
+        else if (action==="theme") themeName=themeName==="oled-black" ? "system" : "oled-black";
         else if (action==="overview") toggleOverview();
         else send({type:"action",action:action});
         releaseMods();
@@ -217,6 +244,7 @@ ShellRoot {
         send({type:"button",button:button,state:0});
     }
     function closePanel() {
+        Theme.cancelInput();
         micKey.cancel();
         clearWord();
         pad.resetGesture();
@@ -234,6 +262,7 @@ ShellRoot {
                     try {
                         let s=JSON.parse(data).settings;
                         let message=JSON.parse(data);
+                        if (message.appearance) root.appearance=message.appearance;
                         if (message.focusChanged) { pad.stopMomentum(); micKey.cancel(); root.clearWord(); }
                         if (message.actionError) root.status=message.actionError;
                         if (message.voice) {
@@ -256,6 +285,8 @@ ShellRoot {
                             root.predictionEnabled=s.predictionEnabled ?? false;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
                             root.oledTheme=s.oledTheme ?? false;
+                            root.themeName=s.themeName ?? "system"; root.iconStyle=s.iconStyle ?? "theme";
+                            root.panelOpacity=s.panelOpacity ?? 1; root.oledShift=s.oledShift ?? true; root.oledDim=s.oledDim ?? true;
                             root.settingsLoaded=true;
                         }
                     } catch(e) { root.status="Не удалось загрузить настройки"; }
@@ -283,6 +314,7 @@ ShellRoot {
         function acceptFirstPrediction(): void { if (root.suggestions.length) root.completeWord(root.suggestions[0]); }
         function touchStatus(): string { return JSON.stringify({pressed:pad.pressEvents,updated:pad.updateEvents,samples:pad.samples,moves:pad.moveEvents,count:pad.previousCount,peak:pad.peakCount,histogram:pad.histogram}); }
         function testKeys(): void { let old=root.russian; root.russian=true; digitKeys.itemAt(1).activated(); letterKeys.itemAt(0).activated(); root.typeText(" "); root.russian=old; }
+        function appearanceStatus(): string { return JSON.stringify({theme:Theme.name,selection:root.themeName,icons:Theme.icons,opacity:root.panelOpacity,themes:root.appearance.themes.length,dimmed:care.dimmed,shift:[care.targetX,care.targetY],busy:care.busy,held:Theme.heldKeys,scale:content.Screen.devicePixelRatio}); }
         function functionStatus(): string { return JSON.stringify({fn:root.fn,locked:root.fnLocked,padEnabled:root.padEnabled,keys:[fnKey,upKey,...[0,1,2].map(i=>arrowKeys.itemAt(i))].map(k=>({x:k.mapToGlobal(0,0).x,y:k.mapToGlobal(0,0).y,width:k.width,height:k.height}))}); }
         function testFunctionKeys(): void {
             let oldFn=root.fn, oldLock=root.fnLocked;
@@ -307,14 +339,19 @@ ShellRoot {
         // Keyboard rows are sized from the screen, not from this window, which in
         // tablet mode is only as tall as the keyboard itself.
         readonly property real areaHeight: screen ? screen.height : height
-        implicitHeight: root.tablet ? keyboard.keyboardHeight + 32 + 10 + 24 + (suggestionRow.visible ? 38 : 0) : 0
-        color: Theme.background
+        implicitHeight: root.tablet && root.settingsOpen ? 446 : root.tablet ? keyboard.keyboardHeight + 32 + 10 + 24 + (suggestionRow.visible ? 38 : 0) : 0
+        color: Theme.canvas
         // Docked in tablet mode, windows shrink above it so the text field stays visible.
         exclusionMode: root.tablet ? ExclusionMode.Auto : ExclusionMode.Ignore
         WlrLayershell.namespace: "yoga-input-panel"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         ColumnLayout {
+            id: content
+            transform: Translate {
+                x: care.visualX / content.Screen.devicePixelRatio
+                y: care.visualY / content.Screen.devicePixelRatio
+            }
             anchors.fill: parent
             anchors.margins: 16
             anchors.topMargin: 8
@@ -335,13 +372,12 @@ ShellRoot {
                         onActivated: modelData==="Print" ? root.runAction("screenshot") : root.typeKey(modelData)
                     }
                 }
-                Key { Layout.preferredWidth: 70; Layout.minimumWidth: 70; Layout.maximumWidth: 70; Layout.fillHeight: true; radius: 7; textSize: 13; label: "Слова"; selected: root.predictionEnabled; onActivated: root.predictionEnabled=!root.predictionEnabled }
-                Key { Layout.preferredWidth: 105; Layout.minimumWidth: 105; Layout.maximumWidth: 105; Layout.fillHeight: true; radius: 7; textSize: 13; label: root.settingsOpen ? "← Назад" : "⚙ Настройки"; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
+                Key { Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: root.settingsOpen ? "←" : ""; controlIcon: root.settingsOpen ? "" : "settings"; iconSize: 18; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
                 Key { Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             ColumnLayout {
                 id: keyboard
-                visible: !root.settingsOpen || root.tablet
+                visible: !root.settingsOpen
                 Layout.fillWidth: true
                 Layout.preferredHeight: keyboardHeight
                 Layout.maximumHeight: keyboardHeight
@@ -400,7 +436,7 @@ ShellRoot {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
                     Key { id: fnKey; Layout.preferredWidth: keyboard.keyHeight; Layout.minimumWidth: keyboard.keyHeight; Layout.maximumWidth: keyboard.keyHeight; Layout.fillHeight: true; label: "Fn"; selected: root.fnActive; onActivated: root.fn=!root.fn; onDownChanged: root.holdMod("fn",down) }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "🚀"; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: ""; controlIcon: "heart"; iconSize: 36; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: ""; hintIcon: "oled"; hintActive: root.fnActive; onActivated: root.typeText(" ") }
                     MicKey {
@@ -430,12 +466,20 @@ ShellRoot {
                 Text { visible: root.status!=="Готово"; text: root.status; color: Theme.textMuted; font.pixelSize: 12 }
             }
             PanelSettings {
-                visible: root.settingsOpen && !root.tablet
+                visible: root.settingsOpen && !root.appearanceOpen
                 settings: root
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(420, panel.height * 0.50)
                 Layout.minimumHeight: 380
-                Layout.maximumHeight: Math.min(420, panel.height * 0.50)
+                Layout.maximumHeight: root.tablet ? 380 : Math.min(420, panel.height * 0.50)
+            }
+            AppearanceSettings {
+                visible: root.settingsOpen && root.appearanceOpen
+                settings: root
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(420,panel.height*.50)
+                Layout.minimumHeight: 380
+                Layout.maximumHeight: root.tablet ? 380 : Math.min(420,panel.height*.50)
             }
             Rectangle {
                 visible: !root.tablet
@@ -749,10 +793,15 @@ ShellRoot {
                     onUpdated: { updateEvents++; }
                     // Use the completed event's active list once, not intermediate
                     // pressed/released snapshots while Qt updates its point pool.
-                    onTouchUpdated: points => sample(points)
+                    onTouchUpdated: points => { care.wake(); sample(points); }
                     onCanceled: { resetGesture(); root.send({type:"release"}); root.drag=false; }
                 }
             }
         }
+        Rectangle {
+            anchors.fill: parent; color: "black"; opacity: care.dimmed ? .65 : 0
+            Behavior on opacity { NumberAnimation { duration: care.dimmed ? 800 : 0 } }
+        }
+
     }
 }

@@ -10,6 +10,7 @@ ColumnLayout {
         Text { text: "Под себя"; color: Theme.text; font.pixelSize: 23; font.weight: Font.DemiBold }
         Text { text: "Сохраняется автоматически"; color: Theme.textMuted; font.pixelSize: 12; Layout.leftMargin: 12 }
         Item { Layout.fillWidth: true }
+        Key { label: "Внешний вид"; textSize: 13; radius: 8; Layout.preferredWidth: 140; Layout.fillHeight: true; onActivated: settings.appearanceOpen=true }
         Key { label: "Сбросить тачпад"; textSize: 12; radius: 8; Layout.preferredWidth: 150; Layout.fillHeight: true; onActivated: { settings.pointerSpeed=2.4; settings.pointerAccel=.1; settings.scrollSpeed=.9; settings.inertiaEnabled=true; settings.inertiaStrength=1.5; settings.inertiaDuration=650; } }
     }
     RowLayout {
@@ -32,7 +33,6 @@ ColumnLayout {
             title: "Ввод"; subtitle: "Подсказки и исправление слов"
             SettingsSwitch { label: "Подсказки слов"; checked: settings.predictionEnabled; onToggled: value => settings.predictionEnabled=value }
             SettingsSwitch { label: "Исправлять по пробелу"; checked: settings.autocorrectEnabled; onToggled: value => settings.autocorrectEnabled=value }
-            SettingsSwitch { label: "Тема OLED: чёрный фон, контуры"; checked: settings.oledTheme; onToggled: value => settings.oledTheme=value }
             Text { text: "Backspace сразу после исправления\nвозвращает исходное слово."; color: Theme.textMuted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Item { Layout.fillHeight: true }
             Rectangle {

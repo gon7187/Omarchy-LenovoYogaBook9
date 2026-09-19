@@ -14,6 +14,7 @@ from pathlib import Path
 from autocorrect import Autocorrect
 from prediction import Predictor
 from system_actions import ActionRunner
+from themes import Appearance, theme_name
 from voice import Voice
 
 OUTPUT_LOCK = threading.Lock()
@@ -67,7 +68,7 @@ def layout_monitor():
 
 SETTINGS_PATH = Path.home()/'.config/yoga-panel/settings.json'
 DEFAULTS = json.loads((Path(__file__).parent/'defaults.json').read_text())
-LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.0018,1.0), 'inertiaStrength':(0.15,1.5), 'inertiaDuration':(200,1500)}
+LIMITS = {'pointerSpeed':(0.5,5.0), 'pointerAccel':(0.0,2.0), 'scrollSpeed':(0.0018,1.0), 'inertiaStrength':(0.15,1.5), 'inertiaDuration':(200,1500), 'panelOpacity':(.65,1.0)}
 
 def valid_settings(data):
     result = {}
@@ -90,7 +91,23 @@ def valid_settings(data):
     oled=data.get('oledTheme',DEFAULTS['oledTheme'])
     if type(oled) is not bool: raise ValueError('Invalid theme setting')
     result['oledTheme']=oled
+    name=data.get('themeName',DEFAULTS['themeName'])
+    if not isinstance(name,str) or (name!='system' and theme_name(name)!=name): raise ValueError('Invalid theme name')
+    result['themeName']=name
+    icon=data.get('iconStyle',DEFAULTS['iconStyle'])
+    if icon not in ('theme','pixel','line','text'): raise ValueError('Invalid icon style')
+    result['iconStyle']=icon
+    for key in ('oledShift','oledDim'):
+        value=data.get(key,DEFAULTS[key])
+        if type(value) is not bool: raise ValueError('Invalid OLED setting')
+        result[key]=value
     return result
+
+def appearance_monitor(appearance):
+    while True:
+        time.sleep(2)
+        update=appearance.changed()
+        if update: emit(update)
 
 def load_settings():
     try:
@@ -177,7 +194,11 @@ def main():
     threading.Thread(target=keyboard_status, daemon=True).start()
     emit('ready')
     emit({'settings':load_settings()})
+    appearance=Appearance()
+    update=appearance.changed()
+    if update: emit(update)
     threading.Thread(target=layout_monitor,daemon=True).start()
+    threading.Thread(target=appearance_monitor,args=(appearance,),daemon=True).start()
     try:
         for line in sys.stdin:
             try:
