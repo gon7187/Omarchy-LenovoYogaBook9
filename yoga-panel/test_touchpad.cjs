@@ -90,7 +90,7 @@ for(const [delta,direction] of [[160,'l'],[-160,'r']]) {
 }
 h=harness();h.sample(three(300));h.sample(three(150));h.c.resetGesture();h.sample([]);
 assert.deepEqual(h.sent,[],'Cancel cannot switch workspace');
-const keys=vm.createContext({pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",held:{},used:{},clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
+const keys=vm.createContext({fn:false,fnActive:false,pad:{stopMomentum(){}},predictionEnabled:true,autocorrectEnabled:true,russian:true,lastTypedAt:0,logo:true,shift:true,control:false,alt:false,wordPrefix:"",held:{},used:{},clearWord:()=>{},updateWord:()=>{},send:e=>keys.last=e});
 vm.runInContext(qml.slice(qml.indexOf('function typeKey(key)'),qml.indexOf('function click(button)')),keys);
 keys.typeKey('Tab');
 assert.deepEqual(Array.from(keys.last.mods),['logo','shift']);

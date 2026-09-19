@@ -12,7 +12,7 @@ QtObject {
     readonly property color key: oled ? "#000000" : "#202a38"
     readonly property color keyBorder: oled ? "#3a3a3a" : "#384658"
     readonly property color keyDown: oled ? "#1c1c1c" : "#446b96"
-    readonly property color keySelected: oled ? "#000000" : "#284e75"
+    readonly property color keySelected: oled ? "#151515" : "#284e75"
     readonly property color keyActiveBorder: oled ? "#c8c8c8" : "#87bcf5"
     readonly property color text: oled ? "#d8d8d8" : "#f0f5ff"
     readonly property color textDim: oled ? "#6a6a6a" : "#8190a5"
