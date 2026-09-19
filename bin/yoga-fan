@@ -38,8 +38,7 @@ DEFAULT_STEPS = [
     [75, 4500, 7000],
     [80, 5100, 8200],
     [90, 5400, 8800],
-    [95, 5600, 9200],
-    [100, 5600, 9400],
+    [95, 6000, 10000],
 ]
 MAX_TARGET = (60, 100)
 EXPECTED_PWM = {
@@ -114,10 +113,10 @@ class Curve:
             ):
                 raise ValueError("Invalid or decreasing temperature/RPM step")
             previous = row
-        if steps[-1][0] != 100:
-            raise ValueError("The final temperature step must start at 100 C")
-        if any(row[1] >= 6000 or row[2] >= 10000 for row in steps[:-1]):
-            raise ValueError("Reserve the full-speed target for the 100 C step")
+        if steps[-1][0] < 95:
+            raise ValueError("The final temperature step must start at 95..100 C")
+        if any(row[0] < 95 and (row[1] >= 6000 or row[2] >= 10000) for row in steps):
+            raise ValueError("Reserve full-speed targets for 95 C and above")
         self.steps = steps
         self.level = -1
         self.below_since = None
