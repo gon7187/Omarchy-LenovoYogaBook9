@@ -13,6 +13,8 @@ Rectangle {
     property bool down: false
     signal activated()
     onVisibleChanged: if (!visible) reset()
+    // Fn release changes the key meaning; never repeat the new meaning.
+    onRepeatableChanged: if (!repeatable) { delay.stop(); repeater.stop(); }
     radius: 11
     color: down ? Theme.keyDown : (selected || (hintActive && hintIcon)) ? Theme.keySelected : Theme.key
     border.color: down || selected || (hintActive && hintIcon) ? Theme.keyActiveBorder : Theme.keyBorder

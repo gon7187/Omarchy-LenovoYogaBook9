@@ -402,3 +402,5 @@ node test_touchpad.cjs
 затем верхний экран возвращён на 1. Автотесты: `python3 -m unittest test_workspaces`.
 
 Проверка F-клавиш и Fn-навигации через отдельную тестовую поверхность (нужна запущенная панель из той же папки): `python3 test_fn_input.py`.
+
+Регрессия отпускания Fn при удерживаемой F-клавише: `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tst_key_repeat.qml`.
