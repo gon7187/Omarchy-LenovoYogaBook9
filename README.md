@@ -849,6 +849,8 @@ snd_hda_codec_alc269 ehdaudio0D0:    speaker_outs=0
 
 Both auto-brightness and auto-rotation are done — see [Auto-brightness](#auto-brightness-from-the-ambient-light-sensor) and [Auto-rotation](#auto-rotation). The hinge sensor is dead (issue #11), so a tablet fold cannot be told from ordinary laptop use by orientation alone; PR #18 proposes deriving the hinge angle from the two gyroscopes instead.
 
+Streaming the gyroscopes at full rate normally needs root (`/dev/iio:deviceN` is `0600`). [`config/udev/70-yoga-gyro-access.rules`](config/udev/70-yoga-gyro-access.rules) opens just the two `gyro_3d` devices to an `iio` group, matched by name since the device numbers differ between units; setup steps are in the file. Tested here: both gyroscopes stream at ~98 Hz as an ordinary user, while the accelerometer and light sensor used by `iio-sensor-proxy` stay root-only and undisturbed. Not yet checked across a reboot.
+
 ### Battery charge limiting — available, but not where you would look
 
 ACPI cannot resolve the embedded-controller charge object, and there are **no** `charge_control_*` attributes under `/sys/class/power_supply/BAT*/`:

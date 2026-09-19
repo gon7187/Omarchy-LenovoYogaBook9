@@ -1,0 +1,24 @@
+# Lenovo Yoga Book 9 13IRU8: let the "iio" group stream the two gyroscopes.
+#
+# A hinge angle integrated from the gyroscopes (one per half) needs their
+# buffered 100 Hz stream with timestamps, and by default that is root-only:
+# /dev/iio:deviceN is 0600 and the buffer and scan_elements switches are 0644
+# root. This opens exactly those to one group, so the daemon can run as an
+# ordinary user service.
+#
+# Matched by name, never by number: iio:deviceN is enumeration order and
+# differs between units (here the gyros are device1 and device3; the
+# accelerometer and light sensor that iio-sensor-proxy holds are 0 and 2).
+#
+# Setup, once:
+#   sudo groupadd --system iio && sudo usermod -aG iio "$USER"
+#   sudo install -Dm644 70-yoga-gyro-access.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload
+#   sudo udevadm trigger --action=add --subsystem-match=iio --attr-match=name=gyro_3d
+# then log out and back in for the group to apply.
+#
+# Note: any member of the group can read the machine's rotation. On a
+# single-user laptop that is you; do not add other accounts casually.
+
+SUBSYSTEM=="iio", KERNEL=="iio:device*", ATTR{name}=="gyro_3d", GROUP="iio", MODE="0660", \
+  RUN+="/bin/sh -c 'cd /sys%p && chgrp iio buffer/enable buffer/length buffer/watermark scan_elements/*_en in_anglvel_sampling_frequency && chmod g+w buffer/enable buffer/length buffer/watermark scan_elements/*_en in_anglvel_sampling_frequency'"
