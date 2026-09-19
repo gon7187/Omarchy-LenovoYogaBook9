@@ -198,7 +198,17 @@ A stereo stream reaches one DAC pair, so the woofers receive nothing. Both pins 
 
 So the workaround below is not a stopgap awaiting something better — it is the correct answer until the kernel is patched.
 
-### Fix
+> **Correction (2026-09-19): on this machine the 4-channel fix never took effect, and the woofers are fed anyway.** This machine runs the SOF driver (`sof-hda-generic-2ch.tplg`), whose speaker PCM is fixed at two channels. PipeWire logs `spa.alsa: given audio.channels 4 out of range:2-2` and opens the device in stereo — while `wpctl inspect` still reports `audio.channels = 4`, so the check below passes regardless. During ordinary stereo playback both DACs carry the stream:
+>
+> ```
+> $ awk '/^Node 0x0[23] /,/^Node 0x04/' /proc/asound/card0/codec#0 | grep -E '^Node|Converter'
+> Node 0x02 [Audio Output]    Converter: stream=1, channel=0   <- woofers
+> Node 0x03 [Audio Output]    Converter: stream=1, channel=0   <- tweeters
+> ```
+>
+> First reported in PR #14, and confirmed here. What is **not** reconciled yet is the mute test above, which gave silence from the woofer pin alone. It was run before this machine's amp calibration CRC was repaired on 2026-08-25 (see [Speaker amp calibration fails](#speaker-amp-calibration-fails); PR #14 proposes the repair as a script), which may or may not account for it. Until that is settled, treat the root-cause analysis above as unproven on SOF, and do not install `51-yoga-bass-speakers.conf` there. It stays in the repo for machines on the legacy `snd_hda_intel` driver, where it has not been tested either.
+
+### Fix (legacy `snd_hda_intel` only — not needed on SOF)
 
 Rather than patch the kernel, open the sink with four channels so the surround pair carries audio, and upmix to generate it. Drop [this file](config/wireplumber/51-yoga-bass-speakers.conf) into `~/.config/wireplumber/wireplumber.conf.d/` and restart WirePlumber:
 
@@ -515,6 +525,21 @@ wpctl set-volume <jamesdsp_sink id> 1.0
 
 JamesDSP has its own limiter (`master_limthreshold`, `master_limrelease` in `~/.config/jamesdsp/audio.conf`) precisely so it can take a full-scale signal without clipping — which is the assumption Omarchy's design rests on.
 
+### With the Dolby EQ, leave the hardware at 100%
+
+For the `yoga_dolby` sink ("Speakers (Dolby stand)") `yoga-volume` does the opposite: the keys move the EQ sink's own volume, which is applied **before** the EQ, and the hardware sink is held at 100%.
+
+The reason is what the hardware volume actually controls. The Speaker sink's volume maps to `Speaker Playback Volume`, which sits on DAC `0x03` — the tweeters — alone. `DAC2 Playback Volume`, the woofers' DAC `0x02`, stays at 87/87 whatever the slider says:
+
+```
+Speaker sink at 35%    DAC 0x02 Amp-Out [0x57 0x57]    DAC 0x03 Amp-Out [0x33 0x33]
+Speaker sink at 100%   DAC 0x02 Amp-Out [0x57 0x57]    DAC 0x03 Amp-Out [0x57 0x57]
+```
+
+So turning the hardware down changes the balance between the two drivers, not just loudness. Of four setups compared by ear at matched loudness — raw speaker or EQ, each with the volume on the hardware or before it — EQ with the hardware at 100% sounded best. That matches the register readings but was judged by ear, not measured.
+
+The first key press after switching to `yoga_dolby` moves the current hardware level onto the EQ sink before setting the hardware to 100%, so the change does not jump in loudness. The sliding bass shelf now follows the EQ sink's volume.
+
 ---
 
 ## Recording shared memory before an OOM hides it
@@ -591,10 +616,14 @@ done
 hyprctl reload
 hyprctl configerrors   # must print nothing
 
-# Quirk 5 — bass speakers
-install -Dm644 config/wireplumber/51-yoga-bass-speakers.conf \
-  ~/.config/wireplumber/wireplumber.conf.d/51-yoga-bass-speakers.conf
-systemctl --user restart wireplumber
+# Quirk 5 — speaker EQ; the volume keys drive it with the hardware at 100%.
+# (51-yoga-bass-speakers.conf is for legacy snd_hda_intel only; on SOF it
+# does nothing — see the correction in Quirk 5.)
+install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
+  ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
+install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
+systemctl --user restart pipewire pipewire-pulse wireplumber
+wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 
 # Emulated touchpad: drop the phantom right button (root-owned path; libinput
 # reads only /etc/libinput, and applies quirks when a device is added, so this
