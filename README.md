@@ -944,16 +944,17 @@ initial temperature staircase. It uses the hottest CPU package/core reading:
 
 | Temperature on rising load | Fan 1 target | Fan 2 target |
 | --- | ---: | ---: |
-| Below 60 °C | Stock EC control | Stock EC control |
-| 60 °C | 4000 RPM | 6000 RPM |
-| 70 °C | 4500 RPM | 7000 RPM |
+| Below 70 °C | Stock EC control | Stock EC control |
+| 70 °C | 4000 RPM | 6000 RPM |
+| 75 °C | 4500 RPM | 7000 RPM |
 | 80 °C | 5100 RPM | 8200 RPM |
 | 90 °C | 5400 RPM | 8800 RPM |
 | 95 °C | 5600 RPM | 9200 RPM |
-| 100 °C | Full PWM (~5750 RPM measured) | Full PWM (~9500 RPM measured) |
+| 100 °C | 5600 RPM | 9400 RPM |
 
-The last step requests 6000 / 10000 RPM, which saturated the EC's PWM regulator
-in the hardware tests. The 80/90/95 °C steps correspond approximately to
+The last step requests 5600 / 9400 RPM, slightly below the measured physical
+maximum. The separate manual `max` mode requests 6000 / 10000 RPM, which
+saturated the EC's PWM regulator in the hardware tests. The 80/90/95 °C steps correspond approximately to
 80/90/95% PWM in the calibration; intermediate percentages vary with the fan,
 temperature and supply. The service controls **RPM**, not PWM duty directly.
 The EC's current automatic demand is a floor, so other thermal demands may
@@ -963,7 +964,7 @@ the clock change are removed entirely.
 Rising demand is applied on the next 0.5 s sample. A lower step requires 20 s
 continuously more than 3 °C below the current step's threshold. **100 °C is
 already the CPU sensor's critical limit**, selected by the owner as the
-full-speed threshold; the command is immediate, but physical spin-up takes
+last step's threshold; the command is immediate, but physical spin-up takes
 time. CPU power limits, thermal throttling and shutdown protections are unchanged.
 This is a starting curve, not an optimum established by equal-power testing.
 
