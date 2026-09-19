@@ -10,3 +10,7 @@ SettingsCard 1.0 SettingsCard.qml
 SettingsSlider 1.0 SettingsSlider.qml
 SettingsSwitch 1.0 SettingsSwitch.qml
 KeyIcon 1.0 KeyIcon.qml
+
+ControlIcon 1.0 ControlIcon.qml
+OledCare 1.0 OledCare.qml
+AppearanceSettings 1.0 AppearanceSettings.qml

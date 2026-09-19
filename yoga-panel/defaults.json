@@ -7,5 +7,10 @@
   "predictionEnabled": false,
   "autocorrectEnabled": true,
   "inertiaEnabled": true,
-  "oledTheme": false
+  "oledTheme": false,
+  "themeName": "system",
+  "iconStyle": "theme",
+  "panelOpacity": 1.0,
+  "oledShift": true,
+  "oledDim": true
 }

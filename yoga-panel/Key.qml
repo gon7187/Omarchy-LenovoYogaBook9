@@ -3,6 +3,8 @@ import QtQuick
 Rectangle {
     id: key
     property string label: ""
+    property string controlIcon: ""
+    property real iconSize: 24
     property real textSize: label.length > 3 ? 17 : 24
     property string hintIcon: ""
     property bool hintActive: false
@@ -12,6 +14,9 @@ Rectangle {
     property bool activateOnRelease: false
     property bool down: false
     signal activated()
+    onDownChanged: { Theme.heldKeys=Math.max(0,Theme.heldKeys+(down ? 1 : -1)); Theme.activity(); }
+    Component.onDestruction: if (down) Theme.heldKeys=Math.max(0,Theme.heldKeys-1)
+    Connections { target: Theme; function onCancelInput() { key.reset(); } }
     onVisibleChanged: if (!visible) reset()
     // Fn release changes the key meaning; never repeat the new meaning.
     onRepeatableChanged: if (!repeatable) { delay.stop(); repeater.stop(); }
@@ -31,6 +36,7 @@ Rectangle {
         font.pixelSize: key.textSize
         font.weight: Font.Medium
     }
+    ControlIcon { anchors.centerIn: parent; width: key.iconSize; height: width; kind: key.controlIcon; visible: key.controlIcon!=="" }
     KeyIcon {
         visible: key.hintIcon!==""
         name: key.hintIcon; tint: key.hintActive ? Theme.text : Theme.textDim

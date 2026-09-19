@@ -9,7 +9,9 @@ Rectangle {
     radius: 8
     color: holding ? Theme.mic : Theme.key
     border.color: holding ? Theme.micBorder : Theme.keyBorder
-    Text { anchors.centerIn: parent; text: "🎤"; font.pixelSize: 26; color: Theme.text }
+    ControlIcon { anchors.centerIn: parent; kind: "mic"; width: 26; height: 26; visible: Theme.icons!=="text" }
+    Text { anchors.centerIn: parent; text: "mic"; font.pixelSize: 17; color: Theme.text; visible: Theme.icons==="text" }
+    onHoldingChanged: Theme.activity()
     function cancel() { if (holding) { holding=false; aborted(); } }
     onVisibleChanged: if (!visible) cancel()
     Component.onDestruction: cancel()
