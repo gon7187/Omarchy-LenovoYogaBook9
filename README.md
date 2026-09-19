@@ -932,13 +932,76 @@ Writing `1` caps charging (Lenovo's implementation stops around 55-60%) to prese
 
 `usb_charging`, `fan_mode` and `camera_power` are exposed on the same device.
 
-**Fan speed cannot be controlled from Linux.** `fan_mode` is accepted but changes nothing: under a 60 s all-core load in `performance` both fans reach the same ceiling, ~3900 and ~6000 RPM at ~95 °C, with `fan_mode` `0` and `4` alike, and stay there until the package is back near 55 °C. The EC runs them on temperature alone. The five ACPI fans (`PNP0C0B`, bound to `acpitz` active trips) only set NVS variables (`VFN0..4`) the EC ignores, `yogafan` does not bind to this model, and no one has fan control for the 82YQ ([LenovoLegionLinux#329](https://github.com/johnfanv2/LenovoLegionLinux/issues/329)). Lower temperatures come only from lower power limits — `low-power` held ~56 °C under the same load.
+**Fan control works on the tested 82YQ / KXCN41WW / KXEC31WW combination.**
+The earlier conclusion that Linux could only read RPM was too broad: Lenovo's
+`fan_mode` interface did nothing in our tests, but firmware analysis and bounded
+hardware tests found working EC RPM overrides. The measured full-PWM speeds on
+this machine were approximately **5750 / 9500 RPM**, beyond the stock targets
+of approximately 3900 / 6000. These are measurements, not manufacturer ratings.
 
-The speeds themselves are readable: the DSDT maps EC RAM at `0xFE0B0000` and puts `FANS`/`FA2S`, the RPM of the two fans, at offsets `0x5A2`/`0x5A4`. [`bin/yoga-fan`](bin/yoga-fan) is a small root service that maps that page read-only and writes `RPM1 RPM2` to `/run/yoga-fan` every 2 s; the `gon7187.sysstats` bar widget shows it as `FAN 2.5/2.6k`.
+[`bin/yoga-fan`](bin/yoga-fan) extends the existing root RPM service with this
+initial temperature staircase. It uses the hottest CPU package/core reading:
+
+| Temperature on rising load | Fan 1 target | Fan 2 target |
+| --- | ---: | ---: |
+| Below 60 °C | Stock EC control | Stock EC control |
+| 60 °C | 4000 RPM | 6000 RPM |
+| 70 °C | 4500 RPM | 7000 RPM |
+| 80 °C | 5100 RPM | 8200 RPM |
+| 90 °C | 5400 RPM | 8800 RPM |
+| 95 °C | 5600 RPM | 9200 RPM |
+| 100 °C | Full PWM (~5750 RPM measured) | Full PWM (~9500 RPM measured) |
+
+The last step requests 6000 / 10000 RPM, which saturated the EC's PWM regulator
+in the hardware tests. The 80/90/95 °C steps correspond approximately to
+80/90/95% PWM in the calibration; intermediate percentages vary with the fan,
+temperature and supply. The service controls **RPM**, not PWM duty directly.
+The EC's current automatic demand is a floor, so other thermal demands may
+raise cooling above the CPU staircase. Below the first step, overrides and
+the clock change are removed entirely.
+
+Rising demand is applied on the next 0.5 s sample. A lower step requires 20 s
+continuously more than 3 °C below the current step's threshold. **100 °C is
+already the CPU sensor's critical limit**, selected by the owner as the
+full-speed threshold; the command is immediate, but physical spin-up takes
+time. CPU power limits, thermal throttling and shutdown protections are unchanged.
+This is a starting curve, not an optimum established by equal-power testing.
+
+The DSDT maps shared EC RAM at `0xFE0B0000`: RPM is at `0x5A2`/`0x5A4`, stock
+targets at `0x5A0`/`0x5A1`, and manual targets at `0x5FA`/`0x5FB` in 100 RPM
+units (`0` returns to automatic control). Firmware initialization leaves
+PWM2 on a 255-count timer, although its regulator caps duty at 159. While
+controlling fans, the service restores PWM2's intended 159-count timer by
+changing only ITE5507 `PCSSGL` bits 5:4 (`0xC0` → `0xD0`, I2EC register
+`0x180C`). It never writes PWM duty, periods, power limits or firmware flash.
+The reference EC image analyzed offline has SHA-256
+`f5f379c2f4db6466cdac74e0bb383bf5c12ba50c158f0de9627971001d38a0a4`.
+
+Writes require the exact DMI/BIOS/EC and controller identities, the tested PWM
+configuration, valid temperatures, expected EC operating state, sane RPM and
+exclusive ownership. Stop, removal and the system sleep hook restore both
+overrides and the original clock. Systemd's 5 s watchdog and `ExecStopPost`
+perform the same rollback after a crash or hang. A fault latches stock mode
+until explicitly re-enabled; the latch lives in `/run` and clears on reboot.
+This recovery needs a running kernel/systemd and accessible EC; it cannot
+recover a completely hung machine. The service still publishes `RPM1 RPM2`
+to `/run/yoga-fan` every 2 s, preserving the existing bar widget.
 
 ```bash
-bin/yoga-fan install      # sudo or pkexec; `remove` undoes it
+bin/yoga-fan install       # sudo/pkexec; separate from the rootless panel installer
+yoga-fan status           # current mode, temperature, RPM, targets and fault state
+yoga-fan auto             # stock EC control; persists across restarts
+yoga-fan curve            # enable the staircase and clear a fault latch
+yoga-fan max              # manual full-speed mode; use `curve` to leave it
+python3 bin/test_yoga_fan.py  # offline checks, no hardware access
 ```
+
+The root-owned `/etc/yoga-fan.json` holds the mode and `[temperature, RPM1, RPM2]`
+steps, validated before use. Upgrades preserve it; `yoga-fan curve` reloads it.
+Installation backs up replaced files under `/var/lib/yoga-fan/backups/`.
+`yoga-fan remove` restores stock cooling and removes the service/hook, retaining
+the settings and backups. The sleep hook stops the service before suspend and
+restarts it after resume only if it was running before sleep.
 
 Still genuinely missing: the `SEN3` thermal sensor is unreadable.
 
