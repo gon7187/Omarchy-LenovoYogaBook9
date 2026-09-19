@@ -78,3 +78,30 @@ end
 -- The on-screen keyboard has no Delete key, so mirror Omarchy's
 -- CTRL + ALT + DELETE ("Close all windows") onto Backspace.
 o.bind("CTRL + ALT + BACKSPACE", "Close all windows", "omarchy-hyprland-window-close-all")
+
+-- Keep the same physical key for down/up even if Fcitx or the on-screen
+-- keyboard changes the seat's keyboard/layout before the release timer fires.
+-- Resolving C/V/X by name again can lose keyup and leave Chromium repeating.
+local function yoga_clipboard(letter, description, code, terminal_mods)
+  hl.unbind("SUPER + " .. letter)
+  o.bind("SUPER + " .. letter, description, function()
+    local mods, key = "CTRL", code
+    local window = hl.get_active_window()
+    if terminal_mods and window then
+      for _, tag in ipairs(window.tags or {}) do
+        if tag:gsub("%*$", "") == "terminal" then
+          mods, key = terminal_mods, "code:118" -- Insert
+          break
+        end
+      end
+    end
+    hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "up" }))
+    end, { timeout = 50, type = "oneshot" })
+  end)
+end
+
+yoga_clipboard("C", "Universal copy", "code:54", "CTRL")
+yoga_clipboard("V", "Universal paste", "code:55", "SHIFT")
+yoga_clipboard("X", "Universal cut", "code:53")
