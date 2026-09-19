@@ -23,17 +23,17 @@ def check():
             first // 100,
             second // 100,
         )
-    assert fan.Curve(fan.DEFAULT_STEPS).targets(99.9, 0) == (56, 92)
+    assert fan.Curve(fan.DEFAULT_STEPS).targets(94.9, 0) == (54, 88)
     assert fan.Curve(fan.DEFAULT_STEPS).targets(101, 0) == fan.MAX_TARGET
     curve = fan.Curve(fan.DEFAULT_STEPS)
-    assert curve.targets(59, 0) == (0, 0)
+    assert curve.targets(69.9, 0) == (0, 0)
     assert curve.targets(80, 1) == (51, 82)
-    assert curve.targets(100, 2) == (60, 100)
-    assert curve.targets(99, 40) == (60, 100)
-    assert curve.targets(97, 41) == (60, 100)
-    assert curve.targets(96, 42) == (60, 100)
-    assert curve.targets(98, 60) == (60, 100)  # Rewarming cancels the delay.
-    assert curve.targets(80, 61) == (60, 100)
+    assert curve.targets(95, 2) == fan.MAX_TARGET
+    assert curve.targets(94, 40) == fan.MAX_TARGET
+    assert curve.targets(92, 41) == fan.MAX_TARGET
+    assert curve.targets(91, 42) == fan.MAX_TARGET
+    assert curve.targets(93, 60) == fan.MAX_TARGET  # Rewarming cancels the delay.
+    assert curve.targets(80, 61) == fan.MAX_TARGET
     assert curve.targets(80, 81) == (51, 82)
     assert curve.targets(90, 82) == (54, 88)  # Upshifts have no delay.
     assert curve.targets(56, 83) == (54, 88)
@@ -47,6 +47,8 @@ def check():
             raise AssertionError("Invalid temperature accepted")
     for steps in (
         [[100, 6000, 10000]],
+        [[70, 4000, 6000], [94, 5600, 9400]],
+        [[70, 4000, 6000], [90, 6000, 10000], [100, 6000, 10000]],
         [[60, 0, 5000], [100, 6000, 10000]],
         [[60, 5500, 9000], [80, 5100, 8200], [100, 6000, 10000]],
         [[60, 4001, 6000], [100, 6000, 10000]],
