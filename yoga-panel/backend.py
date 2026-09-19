@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Private stdin transport. No listener socket, root access, or input logging."""
 import json
-from pathlib import Path
+import math
+import os
+import signal
+import socket
 import subprocess
 import sys
 import threading
-import os
-import math
-import socket
 import time
-import signal
-from prediction import Predictor
+from pathlib import Path
+
 from autocorrect import Autocorrect
+from prediction import Predictor
+from system_actions import ActionRunner
 from voice import Voice
 
 OUTPUT_LOCK = threading.Lock()
@@ -103,7 +105,7 @@ def save_settings(data):
     temporary.write_text(json.dumps(settings)+'\n')
     os.replace(temporary,SETTINGS_PATH)
 
-KEYS = {'Escape', 'Tab', 'BackSpace', 'Return', 'Left', 'Right', 'Up', 'Down', 'Delete', 'Home', 'End'}
+KEYS = {'Escape', 'Tab', 'BackSpace', 'Return', 'Left', 'Right', 'Up', 'Down', 'Delete', 'Home', 'End', 'Insert', 'Prior', 'Next', *(f'F{key}' for key in range(1,13))}
 
 def workspace_command(direction, monitors=None, workspaces=None):
     """Cycle upper-screen desktops, reserving 2 and other monitors' desktops."""
@@ -166,6 +168,7 @@ def main():
     predictor=Predictor()
     corrector=Autocorrect(predictor)
     voice=Voice()
+    actions=ActionRunner(emit)
     pointer = subprocess.Popen([str(Path(__file__).parent/'build/yoga-pointer')], stdin=subprocess.PIPE, text=True)
     keyboard = subprocess.Popen([str(Path(__file__).parent/'build/yoga-keyboard')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     def keyboard_status():
@@ -195,6 +198,8 @@ def main():
                     corrector.reset()
                 elif kind == 'settings':
                     save_settings(e['values'])
+                elif kind == 'action':
+                    actions.launch(e.get('action'))
                 elif kind == 'suggest':
                     prefix=e.get('prefix','')
                     suggestions=[]

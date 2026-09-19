@@ -9,3 +9,4 @@ ScrollPreference 1.0 ScrollPreference.qml
 SettingsCard 1.0 SettingsCard.qml
 SettingsSlider 1.0 SettingsSlider.qml
 SettingsSwitch 1.0 SettingsSwitch.qml
+KeyIcon 1.0 KeyIcon.qml
