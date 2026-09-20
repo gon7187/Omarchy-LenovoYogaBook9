@@ -121,9 +121,33 @@ ShellRoot {
   readonly property color sheen: lightMode ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07)
   readonly property color trackColor: lightMode ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(1, 1, 1, 0.09)
 
+  // ---- glass ---------------------------------------------------------------
+  // A layer surface cannot read what is behind it, but these cards sit on the
+  // background layer, so what is behind them is the wallpaper. The panel draws
+  // it into an off-screen texture at screen size and glass.frag samples it, so
+  // the refracted pixels line up with what Hyprland paints below.
+  property var glassSource: null
+  property real panelOriginX: 0
+  property real panelOriginY: 0
+  property real screenW: 1
+  property real screenH: 1
+  readonly property string wallpaperPath: Quickshell.env("HOME") + "/.local/state/omarchy/current/background"
+  property int wallpaperRevision: 0
+  property real glassPhase: 0
+
+  // The sheen crosses the card and then rests: an idle animation would keep
+  // the GPU redrawing four card-sized shaders forever for no one to see.
+  SequentialAnimation {
+    running: true
+    loops: Animation.Infinite
+    NumberAnimation { target: root; property: "glassPhase"; from: 0; to: 1; duration: 5200; easing.type: Easing.InOutSine }
+    PauseAnimation { duration: 24000 }
+  }
+
   function capitalize(text) { return text.length ? text[0].toUpperCase() + text.slice(1) : text }
 
   function applyPalette() {
+    root.wallpaperRevision++
     const out = {}
     for (const line of String(themeFile.text() || "").split("\n")) {
       const m = line.match(/^\s*(\w+)\s*=\s*"([^"]+)"/)
@@ -376,6 +400,27 @@ ShellRoot {
       }
     }
 
+    // Refracted wallpaper along the rim, over the tint but under the content.
+    ShaderEffect {
+      anchors.fill: parent
+      visible: root.glassSource !== null
+      blending: true
+      supportsAtlasTextures: false
+      fragmentShader: Qt.resolvedUrl("glass.frag.qsb")
+
+      property var src: root.glassSource
+      property vector2d size: Qt.vector2d(width, height)
+      property vector2d uvOffset: Qt.vector2d((root.panelOriginX + card.x) / root.screenW,
+                                              (root.panelOriginY + card.y) / root.screenH)
+      property vector2d uvScale: Qt.vector2d(width / root.screenW, height / root.screenH)
+      property real radius: card.radius
+      property real edge: root.px(2.4)
+      property real strength: root.px(2.2)
+      property real phase: root.glassPhase
+      property real sheen: root.lightMode ? 0.14 : 0.22
+      property real rainbow: root.lightMode ? 0.05 : 0.09
+    }
+
     ColumnLayout {
       id: inner
       anchors.fill: parent
@@ -452,6 +497,38 @@ ShellRoot {
 
       // Empty mask: every click falls through to the desktop below.
       mask: Region {}
+
+      // The wallpaper, drawn exactly as Omarchy's background plugin draws it
+      // (PreserveAspectCrop at screen size), captured into a texture the cards
+      // sample. hideSource keeps it off the screen itself.
+      Item {
+        id: wallHolder
+        width: panel.screen.width
+        height: panel.screen.height
+        Image {
+          id: wallImage
+          anchors.fill: parent
+          fillMode: Image.PreserveAspectCrop
+          cache: false
+          asynchronous: true
+          source: "file://" + root.wallpaperPath + "?rev=" + root.wallpaperRevision
+          onStatusChanged: if (status === Image.Ready) wallTexture.scheduleUpdate()
+        }
+      }
+
+      ShaderEffectSource {
+        id: wallTexture
+        sourceItem: wallHolder
+        hideSource: true
+        live: false
+        recursive: false
+      }
+
+      Binding { target: root; property: "glassSource"; value: wallTexture }
+      Binding { target: root; property: "screenW"; value: panel.screen.width }
+      Binding { target: root; property: "screenH"; value: panel.screen.height }
+      Binding { target: root; property: "panelOriginX"; value: panel.screen.width - panel.width - panel.margins.right }
+      Binding { target: root; property: "panelOriginY"; value: panel.margins.top }
 
       ColumnLayout {
         id: stack

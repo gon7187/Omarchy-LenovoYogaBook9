@@ -39,6 +39,9 @@ def main():
         SOURCE.parent/'config/systemd/user/yoga-widgets.service':HOME/'.config/systemd/user/yoga-widgets.service',
         SOURCE.parent/'config/hypr/yoga-widgets.lua':HOME/'.config/hypr/yoga-widgets.lua',
         SOURCE.parent/'config/quickshell/yoga-widgets/shell.qml':HOME/'.config/quickshell/yoga-widgets/shell.qml',
+        # glass.frag.qsb is the baked shader; the .frag beside it is its source.
+        # Shipping the baked file keeps qt6-shadertools off the runtime deps.
+        SOURCE.parent/'config/quickshell/yoga-widgets/glass.frag.qsb':HOME/'.config/quickshell/yoga-widgets/glass.frag.qsb',
         SOURCE.parent/'config/omarchy/shell.toml':HOME/'.config/omarchy/shell.toml',
         SOURCE.parent/'config/foot/foot.ini':HOME/'.config/foot/foot.ini',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
