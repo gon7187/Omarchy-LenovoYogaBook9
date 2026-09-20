@@ -53,20 +53,70 @@ ShellRoot {
   function col(key, fallback) { return root.palette[key] ? root.palette[key] : fallback }
 
   readonly property bool lightMode: String(root.palette["mode"] || "dark") === "light"
-  readonly property color accent: col("accent", "#7aa2f7")
-  readonly property color fg: col("foreground", "#a9b1d6")
+  readonly property color rawAccent: col("accent", "#7aa2f7")
+  readonly property color rawFg: col("foreground", "#a9b1d6")
+  readonly property color surface: col("background", "#1a1b26")
+
+  // Relative luminance and WCAG contrast, used to keep theme colours legible
+  // on the card rather than trusting that they were picked for this purpose.
+  function channel(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+  function luminance(c) { return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b) }
+  function contrastOf(a, b) {
+    const la = luminance(a), lb = luminance(b)
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+  }
+
+  // The card is translucent, so its effective background depends on the
+  // wallpaper. These two are the extremes it can sit on; a colour that clears
+  // its target against both is legible over any wallpaper.
+  readonly property real cardAlpha: 0.78
+  readonly property color cardOnDark: Qt.rgba(surface.r * cardAlpha, surface.g * cardAlpha, surface.b * cardAlpha, 1)
+  readonly property color cardOnLight: Qt.rgba(surface.r * cardAlpha + (1 - cardAlpha), surface.g * cardAlpha + (1 - cardAlpha), surface.b * cardAlpha + (1 - cardAlpha), 1)
+  function worstContrast(c) { return Math.min(root.contrastOf(c, root.cardOnDark), root.contrastOf(c, root.cardOnLight)) }
+
+  function mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1) }
+
+  // A theme's foreground is picked against its own opaque background; on this
+  // translucent card it can fall under 4.5:1 (everforest, gruvbox, rose-pine).
+  // Push it away from the surface — white on dark themes, black on light ones
+  // — until it clears, which keeps the hue and only lifts the contrast.
+  function enforce(c, target) {
+    const pole = root.lightMode ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
+    for (let t = 0; t < 1; t += 0.05) {
+      const out = root.mix(c, pole, t)
+      if (root.worstContrast(out) >= target) return out
+    }
+    return pole
+  }
+
+  readonly property color fg: enforce(rawFg, 4.5)
   // One dim tone derived from the text colour: `dark_foreground` and `muted`
   // both fall away to near-invisible on some light themes.
-  readonly property color fgDim: Qt.rgba(fg.r, fg.g, fg.b, 0.62)
-  readonly property color surface: col("background", "#1a1b26")
-  readonly property color warm: col("yellow", "#e0af68")
-  readonly property color hot: col("red", "#f7768e")
-  readonly property color cool: col("cyan", "#449dab")
-  readonly property color violet: col("magenta", "#ad8ee6")
+  readonly property color fgDim: root.mix(root.cardOnDark, root.fg, 0.8)
+
+  // Theme accents are chosen against a terminal background, not against this
+  // card: rose-pine, nord and miasma land near 3:1 or below. Blend such a
+  // colour towards the text colour — which always clears the bar — until it
+  // reads, and leave colours that already pass untouched.
+  function readable(c, target) {
+    for (let t = 0; t < 1; t += 0.1) {
+      const out = root.mix(c, root.fg, t)
+      if (root.worstContrast(out) >= target) return out
+    }
+    return root.fg
+  }
+
+  readonly property color accent: readable(rawAccent, 4.0)
+  readonly property color warm: readable(col("yellow", "#e0af68"), 4.0)
+  readonly property color hot: readable(col("red", "#f7768e"), 4.0)
+  readonly property color cool: readable(col("cyan", "#449dab"), 3.0)
+  readonly property color violet: readable(col("magenta", "#ad8ee6"), 3.0)
 
   // Card chrome: the theme background carries the glass, and the hairlines
-  // lighten on dark themes, darken on light ones.
-  readonly property color cardColor: Qt.rgba(surface.r, surface.g, surface.b, lightMode ? 0.62 : 0.45)
+  // lighten on dark themes, darken on light ones. 0.85 is the density where
+  // the worst stock theme still clears 4.5:1 for body text over any wallpaper
+  // — below that, a light wallpaper washes a dark card out completely.
+  readonly property color cardColor: Qt.rgba(surface.r, surface.g, surface.b, cardAlpha)
   readonly property color hairline: lightMode ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.10)
   readonly property color sheen: lightMode ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07)
   readonly property color trackColor: lightMode ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(1, 1, 1, 0.09)
@@ -557,7 +607,7 @@ ShellRoot {
                 horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: root.px(0.95)
                 text: dow.modelData
-                color: dow.index > 4 ? Qt.rgba(root.hot.r, root.hot.g, root.hot.b, 0.7) : root.fgDim
+                color: dow.index > 4 ? root.hot : root.fgDim
               }
             }
 
