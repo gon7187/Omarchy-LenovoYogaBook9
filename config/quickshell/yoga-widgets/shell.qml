@@ -83,11 +83,24 @@ ShellRoot {
                    surface.b * alpha + wallLuma * (1 - alpha), 1)
   }
 
+  // Opacity is raised until the theme's own text colour clears 5.5:1 against
+  // what shows through — the card carries the readability, rather than the
+  // text being bleached to survive a washed-out card. A dark theme over a dark
+  // wallpaper never leaves 0.35 and stays glass; the same theme over a light
+  // wallpaper closes up instead of turning into grey haze.
   readonly property real cardAlpha: {
-    for (let a = 0.35; a <= 0.9001; a += 0.05)
-      if (root.contrastOf(root.pole, root.blendOver(a)) >= 5.0) return a
-    return 0.9
+    for (let a = 0.35; a <= 0.9601; a += 0.05)
+      // Once the card has to close up at all, take it well past the minimum:
+      // a card sitting exactly on the threshold reads as the theme colour
+      // diluted with wallpaper — grey haze — rather than as the theme colour.
+      if (root.contrastOf(root.rawFg, root.blendOver(a)) >= 5.5)
+        return a <= 0.3501 ? a : Math.min(0.96, a + 0.12)
+    return 0.96
   }
+
+  // A denser card has less to refract, so the glass effects fade out with it.
+  readonly property real glassStrength: Math.max(0.25, 1 - (cardAlpha - 0.35) / 0.55)
+
   readonly property color backdrop: blendOver(cardAlpha)
   function worstContrast(c) { return root.contrastOf(c, root.backdrop) }
   function midContrast(c) { return root.contrastOf(c, root.backdrop) }
@@ -509,10 +522,10 @@ ShellRoot {
       property vector2d uvScale: Qt.vector2d(width / root.screenW, height / root.screenH)
       property real radius: card.radius
       property real edge: root.px(2.4)
-      property real strength: root.px(2.2)
+      property real strength: root.px(2.2) * root.glassStrength
       property real phase: root.glassPhase
-      property real sheen: root.lightMode ? 0.14 : 0.22
-      property real rainbow: root.lightMode ? 0.05 : 0.09
+      property real sheen: (root.lightMode ? 0.14 : 0.22) * root.glassStrength
+      property real rainbow: (root.lightMode ? 0.05 : 0.09) * root.glassStrength
     }
 
     ColumnLayout {
