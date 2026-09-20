@@ -567,7 +567,9 @@ ShellRoot {
             font.weight: Font.Light
             font.letterSpacing: -1
             renderType: Text.NativeRendering
-            Layout.topMargin: -6
+            // -10: the clock's 44px glyphs hang ~12px of empty space above
+            // their box, which put the ink 22.5px below the card edge.
+            Layout.topMargin: -10
           }
           Label {
             text: root.capitalize(root.now.toLocaleDateString(Qt.locale("ru_RU"), "dddd, d MMMM"))
@@ -581,6 +583,8 @@ ShellRoot {
         Card {
           RowLayout {
             Layout.fillWidth: true
+            // Same overhang correction as the clock, for the 26px temperature.
+            Layout.topMargin: -4
             spacing: 14
 
             Text {
@@ -648,11 +652,14 @@ ShellRoot {
           }
 
           RowLayout {
-            // fillWidth is not enough for a layout nested in the card: it kept
-            // its own implicit width (the seven columns bunched on the left,
-            // a third of the card empty). preferredWidth pins it to the card.
+            id: fcRow
+            // A layout nested in the card keeps its own content width unless it
+            // is told otherwise — fillWidth alone left the week bunched on the
+            // left — and its columns then need an explicit share each, or the
+            // spare width goes into the gaps between them instead.
             Layout.fillWidth: true
             Layout.preferredWidth: parent ? parent.width : 0
+            Layout.bottomMargin: -2
             spacing: root.px(0.8)
             visible: root.forecast.length > 0
             Repeater {
@@ -661,9 +668,10 @@ ShellRoot {
                 id: fc
                 required property var modelData
                 required property int index
-                // Equal shares of that width, one per day.
                 Layout.fillWidth: true
-                Layout.preferredWidth: 0
+                Layout.preferredWidth: root.forecast.length
+                  ? (fcRow.width - fcRow.spacing * (root.forecast.length - 1)) / root.forecast.length
+                  : 0
                 spacing: 2
                 Label {
                   Layout.alignment: Qt.AlignHCenter
@@ -722,6 +730,9 @@ ShellRoot {
 
           GridLayout {
             Layout.fillWidth: true
+            // The last row of dates keeps ~5px of empty cell below its digits;
+            // without this the calendar looked bottom-heavy next to the others.
+            Layout.bottomMargin: -5
             columns: 7
             columnSpacing: 0
             rowSpacing: 3
@@ -818,7 +829,6 @@ ShellRoot {
         // Agent limits ---------------------------------------------------------
         Card {
           visible: root.limits && (root.limits.claude || root.limits.codex)
-          pad: root.px(1.5)
 
           Meter {
             visible: !!(root.limits && root.limits.claude && root.limits.claude.five_hour)
