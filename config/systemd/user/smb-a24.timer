@@ -1,0 +1,9 @@
+[Unit]
+Description=Re-check Samba share //192.168.2.240/share every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target

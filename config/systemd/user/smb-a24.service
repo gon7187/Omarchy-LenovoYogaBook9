@@ -1,0 +1,10 @@
+[Unit]
+Description=Mount Samba share //192.168.2.240/share (GVFS) and keep it alive
+After=graphical-session.target network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/smb-a24-mount
+
+[Install]
+WantedBy=default.target

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Build before replacing the user installation. No root or package changes."""
 import argparse
-from datetime import datetime
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime
+from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -29,6 +29,10 @@ def main():
         SOURCE.parent/'bin/yoga-mode':HOME/'.local/bin/yoga-mode',
         SOURCE.parent/'bin/yoga-speedtest-reaper':HOME/'.local/bin/yoga-speedtest-reaper',
         SOURCE.parent/'config/systemd/user/yoga-speedtest-reaper.service':HOME/'.config/systemd/user/yoga-speedtest-reaper.service',
+        # Credentials stay out of the repository: the unit fails until ~/.config/smb-a24/credentials exists.
+        SOURCE.parent/'bin/smb-a24-mount':HOME/'.local/bin/smb-a24-mount',
+        SOURCE.parent/'config/systemd/user/smb-a24.service':HOME/'.config/systemd/user/smb-a24.service',
+        SOURCE.parent/'config/systemd/user/smb-a24.timer':HOME/'.config/systemd/user/smb-a24.timer',
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
@@ -88,7 +92,7 @@ def main():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
     run('systemctl','--user','daemon-reload')
-    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service')
+    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service','smb-a24.timer')
     if not args.no_start:
         run('systemctl','--user','restart','yoga-brightness-sync.service','yoga-speedtest-reaper.service','yoga-panel.service')
     if shutil.which('omarchy'):

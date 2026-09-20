@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090,SC2154  # user/domain/password come from the sourced credentials file
+# Keeps //192.168.2.240/share usable at ~/Samba; run periodically by smb-a24.timer.
+# Heals both failure modes: GVFS mount gone, and gvfsd-fuse (the FUSE bridge) dead.
+url=smb://192.168.2.240/share
+fuse_dir=$XDG_RUNTIME_DIR/gvfs
+share_dir="$fuse_dir/smb-share:server=192.168.2.240,share=share"
+. ~/.config/smb-a24/credentials
+
+# Activate GVFS over D-Bus before starting its FUSE client.
+timeout 30 gio mount -l >/dev/null || exit 1
+
+for _ in 1 2 3 4 5 6; do
+  timeout 5 ls "$share_dir" >/dev/null 2>&1 && exit 0
+
+  if ! pgrep -u "$UID" -x gvfsd-fuse >/dev/null; then
+    fusermount3 -uz "$fuse_dir" 2>/dev/null # stale "Transport endpoint is not connected"
+    mkdir -p "$fuse_dir"
+    systemd-run --user --quiet --collect --unit=gvfsd-fuse-a24 /usr/lib/gvfsd-fuse -f "$fuse_dir"
+  fi
+
+  gio mount -l | grep -q '192.168.2.240/share' ||
+    printf '%s\n%s\n%s\n' "$user" "$domain" "$password" | gio mount "$url" >/dev/null 2>&1
+
+  sleep 5
+done
+exit 1
