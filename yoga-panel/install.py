@@ -33,6 +33,12 @@ def main():
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
         SOURCE.parent/'config/hypr/yoga-titlebars.lua':HOME/'.config/hypr/yoga-titlebars.lua',
+        # Desktop widgets: the Quickshell config, its unit and the blur rule.
+        # Turn them on from the Omarchy menu (Display mode -> Desktop widgets).
+        SOURCE.parent/'bin/yoga-widgets':HOME/'.local/bin/yoga-widgets',
+        SOURCE.parent/'config/systemd/user/yoga-widgets.service':HOME/'.config/systemd/user/yoga-widgets.service',
+        SOURCE.parent/'config/hypr/yoga-widgets.lua':HOME/'.config/hypr/yoga-widgets.lua',
+        SOURCE.parent/'config/quickshell/yoga-widgets/shell.qml':HOME/'.config/quickshell/yoga-widgets/shell.qml',
         SOURCE.parent/'config/omarchy/shell.toml':HOME/'.config/omarchy/shell.toml',
         SOURCE.parent/'config/foot/foot.ini':HOME/'.config/foot/foot.ini',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
@@ -72,7 +78,8 @@ def main():
     hyprland=HOME/'.config/hypr/hyprland.lua'
     for module,comment in (('hypr.minimize','Three-finger swipe down/up: minimize/restore all windows on the workspace.'),
                            ('hypr.yoga-windows','Windows opened while the lower-screen keyboard is up go to the upper screen.'),
-                           ('hypr.yoga-titlebars','Compact touch title bars: drag to move, close button.')):
+                           ('hypr.yoga-titlebars','Compact touch title bars: drag to move, close button.'),
+                           ('hypr.yoga-widgets','Blur rule for the desktop widget layer.')):
         if hyprland.exists() and 'require("'+module+'")' not in hyprland.read_text():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')

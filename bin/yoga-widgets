@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Turn the desktop widget layer on or off. Enabling also arms the unit so the
+# choice survives a reboot; the Omarchy menu ticks the row from `status`.
+set -euo pipefail
+
+unit=yoga-widgets.service
+
+on() { systemctl --user enable --now "$unit"; }
+off() { systemctl --user disable --now "$unit"; }
+is_on() { systemctl --user is-active --quiet "$unit"; }
+
+case "${1:-toggle}" in
+  toggle) if is_on; then off; else on; fi ;;
+  show|start|on) on ;;
+  hide|stop|off) off ;;
+  restart) systemctl --user restart "$unit" ;;
+  status) if is_on; then echo on; else echo off; fi ;;
+  *) echo "usage: yoga-widgets [toggle|show|hide|restart|status]" >&2; exit 2 ;;
+esac

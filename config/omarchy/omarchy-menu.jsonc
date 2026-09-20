@@ -64,6 +64,13 @@
     "checked":"yoga-mode status | grep -q ^tablet"
   },
 
+  "display.widgets": {
+    "icon":"\uf009","label":"Desktop widgets",
+    "description":"Clock, weather, calendar and machine load on the upper screen",
+    "action":"yoga-widgets toggle",
+    "checked":"yoga-widgets status | grep -q on"
+  },
+
   "display.autorotate": {
     "icon":"\udb80\udc68","label":"Auto-rotate",
     "description":"All four positions: stand, book either way, and present",

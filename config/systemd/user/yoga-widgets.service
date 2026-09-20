@@ -1,0 +1,12 @@
+[Unit]
+Description=Yoga Book desktop widgets (clock, weather, calendar, machine stats)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/quickshell -p %h/.config/quickshell/yoga-widgets --no-duplicate
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
