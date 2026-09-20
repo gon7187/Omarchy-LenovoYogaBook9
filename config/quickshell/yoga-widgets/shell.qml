@@ -72,7 +72,15 @@ ShellRoot {
   readonly property real cardAlpha: 0.78
   readonly property color cardOnDark: Qt.rgba(surface.r * cardAlpha, surface.g * cardAlpha, surface.b * cardAlpha, 1)
   readonly property color cardOnLight: Qt.rgba(surface.r * cardAlpha + (1 - cardAlpha), surface.g * cardAlpha + (1 - cardAlpha), surface.b * cardAlpha + (1 - cardAlpha), 1)
+  // Body text is held to the true worst case (a white wallpaper). Accents and
+  // bars are measured against a mid-bright wallpaper instead: demanding the
+  // white-wallpaper case for them bleached cyan and magenta almost to the text
+  // colour, and a bar is decoration, not something you have to read.
+  readonly property color cardOnMid: Qt.rgba(surface.r * cardAlpha + (1 - cardAlpha) * 0.55,
+                                             surface.g * cardAlpha + (1 - cardAlpha) * 0.55,
+                                             surface.b * cardAlpha + (1 - cardAlpha) * 0.55, 1)
   function worstContrast(c) { return Math.min(root.contrastOf(c, root.cardOnDark), root.contrastOf(c, root.cardOnLight)) }
+  function midContrast(c) { return Math.min(root.contrastOf(c, root.cardOnDark), root.contrastOf(c, root.cardOnMid)) }
 
   function mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1) }
 
@@ -101,16 +109,16 @@ ShellRoot {
   function readable(c, target) {
     for (let t = 0; t < 1; t += 0.1) {
       const out = root.mix(c, root.fg, t)
-      if (root.worstContrast(out) >= target) return out
+      if (root.midContrast(out) >= target) return out
     }
     return root.fg
   }
 
   readonly property color accent: readable(rawAccent, 4.0)
-  readonly property color warm: readable(col("yellow", "#e0af68"), 4.0)
-  readonly property color hot: readable(col("red", "#f7768e"), 4.0)
-  readonly property color cool: readable(col("cyan", "#449dab"), 3.0)
-  readonly property color violet: readable(col("magenta", "#ad8ee6"), 3.0)
+  readonly property color warm: readable(col("yellow", "#e0af68"), 3.6)
+  readonly property color hot: readable(col("red", "#f7768e"), 3.6)
+  readonly property color cool: readable(col("cyan", "#449dab"), 2.6)
+  readonly property color violet: readable(col("magenta", "#ad8ee6"), 2.6)
 
   // Card chrome: the theme background carries the glass, and the hairlines
   // lighten on dark themes, darken on light ones. 0.85 is the density where
@@ -120,6 +128,53 @@ ShellRoot {
   readonly property color hairline: lightMode ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.10)
   readonly property color sheen: lightMode ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07)
   readonly property color trackColor: lightMode ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(1, 1, 1, 0.09)
+
+  // ---- agent limits --------------------------------------------------------
+  // bin/yoga-ai-limits does the collecting: Claude Code's OAuth usage endpoint
+  // (the one /usage reads) and the rate_limits Codex writes into its own
+  // session log. It caches, so a failed poll keeps the last numbers.
+  property var limits: null
+
+  Process {
+    id: limitsProc
+    command: [Quickshell.env("HOME") + "/.local/bin/yoga-ai-limits"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try { root.limits = JSON.parse(String(text || "")) } catch (e) { /* keep the previous reading */ }
+      }
+    }
+  }
+
+  Timer {
+    interval: 5 * 60 * 1000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!limitsProc.running) limitsProc.running = true
+  }
+
+  function windowLabel(minutes) {
+    if (!minutes) return ""
+    if (minutes % 1440 === 0) return (minutes / 1440) + " дн"
+    if (minutes % 60 === 0) return (minutes / 60) + " ч"
+    return minutes + " мин"
+  }
+
+  function resetLabel(when) {
+    if (!when || isNaN(when.getTime())) return ""
+    const left = when.getTime() - root.now.getTime()
+    if (left <= 0) return "вот-вот"
+    if (left < 24 * 3600 * 1000) return Qt.formatDateTime(when, "HH:mm")
+    return when.toLocaleDateString(Qt.locale("ru_RU"), "d MMM")
+  }
+
+  // Green while there is room, amber past two thirds, red when nearly spent.
+  function limitTint(pct) {
+    if (pct >= 85) return root.hot
+    if (pct >= 66) return root.warm
+    return root.cool
+  }
 
   // ---- glass ---------------------------------------------------------------
   // A layer surface cannot read what is behind it, but these cards sit on the
@@ -381,7 +436,7 @@ ShellRoot {
   component Card: Rectangle {
     id: card
     default property alias content: inner.data
-    property int pad: 18
+    property int pad: root.px(1.6)
     implicitWidth: root.cardWidth
     implicitHeight: inner.implicitHeight + pad * 2
     radius: 22
@@ -491,9 +546,9 @@ ShellRoot {
       color: "transparent"
 
       anchors { top: true; right: true }
-      margins { top: 56; right: 28 }
+      margins { top: root.px(4.0); right: root.px(2.6) }
       implicitWidth: root.cardWidth
-      implicitHeight: stack.implicitHeight
+      implicitHeight: Math.min(stack.implicitHeight, screen.height - margins.top - root.px(1.2))
 
       // Empty mask: every click falls through to the desktop below.
       mask: Region {}
@@ -533,7 +588,7 @@ ShellRoot {
       ColumnLayout {
         id: stack
         anchors.fill: parent
-        spacing: 14
+        spacing: root.px(1.2)
 
         // Clock ---------------------------------------------------------------
         Card {
@@ -761,6 +816,51 @@ ShellRoot {
               text: root.fanRpm.length ? root.fanRpm.join(" / ") + " об/мин" : ""
               font.pixelSize: root.px(1.0)
             }
+          }
+        }
+        // Agent limits ---------------------------------------------------------
+        Card {
+          visible: root.limits && (root.limits.claude || root.limits.codex)
+          pad: root.px(1.5)
+
+          Meter {
+            visible: !!(root.limits && root.limits.claude && root.limits.claude.five_hour)
+            label: "Claude 5 ч"
+            value: root.limits && root.limits.claude && root.limits.claude.five_hour
+              ? root.limits.claude.five_hour.pct + "%  ·  " + root.resetLabel(new Date(root.limits.claude.five_hour.resets))
+              : ""
+            fraction: root.limits && root.limits.claude && root.limits.claude.five_hour ? root.limits.claude.five_hour.pct / 100 : 0
+            tint: root.limitTint(root.limits && root.limits.claude && root.limits.claude.five_hour ? root.limits.claude.five_hour.pct : 0)
+          }
+
+          Meter {
+            visible: !!(root.limits && root.limits.claude && root.limits.claude.seven_day)
+            label: "Claude 7 дн"
+            value: root.limits && root.limits.claude && root.limits.claude.seven_day
+              ? root.limits.claude.seven_day.pct + "%  ·  " + root.resetLabel(new Date(root.limits.claude.seven_day.resets))
+              : ""
+            fraction: root.limits && root.limits.claude && root.limits.claude.seven_day ? root.limits.claude.seven_day.pct / 100 : 0
+            tint: root.limitTint(root.limits && root.limits.claude && root.limits.claude.seven_day ? root.limits.claude.seven_day.pct : 0)
+          }
+
+          Meter {
+            visible: !!(root.limits && root.limits.codex && root.limits.codex.primary)
+            label: "Codex " + (root.limits && root.limits.codex && root.limits.codex.primary ? root.windowLabel(root.limits.codex.primary.window_minutes) : "")
+            value: root.limits && root.limits.codex && root.limits.codex.primary
+              ? root.limits.codex.primary.pct + "%  ·  " + root.resetLabel(new Date(root.limits.codex.primary.resets_at * 1000))
+              : ""
+            fraction: root.limits && root.limits.codex && root.limits.codex.primary ? root.limits.codex.primary.pct / 100 : 0
+            tint: root.limitTint(root.limits && root.limits.codex && root.limits.codex.primary ? root.limits.codex.primary.pct : 0)
+          }
+
+          Meter {
+            visible: !!(root.limits && root.limits.codex && root.limits.codex.secondary)
+            label: "Codex " + (root.limits && root.limits.codex && root.limits.codex.secondary ? root.windowLabel(root.limits.codex.secondary.window_minutes) : "")
+            value: root.limits && root.limits.codex && root.limits.codex.secondary
+              ? root.limits.codex.secondary.pct + "%  ·  " + root.resetLabel(new Date(root.limits.codex.secondary.resets_at * 1000))
+              : ""
+            fraction: root.limits && root.limits.codex && root.limits.codex.secondary ? root.limits.codex.secondary.pct / 100 : 0
+            tint: root.limitTint(root.limits && root.limits.codex && root.limits.codex.secondary ? root.limits.codex.secondary.pct : 0)
           }
         }
       }

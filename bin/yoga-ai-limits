@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Collect Claude Code and Codex rate-limit usage for the desktop widget.
+
+Prints one JSON object on stdout and caches it, so a failed poll keeps showing
+the last known numbers instead of blanking the card.
+
+Claude Code has no CLI for this; /usage in a session reads the same OAuth
+endpoint this does, with the token Claude Code already stored locally. The
+token is read from ~/.claude/.credentials.json, sent only to api.anthropic.com,
+and never printed. Codex writes its own limits into its session log, so that
+one needs no network at all.
+"""
+import json
+import time
+import urllib.request
+from pathlib import Path
+
+HOME=Path.home()
+CACHE=HOME/'.cache/yoga-widgets/limits.json'
+USAGE_URL='https://api.anthropic.com/api/oauth/usage'
+
+def claude():
+    creds=HOME/'.claude/.credentials.json'
+    if not creds.exists(): return None
+    try: oauth=json.loads(creds.read_text())['claudeAiOauth']
+    except Exception: return None
+    token=oauth.get('accessToken')
+    if not token: return None
+    # An expired token means Claude Code has not refreshed it yet; the request
+    # would 401, so skip it and let the cached numbers stand.
+    if oauth.get('expiresAt',0)/1000 < time.time(): return None
+    request=urllib.request.Request(USAGE_URL,headers={
+        'Authorization':'Bearer '+token,
+        'anthropic-beta':'oauth-2025-04-20',
+        'Content-Type':'application/json'})
+    try:
+        with urllib.request.urlopen(request,timeout=15) as response:
+            data=json.loads(response.read())
+    except Exception: return None
+    out={'plan':oauth.get('subscriptionType','')}
+    for key in ('five_hour','seven_day','seven_day_opus'):
+        window=data.get(key)
+        if not window or window.get('utilization') is None: continue
+        out[key]={'pct':round(float(window['utilization'])),'resets':window.get('resets_at')}
+    return out if len(out)>1 else None
+
+def codex():
+    """Codex records its limits in every session log; take the newest one."""
+    root=HOME/'.codex/sessions'
+    if not root.is_dir(): return None
+    logs=sorted(root.rglob('*.jsonl'),key=lambda p:p.stat().st_mtime,reverse=True)
+    for log in logs[:5]:
+        try: tail=log.read_bytes()[-400_000:].decode('utf-8','ignore')
+        except OSError: continue
+        index=tail.rfind('"rate_limits"')
+        if index<0: continue
+        # Back up to the start of the enclosing JSON line, then parse it.
+        start=tail.rfind('\n',0,index)+1
+        end=tail.find('\n',index)
+        line=tail[start:end if end>0 else None]
+        try: limits=json.loads(line)['payload']['rate_limits']
+        except Exception:
+            try: limits=json.loads(line)['rate_limits']
+            except Exception: continue
+        out={'plan':limits.get('plan_type',''),'seen':log.stat().st_mtime}
+        for key in ('primary','secondary'):
+            window=limits.get(key)
+            if not window or window.get('used_percent') is None: continue
+            out[key]={'pct':round(float(window['used_percent'])),
+                      'window_minutes':window.get('window_minutes'),
+                      'resets_at':window.get('resets_at')}
+        if len(out)>2: return out
+    return None
+
+def main():
+    fresh={'claude':claude(),'codex':codex(),'at':int(time.time())}
+    cached={}
+    if CACHE.exists():
+        try: cached=json.loads(CACHE.read_text())
+        except Exception: cached={}
+    # Keep whichever side answered; fall back per service, not all-or-nothing.
+    for service in ('claude','codex'):
+        if fresh[service] is None: fresh[service]=cached.get(service)
+    CACHE.parent.mkdir(parents=True,exist_ok=True)
+    CACHE.write_text(json.dumps(fresh))
+    print(json.dumps(fresh))
+
+if __name__=='__main__': main()
