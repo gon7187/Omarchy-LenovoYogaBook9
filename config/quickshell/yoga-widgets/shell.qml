@@ -66,56 +66,35 @@ ShellRoot {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
   }
 
-  // The card is translucent, so what sits behind the text is the wallpaper
-  // showing through it. bin/yoga-wallpaper-luma measures how bright the
-  // wallpaper is where the cards are (85th percentile, so a bright patch is
-  // not averaged away) and the card is then made only as opaque as readability
-  // needs: opacity rises until white (on dark themes) or black (on light ones)
-  // clears 5:1 against what shows through, leaving enforce() room to reach
-  // 4.5:1. On a dark wallpaper with a dark theme that bottoms out at 0.35 and
-  // the cards stay glass; a light theme over a dark wallpaper has to go denser.
+  // Frosted-glass material, iOS-style: the card is a neutral scrim, never the
+  // theme colour poured over the wallpaper. Mixing a blue-grey theme with a
+  // pink wallpaper makes mud, and the denser it got the muddier it looked, so
+  // the tint is kept to a trace and the scrim is plain black or white —
+  // whichever the wallpaper calls for. That keeps the wallpaper's own colour
+  // showing through at a fixed 62% transparency on anything.
   property real wallLuma: 0.15
-  readonly property color pole: lightMode ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
+  readonly property real cardAlpha: 0.38
+  readonly property bool lightMaterial: wallLuma > 0.45
+  readonly property color scrim: lightMaterial ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1)
+  readonly property color material: mix(scrim, surface, 0.12)
+  readonly property color wallGray: Qt.rgba(wallLuma, wallLuma, wallLuma, 1)
+  readonly property color backdrop: mix(wallGray, material, cardAlpha)
+  readonly property color pole: lightMaterial ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
+  readonly property real glassStrength: 1.0
 
-  function blendOver(alpha) {
-    return Qt.rgba(surface.r * alpha + wallLuma * (1 - alpha),
-                   surface.g * alpha + wallLuma * (1 - alpha),
-                   surface.b * alpha + wallLuma * (1 - alpha), 1)
-  }
-
-  // Opacity is raised until the theme's own text colour clears 5.5:1 against
-  // what shows through — the card carries the readability, rather than the
-  // text being bleached to survive a washed-out card. A dark theme over a dark
-  // wallpaper never leaves 0.35 and stays glass; the same theme over a light
-  // wallpaper closes up instead of turning into grey haze.
-  readonly property real cardAlpha: {
-    for (let a = 0.35; a <= 0.9601; a += 0.05)
-      // Once the card has to close up at all, take it well past the minimum:
-      // a card sitting exactly on the threshold reads as the theme colour
-      // diluted with wallpaper — grey haze — rather than as the theme colour.
-      if (root.contrastOf(root.rawFg, root.blendOver(a)) >= 5.5)
-        return a <= 0.3501 ? a : Math.min(0.96, a + 0.12)
-    return 0.96
-  }
-
-  // A denser card has less to refract, so the glass effects fade out with it.
-  readonly property real glassStrength: Math.max(0.25, 1 - (cardAlpha - 0.35) / 0.55)
-
-  readonly property color backdrop: blendOver(cardAlpha)
   function worstContrast(c) { return root.contrastOf(c, root.backdrop) }
   function midContrast(c) { return root.contrastOf(c, root.backdrop) }
 
   // Guarded: during the first binding pass one side can still be undefined
   // (fg is derived from the same palette these helpers feed).
   function mix(a, b, t) {
-    if (!a || !b) return a || b || root.pole
+    if (!a || !b) return a || b || Qt.rgba(0, 0, 0, 1)
     return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
   }
 
-  // A theme's foreground is picked against its own opaque background; on this
-  // translucent card it can fall under 4.5:1 (everforest, gruvbox, rose-pine).
-  // Push it away from the surface — white on dark themes, black on light ones
-  // — until it clears, which keeps the hue and only lifts the contrast.
+  // On a light material the theme's background colour is the readable one and
+  // its foreground is not, so take whichever of the pair stands out; enforce()
+  // only steps in when neither does.
   function enforce(c, target) {
     for (let t = 0; t < 1; t += 0.05) {
       const out = root.mix(c, root.pole, t)
@@ -124,15 +103,13 @@ ShellRoot {
     return root.pole
   }
 
-  readonly property color fg: enforce(rawFg, 4.5)
-  // One dim tone derived from the text colour: `dark_foreground` and `muted`
-  // both fall away to near-invisible on some light themes.
-  readonly property color fgDim: root.mix(root.cardOnDark, root.fg, 0.8)
+  readonly property color rawText: root.contrastOf(rawFg, backdrop) >= root.contrastOf(surface, backdrop) ? rawFg : surface
+  readonly property color fg: enforce(rawText, 4.5)
+  readonly property color fgDim: root.mix(backdrop, fg, 0.78)
 
   // Theme accents are chosen against a terminal background, not against this
-  // card: rose-pine, nord and miasma land near 3:1 or below. Blend such a
-  // colour towards the text colour — which always clears the bar — until it
-  // reads, and leave colours that already pass untouched.
+  // card. Blend one towards the text colour until it reads, and leave the
+  // colours that already pass untouched.
   function readable(c, target) {
     for (let t = 0; t < 1; t += 0.1) {
       const out = root.mix(c, root.fg, t)
@@ -151,10 +128,10 @@ ShellRoot {
   // lighten on dark themes, darken on light ones. 0.85 is the density where
   // the worst stock theme still clears 4.5:1 for body text over any wallpaper
   // — below that, a light wallpaper washes a dark card out completely.
-  readonly property color cardColor: Qt.rgba(surface.r, surface.g, surface.b, cardAlpha)
-  readonly property color hairline: lightMode ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.10)
-  readonly property color sheen: lightMode ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07)
-  readonly property color trackColor: lightMode ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(1, 1, 1, 0.09)
+  readonly property color cardColor: Qt.rgba(material.r, material.g, material.b, cardAlpha)
+  readonly property color hairline: lightMaterial ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.14)
+  readonly property color sheen: lightMaterial ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(1, 1, 1, 0.09)
+  readonly property color trackColor: lightMaterial ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(1, 1, 1, 0.12)
 
   // ---- agent limits --------------------------------------------------------
   // bin/yoga-ai-limits does the collecting: Claude Code's OAuth usage endpoint
@@ -524,8 +501,8 @@ ShellRoot {
       property real edge: root.px(2.4)
       property real strength: root.px(2.2) * root.glassStrength
       property real phase: root.glassPhase
-      property real sheen: (root.lightMode ? 0.14 : 0.22) * root.glassStrength
-      property real rainbow: (root.lightMode ? 0.05 : 0.09) * root.glassStrength
+      property real sheen: (root.lightMaterial ? 0.14 : 0.22) * root.glassStrength
+      property real rainbow: (root.lightMaterial ? 0.05 : 0.09) * root.glassStrength
     }
 
     ColumnLayout {
@@ -821,7 +798,7 @@ ShellRoot {
                   font.pixelSize: root.px(1.1)
                   font.weight: day.today ? Font.DemiBold : Font.Normal
                   renderType: Text.NativeRendering
-                  color: day.today ? root.surface : (day.weekend ? root.hot : root.fg)
+                  color: day.today ? root.backdrop : (day.weekend ? root.hot : root.fg)
                 }
               }
             }
