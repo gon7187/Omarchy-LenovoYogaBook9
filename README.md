@@ -259,6 +259,39 @@ A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC erro
 
 **This was the missing bass.** With the EQ confirmed working digitally (+13 dB at 100 Hz measured on the sink monitor) there was still no low end by ear, with or without processing, and no amp profile changed that. After `yoga-amp-calib fix` and a reboot the `V1 CRC error` is gone and the bass is back. The uncalibrated amps were evidently running a conservative protection model that cut the low end.
 
+### Volume-dependent speaker imbalance (SOF)
+
+The UCM Speaker route controls only `Speaker Playback Volume` (DAC 0x03),
+leaving `DAC2 Playback Volume` (DAC 0x02) at 0 dB. Measured at 25% system
+volume, the first DAC was at -36 dB; at 10%, -60 dB. Both speaker switches
+remained on and both DACs carried the same stereo stream. This changes the
+balance between the two speaker paths as volume falls.
+
+[`53-yoga-software-volume.conf`](config/wireplumber/53-yoga-software-volume.conf)
+enables `api.alsa.soft-mixer` on this SOF card: PipeWire attenuates the shared
+stereo stream instead. This is a device-wide property, including this card's
+microphone and HDMI routes; Bluetooth and USB devices are unaffected.
+The setting is described in the [WirePlumber ALSA documentation](https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/alsa.html).
+
+Apply the rule before resetting the old hardware attenuation:
+
+```bash
+install -Dm644 config/wireplumber/53-yoga-software-volume.conf \
+  ~/.config/wireplumber/wireplumber.conf.d/53-yoga-software-volume.conf
+systemctl --user restart wireplumber
+# Wait for the Speaker sink to reappear; HW_VOLUME_CTRL must be absent.
+pactl list sinks
+amixer -c sofhdadsp sset Speaker 0dB
+amixer -c sofhdadsp sset DAC2 0dB
+```
+
+At 30%, 20% and 10%, `amixer -c sofhdadsp sget Speaker` and
+`amixer -c sofhdadsp sget DAC2` must both stay at 0 dB while the sound gets
+quieter. Also verify mute and listen below 30% with the same music.
+`alsa-restore.service` saves these hardware levels on orderly shutdown;
+`sudo alsactl store sofhdadsp` saves them immediately if desired. A fresh
+installation or lost ALSA state needs the one-time hardware reset again.
+
 ### Fix (legacy snd_hda_intel only)
 
 Rather than patch the kernel, open the sink with four channels so the surround pair carries audio, and upmix to generate it. Drop [this file](config/wireplumber/51-yoga-bass-speakers.conf) into `~/.config/wireplumber/wireplumber.conf.d/` and restart WirePlumber:
