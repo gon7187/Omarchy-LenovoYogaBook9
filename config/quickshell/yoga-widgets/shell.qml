@@ -5,7 +5,12 @@
 // draws over the wallpaper, below every window, and never steals a click.
 // Hyprland blurs it through the yoga-widgets layer rule (hypr/yoga-widgets.lua).
 //
-// Colours follow the active Omarchy theme, read straight from its colors.toml.
+// Type and colour follow the Omarchy shell: the family is the fontconfig
+// alias `monospace` that `omarchy font set` rewrites, sizes derive from the
+// [font] base-size in shell.toml the way Style.qml derives the bar's, and every
+// colour is a role from the active theme's colors.toml (all 24 stock themes
+// define the ones used here). Both files are watched, so a theme or font change
+// lands without a restart.
 // CPU/RAM/temperature sampling mirrors the gon7187.sysstats bar plugin.
 import QtQuick
 import QtQuick.Layouts
@@ -18,28 +23,60 @@ ShellRoot {
 
   // eDP-1 is the upper panel; the lower one belongs to yoga-panel.
   readonly property string monitorName: "eDP-1"
-  readonly property string uiFont: "Noto Sans"
+  readonly property string uiFont: "monospace"
   readonly property string emojiFont: "Noto Color Emoji"
   readonly property int cardWidth: 320
+
+  // ---- type ----------------------------------------------------------------
+  property int fontBase: 12
+  function px(mult) { return Math.max(1, Math.round(root.fontBase * mult)) }
+
+  // Parsing hangs off `loaded`, not off `reload()`: the reload is asynchronous,
+  // so reading text() straight after it returns the previous contents.
+  function applyFontBase() {
+    const m = String(shellToml.text() || "").match(/\[font\][^[]*?base-size\s*=\s*(\d+)/)
+    if (m) root.fontBase = Number(m[1])
+  }
+
+  FileView {
+    id: shellToml
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.toml"
+    blockLoading: true
+    printErrors: false
+    watchChanges: true
+    onFileChanged: reload()
+    onLoaded: root.applyFontBase()
+  }
 
   // ---- theme ---------------------------------------------------------------
   property var palette: ({})
   function col(key, fallback) { return root.palette[key] ? root.palette[key] : fallback }
+
+  readonly property bool lightMode: String(root.palette["mode"] || "dark") === "light"
   readonly property color accent: col("accent", "#7aa2f7")
-  readonly property color fg: col("bright_foreground", "#e6eaf5")
-  readonly property color fgDim: col("dark_foreground", "#8b93b4")
+  readonly property color fg: col("foreground", "#a9b1d6")
+  // One dim tone derived from the text colour: `dark_foreground` and `muted`
+  // both fall away to near-invisible on some light themes.
+  readonly property color fgDim: Qt.rgba(fg.r, fg.g, fg.b, 0.62)
+  readonly property color surface: col("background", "#1a1b26")
   readonly property color warm: col("yellow", "#e0af68")
   readonly property color hot: col("red", "#f7768e")
   readonly property color cool: col("cyan", "#449dab")
   readonly property color violet: col("magenta", "#ad8ee6")
 
+  // Card chrome: the theme background carries the glass, and the hairlines
+  // lighten on dark themes, darken on light ones.
+  readonly property color cardColor: Qt.rgba(surface.r, surface.g, surface.b, lightMode ? 0.62 : 0.45)
+  readonly property color hairline: lightMode ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.10)
+  readonly property color sheen: lightMode ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.07)
+  readonly property color trackColor: lightMode ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(1, 1, 1, 0.09)
+
   function capitalize(text) { return text.length ? text[0].toUpperCase() + text.slice(1) : text }
 
-  function loadPalette() {
-    themeFile.reload()
+  function applyPalette() {
     const out = {}
     for (const line of String(themeFile.text() || "").split("\n")) {
-      const m = line.match(/^\s*(\w+)\s*=\s*"(#[0-9a-fA-F]{6})"/)
+      const m = line.match(/^\s*(\w+)\s*=\s*"([^"]+)"/)
       if (m) out[m[1]] = m[2]
     }
     if (Object.keys(out).length) root.palette = out
@@ -51,7 +88,8 @@ ShellRoot {
     blockLoading: true
     printErrors: false
     watchChanges: true
-    onFileChanged: root.loadPalette()
+    onFileChanged: reload()
+    onLoaded: root.applyPalette()
   }
 
   // ---- clock ---------------------------------------------------------------
@@ -263,7 +301,7 @@ ShellRoot {
     onTriggered: if (!weatherProc.running) weatherProc.running = true
   }
 
-  Component.onCompleted: root.loadPalette()
+  Component.onCompleted: { shellToml.reload(); themeFile.reload() }
 
   // ---- building blocks -----------------------------------------------------
   component Card: Rectangle {
@@ -273,9 +311,9 @@ ShellRoot {
     implicitWidth: root.cardWidth
     implicitHeight: inner.implicitHeight + pad * 2
     radius: 22
-    color: Qt.rgba(0, 0, 0, 0.42)
+    color: root.cardColor
     border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.10)
+    border.color: root.hairline
 
     // A faint top highlight is what sells the glass; without it the card
     // reads as a flat black box over a blurred wallpaper.
@@ -283,7 +321,7 @@ ShellRoot {
       anchors.fill: parent
       radius: parent.radius
       gradient: Gradient {
-        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.07) }
+        GradientStop { position: 0.0; color: root.sheen }
         GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.0) }
       }
     }
@@ -299,8 +337,8 @@ ShellRoot {
   component Label: Text {
     color: root.fgDim
     font.family: root.uiFont
-    font.pixelSize: 12
-    font.letterSpacing: 0.6
+    font.pixelSize: root.px(1.1)
+    font.letterSpacing: 0.4
     renderType: Text.NativeRendering
   }
 
@@ -315,13 +353,13 @@ ShellRoot {
 
     RowLayout {
       Layout.fillWidth: true
-      Label { text: meter.label; font.pixelSize: 12 }
+      Label { text: meter.label; font.pixelSize: root.px(1.1) }
       Item { Layout.fillWidth: true }
       Text {
         text: meter.value
         color: root.fg
         font.family: root.uiFont
-        font.pixelSize: 13
+        font.pixelSize: root.px(1.15)
         font.weight: Font.Medium
         renderType: Text.NativeRendering
       }
@@ -331,7 +369,7 @@ ShellRoot {
       Layout.fillWidth: true
       implicitHeight: 6
       radius: 3
-      color: Qt.rgba(1, 1, 1, 0.09)
+      color: root.trackColor
       Rectangle {
         width: parent.width * Math.max(0, Math.min(1, meter.fraction))
         height: parent.height
@@ -376,7 +414,7 @@ ShellRoot {
             text: Qt.formatDateTime(root.now, "HH:mm")
             color: root.fg
             font.family: root.uiFont
-            font.pixelSize: 54
+            font.pixelSize: root.px(4.4)
             font.weight: Font.Light
             font.letterSpacing: -1
             renderType: Text.NativeRendering
@@ -384,7 +422,7 @@ ShellRoot {
           }
           Label {
             text: root.capitalize(root.now.toLocaleDateString(Qt.locale("ru_RU"), "dddd, d MMMM"))
-            font.pixelSize: 13
+            font.pixelSize: root.px(1.15)
             color: root.accent
             Layout.topMargin: -6
           }
@@ -399,7 +437,7 @@ ShellRoot {
             Text {
               text: root.weather ? root.wmoIcon(root.weather.code, root.weather.isDay) : "…"
               font.family: root.emojiFont
-              font.pixelSize: 38
+              font.pixelSize: root.px(3.2)
             }
 
             ColumnLayout {
@@ -409,13 +447,21 @@ ShellRoot {
                 text: root.weather ? (root.weather.temp > 0 ? "+" : "") + root.weather.temp + "°" : "--"
                 color: root.fg
                 font.family: root.uiFont
-                font.pixelSize: 30
+                font.pixelSize: root.px(2.6)
                 font.weight: Font.Light
                 renderType: Text.NativeRendering
               }
               Label {
                 Layout.fillWidth: true
                 text: root.weather ? root.weather.desc : "загрузка"
+                color: root.fg
+                elide: Text.ElideRight
+              }
+              Label {
+                Layout.fillWidth: true
+                text: root.weatherPlace
+                visible: root.weatherPlace.length > 0
+                font.pixelSize: root.px(1.0)
                 elide: Text.ElideRight
               }
             }
@@ -424,21 +470,22 @@ ShellRoot {
           Label {
             Layout.fillWidth: true
             text: root.weather
-              ? (root.weatherPlace ? root.weatherPlace + "   ·   " : "") + "ощущается " + (root.weather.feels > 0 ? "+" : "") + root.weather.feels + "°   ·   " + root.weather.wind + " км/ч   ·   " + root.weather.humidity + "%"
+              ? "ощущается " + (root.weather.feels > 0 ? "+" : "") + root.weather.feels + "°  ·  " + root.weather.wind + " км/ч  ·  " + root.weather.humidity + "%"
               : ""
             visible: !!root.weather
-            font.pixelSize: 11
+            font.pixelSize: root.px(1.0)
           }
 
           Rectangle {
             Layout.fillWidth: true
             implicitHeight: 1
-            color: Qt.rgba(1, 1, 1, 0.08)
+            color: root.hairline
             visible: root.forecast.length > 0
           }
 
           RowLayout {
             Layout.fillWidth: true
+            spacing: root.px(0.8)
             visible: root.forecast.length > 0
             Repeater {
               model: root.forecast
@@ -450,21 +497,21 @@ ShellRoot {
                 spacing: 2
                 Label {
                   Layout.alignment: Qt.AlignHCenter
-                  font.pixelSize: 11
+                  font.pixelSize: root.px(1.0)
                   text: fc.index === 0 ? "сегодня" : new Date(fc.modelData.date).toLocaleDateString(Qt.locale("ru_RU"), "ddd")
                 }
                 Text {
                   Layout.alignment: Qt.AlignHCenter
                   text: root.wmoIcon(fc.modelData.code, true)
                   font.family: root.emojiFont
-                  font.pixelSize: 16
+                  font.pixelSize: root.px(1.5)
                 }
                 Text {
                   Layout.alignment: Qt.AlignHCenter
-                  text: fc.modelData.max + "° / " + fc.modelData.min + "°"
+                  text: fc.modelData.max + "°/" + fc.modelData.min + "°"
                   color: root.fg
                   font.family: root.uiFont
-                  font.pixelSize: 11
+                  font.pixelSize: root.px(1.0)
                   renderType: Text.NativeRendering
                 }
               }
@@ -490,7 +537,7 @@ ShellRoot {
 
           Label {
             text: root.capitalize(Qt.locale("ru_RU").standaloneMonthName(root.now.getMonth())) + " " + root.now.getFullYear()
-            font.pixelSize: 13
+            font.pixelSize: root.px(1.2)
             color: root.fg
           }
 
@@ -508,9 +555,9 @@ ShellRoot {
                 required property int index
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 10
+                font.pixelSize: root.px(0.95)
                 text: dow.modelData
-                color: dow.index > 4 ? Qt.darker(root.hot, 1.4) : root.fgDim
+                color: dow.index > 4 ? Qt.rgba(root.hot.r, root.hot.g, root.hot.b, 0.7) : root.fgDim
               }
             }
 
@@ -521,15 +568,15 @@ ShellRoot {
                 required property var modelData
                 required property int index
                 Layout.fillWidth: true
-                implicitHeight: 24
+                implicitHeight: root.px(2.3)
                 readonly property bool today: modelData === root.now.getDate()
                 readonly property bool weekend: (index % 7) > 4
 
                 Rectangle {
                   anchors.centerIn: parent
-                  width: 24
-                  height: 24
-                  radius: 12
+                  width: root.px(2.2)
+                  height: root.px(2.2)
+                  radius: width / 2
                   visible: day.today
                   color: root.accent
                 }
@@ -537,10 +584,10 @@ ShellRoot {
                   anchors.centerIn: parent
                   text: day.modelData > 0 ? day.modelData : ""
                   font.family: root.uiFont
-                  font.pixelSize: 12
+                  font.pixelSize: root.px(1.1)
                   font.weight: day.today ? Font.DemiBold : Font.Normal
                   renderType: Text.NativeRendering
-                  color: day.today ? "#000000" : (day.weekend ? Qt.darker(root.hot, 1.2) : root.fg)
+                  color: day.today ? root.surface : (day.weekend ? root.hot : root.fg)
                 }
               }
             }
@@ -575,17 +622,17 @@ ShellRoot {
             Layout.topMargin: 2
             Label {
               text: root.cpuTemp > 0 ? "темп " + root.cpuTemp + "°" : ""
-              font.pixelSize: 11
+              font.pixelSize: root.px(1.0)
               color: root.cpuTemp >= 85 ? root.hot : (root.cpuTemp >= 70 ? root.warm : root.fgDim)
             }
             Label {
               text: root.ssdTemp > 0 ? "SSD " + root.ssdTemp + "°" : ""
-              font.pixelSize: 11
+              font.pixelSize: root.px(1.0)
             }
             Item { Layout.fillWidth: true }
             Label {
               text: root.fanRpm.length ? root.fanRpm.join(" / ") + " об/мин" : ""
-              font.pixelSize: 11
+              font.pixelSize: root.px(1.0)
             }
           }
         }
