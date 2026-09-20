@@ -382,7 +382,7 @@ ShellRoot {
 
   function wmoText(code) {
     const map = {
-      0: "Ясно", 1: "Малооблачно", 2: "Переменная облачность", 3: "Пасмурно",
+      0: "Ясно", 1: "Малооблачно", 2: "Переменно облачно", 3: "Пасмурно",
       45: "Туман", 48: "Изморозь",
       51: "Слабая морось", 53: "Морось", 55: "Сильная морось",
       56: "Ледяная морось", 57: "Ледяная морось",
@@ -411,7 +411,7 @@ ShellRoot {
       "  name=$(sed -nE 's/.*\"city\":\"([^\"]*)\".*/\\1/p' \"$cache/location.json\" 2>/dev/null); " +
       "fi; " +
       "if [ -n \"$lat\" ] && [ -n \"$lon\" ]; then " +
-      "  curl -fsS --max-time 20 \"https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=3\" -o \"$cache/weather.tmp\" && mv \"$cache/weather.tmp\" \"$cache/weather.json\" || true; " +
+      "  curl -fsS --max-time 20 \"https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7\" -o \"$cache/weather.tmp\" && mv \"$cache/weather.tmp\" \"$cache/weather.json\" || true; " +
       "fi; " +
       "echo \"$name\"; cat \"$cache/weather.json\" 2>/dev/null"]
     stdout: StdioCollector {
@@ -436,7 +436,7 @@ ShellRoot {
           }
           const d = data.daily
           const days = []
-          for (let i = 0; i < (d.time || []).length && i < 3; i++)
+          for (let i = 0; i < (d.time || []).length && i < 7; i++)
             days.push({ date: d.time[i], max: Math.round(d.temperature_2m_max[i]), min: Math.round(d.temperature_2m_min[i]), code: d.weather_code[i] })
           root.forecast = days
         } catch (e) {
@@ -614,15 +614,30 @@ ShellRoot {
                 elide: Text.ElideRight
               }
             }
-          }
 
-          Label {
-            Layout.fillWidth: true
-            text: root.weather
-              ? "ощущается " + (root.weather.feels > 0 ? "+" : "") + root.weather.feels + "°  ·  " + root.weather.wind + " км/ч  ·  " + root.weather.humidity + "%"
-              : ""
-            visible: !!root.weather
-            font.pixelSize: root.px(1.0)
+            // Feels-like, wind and humidity ride in the empty space beside the
+            // temperature rather than on a line of their own: three short right
+            // aligned rows cost no height at all.
+            ColumnLayout {
+              Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+              spacing: 2
+              visible: !!root.weather
+              Label {
+                Layout.alignment: Qt.AlignRight
+                text: root.weather ? "ощущается " + (root.weather.feels > 0 ? "+" : "") + root.weather.feels + "°" : ""
+                font.pixelSize: root.px(0.95)
+              }
+              Label {
+                Layout.alignment: Qt.AlignRight
+                text: root.weather ? root.weather.wind + " км/ч" : ""
+                font.pixelSize: root.px(0.95)
+              }
+              Label {
+                Layout.alignment: Qt.AlignRight
+                text: root.weather ? root.weather.humidity + "%" : ""
+                font.pixelSize: root.px(0.95)
+              }
+            }
           }
 
           Rectangle {
@@ -646,21 +661,30 @@ ShellRoot {
                 spacing: 2
                 Label {
                   Layout.alignment: Qt.AlignHCenter
-                  font.pixelSize: root.px(1.0)
-                  text: fc.index === 0 ? "сегодня" : new Date(fc.modelData.date).toLocaleDateString(Qt.locale("ru_RU"), "ddd")
+                  font.pixelSize: root.px(0.95)
+                  color: fc.index === 0 ? root.accent : root.fgDim
+                  text: new Date(fc.modelData.date).toLocaleDateString(Qt.locale("ru_RU"), "ddd")
                 }
                 Text {
                   Layout.alignment: Qt.AlignHCenter
                   text: root.wmoIcon(fc.modelData.code, true)
                   font.family: root.emojiFont
-                  font.pixelSize: root.px(1.5)
+                  font.pixelSize: root.px(1.4)
                 }
                 Text {
                   Layout.alignment: Qt.AlignHCenter
-                  text: fc.modelData.max + "°/" + fc.modelData.min + "°"
+                  text: fc.modelData.max + "°"
                   color: root.fg
                   font.family: root.uiFont
                   font.pixelSize: root.px(1.0)
+                  renderType: Text.NativeRendering
+                }
+                Text {
+                  Layout.alignment: Qt.AlignHCenter
+                  text: fc.modelData.min + "°"
+                  color: root.fgDim
+                  font.family: root.uiFont
+                  font.pixelSize: root.px(0.95)
                   renderType: Text.NativeRendering
                 }
               }
