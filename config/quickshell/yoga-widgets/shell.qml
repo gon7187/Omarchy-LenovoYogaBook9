@@ -17,6 +17,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "material.js" as Material
 
 ShellRoot {
   id: root
@@ -66,25 +67,6 @@ ShellRoot {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
   }
 
-  // Frosted-glass material, iOS-style: the card is a neutral scrim, never the
-  // theme colour poured over the wallpaper. Mixing a blue-grey theme with a
-  // pink wallpaper makes mud, and the denser it got the muddier it looked, so
-  // the tint is kept to a trace and the scrim is plain black or white —
-  // whichever the wallpaper calls for. That keeps the wallpaper's own colour
-  // showing through at a fixed 62% transparency on anything.
-  property real wallLuma: 0.15
-  readonly property real cardAlpha: 0.38
-  readonly property bool lightMaterial: wallLuma > 0.45
-  readonly property color scrim: lightMaterial ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1)
-  readonly property color material: mix(scrim, surface, 0.12)
-  readonly property color wallGray: Qt.rgba(wallLuma, wallLuma, wallLuma, 1)
-  readonly property color backdrop: mix(wallGray, material, cardAlpha)
-  readonly property color pole: lightMaterial ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
-  readonly property real glassStrength: 1.0
-
-  function worstContrast(c) { return root.contrastOf(c, root.backdrop) }
-  function midContrast(c) { return root.contrastOf(c, root.backdrop) }
-
   // Guarded: during the first binding pass one side can still be undefined
   // (fg is derived from the same palette these helpers feed).
   function mix(a, b, t) {
@@ -92,9 +74,47 @@ ShellRoot {
     return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
   }
 
-  // On a light material the theme's background colour is the readable one and
-  // its foreground is not, so take whichever of the pair stands out; enforce()
-  // only steps in when neither does.
+  // ---- material ------------------------------------------------------------
+  // What the wallpaper is doing where the cards sit: brightness, dominant hue
+  // and how chromatic it is (bin/yoga-wallpaper-luma). A black or white
+  // wallpaper reports chroma 0, which keeps the cards neutral by itself.
+  property real wallLuma: 0.15
+  property real wallPeak: 0.15
+  property real wallHue: 0
+  property real wallChroma: 0
+
+  // Everything the card's colour is made of lives in material.js, so
+  // test_widget_material.cjs can check the real formulas rather than a copy.
+  readonly property var wall: ({ luma: wallLuma, peak: wallPeak, hue: wallHue, chroma: wallChroma })
+  readonly property bool lightMaterial: Material.isLight(wall)
+  readonly property color pole: lightMaterial ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
+
+  function opaque(c) { return Qt.rgba(c.r, c.g, c.b, 1) }
+
+  readonly property color plate: opaque(Material.plate(wall))
+  readonly property real cardAlpha: Material.alphaFor(wall)
+  readonly property color cardColor: Qt.rgba(plate.r, plate.g, plate.b, cardAlpha)
+
+  // The hairline is that same tone one step further out, at 38% — a seam
+  // between card and wallpaper, not a frame drawn on top of it.
+  readonly property color hairlineTone: opaque(Material.hairline(wall))
+  readonly property color hairline: Qt.rgba(hairlineTone.r, hairlineTone.g, hairlineTone.b, 0.38)
+  readonly property real hairlineWidth: 1
+  readonly property real cardRadius: 20
+
+  // The colour the text actually sits on: the card tint laid over the
+  // wallpaper's own brightness. Contrast is measured against this, not against
+  // the theme background, because the card is translucent.
+  readonly property color wallGray: Qt.rgba(wallLuma, wallLuma, wallLuma, 1)
+  readonly property color backdrop: mix(wallGray, plate, cardAlpha)
+  // The same card over the strip's brightest region: text has to clear both,
+  // or a sunset behind the cards eats it.
+  readonly property color backdropPeak: mix(Qt.rgba(wallPeak, wallPeak, wallPeak, 1), plate, cardAlpha)
+  readonly property color trackColor: lightMaterial ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(1, 1, 1, 0.12)
+
+  function worstContrast(c) { return Math.min(root.contrastOf(c, root.backdrop), root.contrastOf(c, root.backdropPeak)) }
+  function midContrast(c) { return Math.min(root.contrastOf(c, root.backdrop), root.contrastOf(c, root.backdropPeak)) }
+
   function enforce(c, target) {
     for (let t = 0; t < 1; t += 0.05) {
       const out = root.mix(c, root.pole, t)
@@ -103,7 +123,10 @@ ShellRoot {
     return root.pole
   }
 
-  readonly property color rawText: root.contrastOf(rawFg, backdrop) >= root.contrastOf(surface, backdrop) ? rawFg : surface
+  // On a light material the theme's background colour is the readable one and
+  // its foreground is not, so take whichever of the pair stands out; enforce()
+  // only steps in when neither does.
+  readonly property color rawText: root.worstContrast(rawFg) >= root.worstContrast(surface) ? rawFg : surface
   readonly property color fg: enforce(rawText, 4.5)
   readonly property color fgDim: root.mix(backdrop, fg, 0.78)
 
@@ -118,20 +141,11 @@ ShellRoot {
     return root.fg
   }
 
-  readonly property color accent: readable(rawAccent, 4.0)
+  // The accent comes from the wallpaper as well; a near-grey one has no hue to
+  // give, and then the theme's own accent stands in.
+  readonly property color accent: readable(Material.hasHue(wall) ? opaque(Material.accent(wall)) : rawAccent, 4.0)
   readonly property color warm: readable(col("yellow", "#e0af68"), 3.6)
   readonly property color hot: readable(col("red", "#f7768e"), 3.6)
-  readonly property color cool: readable(col("cyan", "#449dab"), 2.6)
-  readonly property color violet: readable(col("magenta", "#ad8ee6"), 2.6)
-
-  // Card chrome: the theme background carries the glass, and the hairlines
-  // lighten on dark themes, darken on light ones. 0.85 is the density where
-  // the worst stock theme still clears 4.5:1 for body text over any wallpaper
-  // — below that, a light wallpaper washes a dark card out completely.
-  readonly property color cardColor: Qt.rgba(material.r, material.g, material.b, cardAlpha)
-  readonly property color hairline: lightMaterial ? Qt.rgba(0, 0, 0, 0.13) : Qt.rgba(1, 1, 1, 0.14)
-  readonly property color sheen: lightMaterial ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(1, 1, 1, 0.09)
-  readonly property color trackColor: lightMaterial ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(1, 1, 1, 0.12)
 
   // ---- agent limits --------------------------------------------------------
   // bin/yoga-ai-limits does the collecting: Claude Code's OAuth usage endpoint
@@ -177,24 +191,13 @@ ShellRoot {
   function limitTint(pct) {
     if (pct >= 85) return root.hot
     if (pct >= 66) return root.warm
-    return root.cool
+    return root.accent
   }
 
-  // ---- glass ---------------------------------------------------------------
-  // A layer surface cannot read what is behind it, but these cards sit on the
-  // background layer, so what is behind them is the wallpaper. The panel draws
-  // it into an off-screen texture at screen size and glass.frag samples it, so
-  // the refracted pixels line up with what Hyprland paints below.
-  property var glassSource: null
-  property real panelOriginX: 0
-  property real panelOriginY: 0
-  property real screenW: 1
-  property real screenH: 1
+  // ---- wallpaper -----------------------------------------------------------
   // The state entry is a symlink, so a file watcher on it does not fire when
-  // the wallpaper changes; poll the resolved path instead. The same call
-  // returns its brightness, so one process covers both.
-  property string wallpaperPath: ""
-  property real glassPhase: 0
+  // the wallpaper changes; poll it instead. One call returns everything the
+  // cards take from the wallpaper: brightness, hue and how chromatic it is.
 
   Process {
     id: wallProc
@@ -202,12 +205,13 @@ ShellRoot {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        const parts = String(text || "").trim().split(/\s+/)
-        if (parts.length < 2) return
-        const luma = Number(parts[parts.length - 1])
-        const path = parts.slice(0, -1).join(" ")
-        if (isFinite(luma)) root.wallLuma = luma
-        if (path && path !== root.wallpaperPath) root.wallpaperPath = path
+        try {
+          const probe = JSON.parse(String(text || ""))
+          if (isFinite(probe.luma)) root.wallLuma = probe.luma
+          if (isFinite(probe.peak)) root.wallPeak = probe.peak
+          if (isFinite(probe.hue)) root.wallHue = probe.hue
+          if (isFinite(probe.chroma)) root.wallChroma = probe.chroma
+        } catch (e) { /* keep the previous reading */ }
       }
     }
   }
@@ -218,15 +222,6 @@ ShellRoot {
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!wallProc.running) wallProc.running = true
-  }
-
-  // The sheen crosses the card and then rests: an idle animation would keep
-  // the GPU redrawing four card-sized shaders forever for no one to see.
-  SequentialAnimation {
-    running: true
-    loops: Animation.Infinite
-    NumberAnimation { target: root; property: "glassPhase"; from: 0; to: 1; duration: 5200; easing.type: Easing.InOutSine }
-    PauseAnimation { duration: 24000 }
   }
 
   function capitalize(text) { return text.length ? text[0].toUpperCase() + text.slice(1) : text }
@@ -462,47 +457,22 @@ ShellRoot {
   Component.onCompleted: { shellToml.reload(); themeFile.reload() }
 
   // ---- building blocks -----------------------------------------------------
-  component Card: Rectangle {
+  component Card: Item {
     id: card
     default property alias content: inner.data
     property int pad: root.px(1.6)
     implicitWidth: root.cardWidth
     implicitHeight: inner.implicitHeight + pad * 2
-    radius: 22
-    color: root.cardColor
-    border.width: 1
-    border.color: root.hairline
 
-    // A faint top highlight is what sells the glass; without it the card
-    // reads as a flat black box over a blurred wallpaper.
+    // Hyprland blurs this layer (hypr/yoga-widgets.lua), so the tint below sits
+    // on a blurred wallpaper rather than a sharp one.
     Rectangle {
       anchors.fill: parent
-      radius: parent.radius
-      gradient: Gradient {
-        GradientStop { position: 0.0; color: root.sheen }
-        GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.0) }
-      }
-    }
+      radius: root.cardRadius
+      color: root.cardColor
+      border.width: root.hairlineWidth
+      border.color: root.hairline
 
-    // Refracted wallpaper along the rim, over the tint but under the content.
-    ShaderEffect {
-      anchors.fill: parent
-      visible: root.glassSource !== null
-      blending: true
-      supportsAtlasTextures: false
-      fragmentShader: Qt.resolvedUrl("glass.frag.qsb")
-
-      property var src: root.glassSource
-      property vector2d size: Qt.vector2d(width, height)
-      property vector2d uvOffset: Qt.vector2d((root.panelOriginX + card.x) / root.screenW,
-                                              (root.panelOriginY + card.y) / root.screenH)
-      property vector2d uvScale: Qt.vector2d(width / root.screenW, height / root.screenH)
-      property real radius: card.radius
-      property real edge: root.px(2.4)
-      property real strength: root.px(2.2) * root.glassStrength
-      property real phase: root.glassPhase
-      property real sheen: (root.lightMaterial ? 0.14 : 0.22) * root.glassStrength
-      property real rainbow: (root.lightMaterial ? 0.05 : 0.09) * root.glassStrength
     }
 
     ColumnLayout {
@@ -581,38 +551,6 @@ ShellRoot {
 
       // Empty mask: every click falls through to the desktop below.
       mask: Region {}
-
-      // The wallpaper, drawn exactly as Omarchy's background plugin draws it
-      // (PreserveAspectCrop at screen size), captured into a texture the cards
-      // sample. hideSource keeps it off the screen itself.
-      Item {
-        id: wallHolder
-        width: panel.screen.width
-        height: panel.screen.height
-        Image {
-          id: wallImage
-          anchors.fill: parent
-          fillMode: Image.PreserveAspectCrop
-          cache: false
-          asynchronous: true
-          source: root.wallpaperPath ? "file://" + root.wallpaperPath : ""
-          onStatusChanged: if (status === Image.Ready) wallTexture.scheduleUpdate()
-        }
-      }
-
-      ShaderEffectSource {
-        id: wallTexture
-        sourceItem: wallHolder
-        hideSource: true
-        live: false
-        recursive: false
-      }
-
-      Binding { target: root; property: "glassSource"; value: wallTexture }
-      Binding { target: root; property: "screenW"; value: panel.screen.width }
-      Binding { target: root; property: "screenH"; value: panel.screen.height }
-      Binding { target: root; property: "panelOriginX"; value: panel.screen.width - panel.width - panel.margins.right }
-      Binding { target: root; property: "panelOriginY"; value: panel.margins.top }
 
       ColumnLayout {
         id: stack
@@ -817,7 +755,7 @@ ShellRoot {
             label: "RAM"
             value: root.ramUsedGiB.toFixed(1) + " / " + root.ramTotalGiB.toFixed(1) + " ГиБ"
             fraction: root.ramFraction
-            tint: root.violet
+            tint: root.accent
           }
           Meter {
             // Iris Xe has no load counter without perf privileges; the render
@@ -825,7 +763,7 @@ ShellRoot {
             label: "GPU"
             value: root.gpuMhz > 0 ? root.gpuMhz + " МГц" : "простой"
             fraction: root.gpuMhz / root.gpuMaxMhz
-            tint: root.cool
+            tint: root.accent
           }
 
           RowLayout {

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Resolve the current wallpaper and measure how bright it is where the widgets sit.
+"""Resolve the current wallpaper and describe it where the desktop widgets sit.
 
-Prints "<real path> <luma>" for the desktop widgets: the path lets them notice
-a wallpaper change (the state entry is a symlink, so watching it is unreliable),
-and the brightness lets them pick a card opacity that stays readable without
-being denser than it has to be.
+Prints one JSON line: {"path", "luma", "peak", "hue", "chroma"} for the right-hand strip
+the cards cover. The path lets them notice a wallpaper change (the state entry
+is a symlink, so watching that file is unreliable), and the rest lets the cards
+take their colour from the wallpaper instead of from the theme.
 
-Luma is the 85th percentile of the right-hand strip, not the mean: a mostly
-dark wallpaper with a bright sunset behind the cards would average out to dark
-and leave the text sitting on a glare.
+Luma is the median of that strip and peak its 85th percentile: the median decides
+whether the cards sit in a dark or a light place, the peak how bright the worst
+glare behind them gets. Hue is the circular mean over an 8-colour quantisation, each cluster
+weighted by its share and its own saturation, so a large grey area does not drag
+the hue of a small vivid one; chroma is that same weighted saturation, near zero
+on a black or white wallpaper, which is what tells the cards to stay neutral.
 """
+import colorsys
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -26,17 +31,43 @@ def measure(path):
         # draft() lets libjpeg decode a downscaled image directly - the source
         # files are 6000px wide and this runs every few seconds.
         image.draft('RGB',(640,400))
-        image=image.convert('L')
-        width,height=image.size
-        strip=image.crop((int(width*(1-STRIP)),0,width,height))
-        values=sorted(strip.tobytes())
-        if not values: return ImageStat.Stat(strip).mean[0]/255
-        return values[int(len(values)*0.85)]/255
+        rgb=image.convert('RGB')
+        width,height=rgb.size
+        strip=rgb.crop((int(width*(1-STRIP)),0,width,height))
+        grey=strip.convert('L')
+        values=sorted(grey.tobytes())
+        # Two readings, because they answer different questions: the median says
+        # whether the strip is a dark or a light place (which decides whether the
+        # card is a dark or a light plate), the 85th percentile says how bright
+        # its brightest region is (which decides how much contrast the text needs).
+        # A dark wallpaper with a sunset behind the cards has a low median and a
+        # high peak, and reading only the peak turned it into a milky plate.
+        luma=values[len(values)//2]/255 if values else ImageStat.Stat(grey).mean[0]/255
+        peak=values[int(len(values)*0.85)]/255 if values else luma
+        hue,chroma=dominant(strip.resize((80,200)))
+    return {'luma':round(luma,4),'peak':round(peak,4),'hue':round(hue,1),'chroma':round(chroma,4)}
+
+def dominant(strip):
+    quantised=strip.quantize(colors=8,method=Image.FASTOCTREE)
+    palette=quantised.getpalette()
+    counts=quantised.getcolors() or []
+    total=sum(count for count,_ in counts) or 1
+    x=y=weight=0.0
+    for count,index in counts:
+        r,g,b=palette[index*3:index*3+3]
+        hue,_,sat=colorsys.rgb_to_hls(r/255,g/255,b/255)
+        # Weight by share and saturation both: a grey cluster carries no hue.
+        w=(count/total)*sat
+        x+=w*math.cos(hue*2*math.pi); y+=w*math.sin(hue*2*math.pi); weight+=w
+    if weight<=0: return 0.0,0.0
+    # hypot is the weight that actually agreed on a direction: a wallpaper
+    # split between two opposite hues reads as less chromatic than either.
+    return math.degrees(math.atan2(y,x))%360,min(1.0,math.hypot(x,y))
 
 def main():
     try: target=LINK.resolve(strict=True)
     except OSError:
-        print('', 0.15); return
+        print(json.dumps({'path':'','luma':0.15,'peak':0.15,'hue':0.0,'chroma':0.0})); return
     key=str(target)
     try: stamp=target.stat().st_mtime
     except OSError: stamp=0
@@ -45,13 +76,15 @@ def main():
         try: cached=json.loads(CACHE.read_text())
         except (OSError,ValueError): cached={}
     if cached.get('path')==key and cached.get('stamp')==stamp:
-        print(key, round(float(cached.get('luma',0.15)),4)); return
-    try: luma=measure(target)
+        print(json.dumps({'path':key,'luma':cached.get('luma',0.15),'peak':cached.get('peak',0.15),
+                          'hue':cached.get('hue',0.0),'chroma':cached.get('chroma',0.0)})); return
+    try: reading=measure(target)
     except Exception as error:
         print(f'yoga-wallpaper-luma: {error}',file=sys.stderr)
-        luma=float(cached.get('luma',0.15))
+        reading={'luma':cached.get('luma',0.15),'peak':cached.get('peak',0.15),
+                 'hue':cached.get('hue',0.0),'chroma':cached.get('chroma',0.0)}
     CACHE.parent.mkdir(parents=True,exist_ok=True)
-    CACHE.write_text(json.dumps({'path':key,'stamp':stamp,'luma':luma}))
-    print(key, round(luma,4))
+    CACHE.write_text(json.dumps({'path':key,'stamp':stamp,**reading}))
+    print(json.dumps({'path':key,**reading}))
 
 if __name__=='__main__': main()

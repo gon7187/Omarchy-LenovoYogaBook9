@@ -41,9 +41,8 @@ def main():
         SOURCE.parent/'bin/yoga-ai-limits':HOME/'.local/bin/yoga-ai-limits',
         SOURCE.parent/'bin/yoga-wallpaper-luma':HOME/'.local/bin/yoga-wallpaper-luma',
         SOURCE.parent/'config/quickshell/yoga-widgets/shell.qml':HOME/'.config/quickshell/yoga-widgets/shell.qml',
-        # glass.frag.qsb is the baked shader; the .frag beside it is its source.
-        # Shipping the baked file keeps qt6-shadertools off the runtime deps.
-        SOURCE.parent/'config/quickshell/yoga-widgets/glass.frag.qsb':HOME/'.config/quickshell/yoga-widgets/glass.frag.qsb',
+        # The card material, shared by the widgets and test_widget_material.cjs.
+        SOURCE.parent/'config/quickshell/yoga-widgets/material.js':HOME/'.config/quickshell/yoga-widgets/material.js',
         SOURCE.parent/'config/omarchy/shell.toml':HOME/'.config/omarchy/shell.toml',
         SOURCE.parent/'config/foot/foot.ini':HOME/'.config/foot/foot.ini',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')
