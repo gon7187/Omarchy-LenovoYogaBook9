@@ -66,35 +66,49 @@ ShellRoot {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
   }
 
-  // The card is translucent, so its effective background depends on the
-  // wallpaper. These two are the extremes it can sit on; a colour that clears
-  // its target against both is legible over any wallpaper.
-  readonly property real cardAlpha: 0.78
-  readonly property color cardOnDark: Qt.rgba(surface.r * cardAlpha, surface.g * cardAlpha, surface.b * cardAlpha, 1)
-  readonly property color cardOnLight: Qt.rgba(surface.r * cardAlpha + (1 - cardAlpha), surface.g * cardAlpha + (1 - cardAlpha), surface.b * cardAlpha + (1 - cardAlpha), 1)
-  // Body text is held to the true worst case (a white wallpaper). Accents and
-  // bars are measured against a mid-bright wallpaper instead: demanding the
-  // white-wallpaper case for them bleached cyan and magenta almost to the text
-  // colour, and a bar is decoration, not something you have to read.
-  readonly property color cardOnMid: Qt.rgba(surface.r * cardAlpha + (1 - cardAlpha) * 0.55,
-                                             surface.g * cardAlpha + (1 - cardAlpha) * 0.55,
-                                             surface.b * cardAlpha + (1 - cardAlpha) * 0.55, 1)
-  function worstContrast(c) { return Math.min(root.contrastOf(c, root.cardOnDark), root.contrastOf(c, root.cardOnLight)) }
-  function midContrast(c) { return Math.min(root.contrastOf(c, root.cardOnDark), root.contrastOf(c, root.cardOnMid)) }
+  // The card is translucent, so what sits behind the text is the wallpaper
+  // showing through it. bin/yoga-wallpaper-luma measures how bright the
+  // wallpaper is where the cards are (85th percentile, so a bright patch is
+  // not averaged away) and the card is then made only as opaque as readability
+  // needs: opacity rises until white (on dark themes) or black (on light ones)
+  // clears 5:1 against what shows through, leaving enforce() room to reach
+  // 4.5:1. On a dark wallpaper with a dark theme that bottoms out at 0.35 and
+  // the cards stay glass; a light theme over a dark wallpaper has to go denser.
+  property real wallLuma: 0.15
+  readonly property color pole: lightMode ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
 
-  function mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1) }
+  function blendOver(alpha) {
+    return Qt.rgba(surface.r * alpha + wallLuma * (1 - alpha),
+                   surface.g * alpha + wallLuma * (1 - alpha),
+                   surface.b * alpha + wallLuma * (1 - alpha), 1)
+  }
+
+  readonly property real cardAlpha: {
+    for (let a = 0.35; a <= 0.9001; a += 0.05)
+      if (root.contrastOf(root.pole, root.blendOver(a)) >= 5.0) return a
+    return 0.9
+  }
+  readonly property color backdrop: blendOver(cardAlpha)
+  function worstContrast(c) { return root.contrastOf(c, root.backdrop) }
+  function midContrast(c) { return root.contrastOf(c, root.backdrop) }
+
+  // Guarded: during the first binding pass one side can still be undefined
+  // (fg is derived from the same palette these helpers feed).
+  function mix(a, b, t) {
+    if (!a || !b) return a || b || root.pole
+    return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
+  }
 
   // A theme's foreground is picked against its own opaque background; on this
   // translucent card it can fall under 4.5:1 (everforest, gruvbox, rose-pine).
   // Push it away from the surface — white on dark themes, black on light ones
   // — until it clears, which keeps the hue and only lifts the contrast.
   function enforce(c, target) {
-    const pole = root.lightMode ? Qt.rgba(0, 0, 0, 1) : Qt.rgba(1, 1, 1, 1)
     for (let t = 0; t < 1; t += 0.05) {
-      const out = root.mix(c, pole, t)
+      const out = root.mix(c, root.pole, t)
       if (root.worstContrast(out) >= target) return out
     }
-    return pole
+    return root.pole
   }
 
   readonly property color fg: enforce(rawFg, 4.5)
@@ -186,9 +200,35 @@ ShellRoot {
   property real panelOriginY: 0
   property real screenW: 1
   property real screenH: 1
-  readonly property string wallpaperPath: Quickshell.env("HOME") + "/.local/state/omarchy/current/background"
-  property int wallpaperRevision: 0
+  // The state entry is a symlink, so a file watcher on it does not fire when
+  // the wallpaper changes; poll the resolved path instead. The same call
+  // returns its brightness, so one process covers both.
+  property string wallpaperPath: ""
   property real glassPhase: 0
+
+  Process {
+    id: wallProc
+    command: [Quickshell.env("HOME") + "/.local/bin/yoga-wallpaper-luma"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        const parts = String(text || "").trim().split(/\s+/)
+        if (parts.length < 2) return
+        const luma = Number(parts[parts.length - 1])
+        const path = parts.slice(0, -1).join(" ")
+        if (isFinite(luma)) root.wallLuma = luma
+        if (path && path !== root.wallpaperPath) root.wallpaperPath = path
+      }
+    }
+  }
+
+  Timer {
+    interval: 15000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!wallProc.running) wallProc.running = true
+  }
 
   // The sheen crosses the card and then rests: an idle animation would keep
   // the GPU redrawing four card-sized shaders forever for no one to see.
@@ -202,7 +242,6 @@ ShellRoot {
   function capitalize(text) { return text.length ? text[0].toUpperCase() + text.slice(1) : text }
 
   function applyPalette() {
-    root.wallpaperRevision++
     const out = {}
     for (const line of String(themeFile.text() || "").split("\n")) {
       const m = line.match(/^\s*(\w+)\s*=\s*"([^"]+)"/)
@@ -218,7 +257,7 @@ ShellRoot {
     printErrors: false
     watchChanges: true
     onFileChanged: reload()
-    onLoaded: root.applyPalette()
+    onLoaded: { root.applyPalette(); if (!wallProc.running) wallProc.running = true }
   }
 
   // ---- clock ---------------------------------------------------------------
@@ -566,7 +605,7 @@ ShellRoot {
           fillMode: Image.PreserveAspectCrop
           cache: false
           asynchronous: true
-          source: "file://" + root.wallpaperPath + "?rev=" + root.wallpaperRevision
+          source: root.wallpaperPath ? "file://" + root.wallpaperPath : ""
           onStatusChanged: if (status === Image.Ready) wallTexture.scheduleUpdate()
         }
       }

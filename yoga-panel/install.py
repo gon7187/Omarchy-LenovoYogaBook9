@@ -39,6 +39,7 @@ def main():
         SOURCE.parent/'config/systemd/user/yoga-widgets.service':HOME/'.config/systemd/user/yoga-widgets.service',
         SOURCE.parent/'config/hypr/yoga-widgets.lua':HOME/'.config/hypr/yoga-widgets.lua',
         SOURCE.parent/'bin/yoga-ai-limits':HOME/'.local/bin/yoga-ai-limits',
+        SOURCE.parent/'bin/yoga-wallpaper-luma':HOME/'.local/bin/yoga-wallpaper-luma',
         SOURCE.parent/'config/quickshell/yoga-widgets/shell.qml':HOME/'.config/quickshell/yoga-widgets/shell.qml',
         # glass.frag.qsb is the baked shader; the .frag beside it is its source.
         # Shipping the baked file keeps qt6-shadertools off the runtime deps.

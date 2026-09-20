@@ -70,7 +70,7 @@ void main() {
     float a = atan(n.y, n.x);
     vec3 tint = 0.5 + 0.5 * cos(vec3(0.0, 2.094, 4.188) + a * 1.7 + phase * 6.283);
     col += rainbow * lens * (tint - 0.5);
-    col += rim * 0.30;
+    col += rim * 0.24;
 
     // Travelling sheen: a soft diagonal band crossing the card.
     float band = (qt_TexCoord0.x + qt_TexCoord0.y) * 0.5;
@@ -81,6 +81,6 @@ void main() {
     // The lens is only visible near the rim; the middle stays clear so the
     // Hyprland blur below shows through.
     float glow = sheen * smoothstep(0.22, 0.0, dist);
-    float alpha = inside * clamp(lens * 0.42 + rim * 0.22 + glow, 0.0, 1.0);
+    float alpha = inside * clamp(lens * 0.34 + rim * 0.18 + glow, 0.0, 1.0);
     fragColor = vec4(col * alpha, alpha) * qt_Opacity;
 }

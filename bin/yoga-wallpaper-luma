@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Resolve the current wallpaper and measure how bright it is where the widgets sit.
+
+Prints "<real path> <luma>" for the desktop widgets: the path lets them notice
+a wallpaper change (the state entry is a symlink, so watching it is unreliable),
+and the brightness lets them pick a card opacity that stays readable without
+being denser than it has to be.
+
+Luma is the 85th percentile of the right-hand strip, not the mean: a mostly
+dark wallpaper with a bright sunset behind the cards would average out to dark
+and leave the text sitting on a glare.
+"""
+import json
+import sys
+from pathlib import Path
+
+from PIL import Image, ImageStat
+
+HOME=Path.home()
+LINK=HOME/'.local/state/omarchy/current/background'
+CACHE=HOME/'.cache/yoga-widgets/wallpaper.json'
+STRIP=0.28   # rightmost fraction of the screen the cards cover
+
+def measure(path):
+    with Image.open(path) as image:
+        # draft() lets libjpeg decode a downscaled image directly - the source
+        # files are 6000px wide and this runs every few seconds.
+        image.draft('RGB',(640,400))
+        image=image.convert('L')
+        width,height=image.size
+        strip=image.crop((int(width*(1-STRIP)),0,width,height))
+        values=sorted(strip.tobytes())
+        if not values: return ImageStat.Stat(strip).mean[0]/255
+        return values[int(len(values)*0.85)]/255
+
+def main():
+    try: target=LINK.resolve(strict=True)
+    except OSError:
+        print('', 0.15); return
+    key=str(target)
+    try: stamp=target.stat().st_mtime
+    except OSError: stamp=0
+    cached={}
+    if CACHE.exists():
+        try: cached=json.loads(CACHE.read_text())
+        except (OSError,ValueError): cached={}
+    if cached.get('path')==key and cached.get('stamp')==stamp:
+        print(key, round(float(cached.get('luma',0.15)),4)); return
+    try: luma=measure(target)
+    except Exception as error:
+        print(f'yoga-wallpaper-luma: {error}',file=sys.stderr)
+        luma=float(cached.get('luma',0.15))
+    CACHE.parent.mkdir(parents=True,exist_ok=True)
+    CACHE.write_text(json.dumps({'path':key,'stamp':stamp,'luma':luma}))
+    print(key, round(luma,4))
+
+if __name__=='__main__': main()
