@@ -648,7 +648,11 @@ ShellRoot {
           }
 
           RowLayout {
+            // fillWidth is not enough for a layout nested in the card: it kept
+            // its own implicit width (the seven columns bunched on the left,
+            // a third of the card empty). preferredWidth pins it to the card.
             Layout.fillWidth: true
+            Layout.preferredWidth: parent ? parent.width : 0
             spacing: root.px(0.8)
             visible: root.forecast.length > 0
             Repeater {
@@ -657,7 +661,9 @@ ShellRoot {
                 id: fc
                 required property var modelData
                 required property int index
+                // Equal shares of that width, one per day.
                 Layout.fillWidth: true
+                Layout.preferredWidth: 0
                 spacing: 2
                 Label {
                   Layout.alignment: Qt.AlignHCenter
