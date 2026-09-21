@@ -30,13 +30,21 @@ ShellRoot {
 
   // ---- type ----------------------------------------------------------------
   property int fontBase: 12
-  function px(mult) { return Math.max(1, Math.round(root.fontBase * mult)) }
+  // The widgets follow the Omarchy font size, but the screen does not grow
+  // with it: at base-size 11 the stack outgrew the panel by 35px and the panel
+  // cut the limits card in half, and a six-week month with four limit rows is
+  // ~100px worse. `shrink` steps the widgets' own base down until the stack
+  // fits. It only ever grows, and starts over when the font size changes, so it
+  // cannot flip between two sizes.
+  property int shrink: 0
+  readonly property int widgetBase: Math.max(8, fontBase - shrink)
+  function px(mult) { return Math.max(1, Math.round(root.widgetBase * mult)) }
 
   // Parsing hangs off `loaded`, not off `reload()`: the reload is asynchronous,
   // so reading text() straight after it returns the previous contents.
   function applyFontBase() {
     const m = String(shellToml.text() || "").match(/\[font\][^[]*?base-size\s*=\s*(\d+)/)
-    if (m) root.fontBase = Number(m[1])
+    if (m && Number(m[1]) !== root.fontBase) { root.fontBase = Number(m[1]); root.shrink = 0 }
   }
 
   FileView {
@@ -547,13 +555,25 @@ ShellRoot {
       anchors { top: true; right: true }
       margins { top: root.px(4.0); right: root.px(2.6) }
       implicitWidth: root.cardWidth
-      implicitHeight: Math.min(stack.implicitHeight, screen.height - margins.top - root.px(1.2))
+      readonly property int room: screen.height - margins.top - root.px(1.2)
+      implicitHeight: Math.min(stack.implicitHeight, room)
 
       // Empty mask: every click falls through to the desktop below.
       mask: Region {}
 
+      // Judged once the layout settles: a size step re-lays the cards one at a
+      // time, and the half-updated sum in between read as an overflow (854px at
+      // base 10 that settles to ~800) and stepped down a size too far. Only the
+      // visible panel votes — Variants builds one per screen.
+      Timer {
+        id: fitCheck
+        interval: 150
+        onTriggered: if (panel.visible && stack.implicitHeight > panel.room && root.widgetBase > 8) root.shrink++
+      }
+
       ColumnLayout {
         id: stack
+        onImplicitHeightChanged: fitCheck.restart()
         anchors.fill: parent
         spacing: root.px(1.2)
 
