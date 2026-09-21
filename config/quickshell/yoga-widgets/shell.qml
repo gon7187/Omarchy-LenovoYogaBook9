@@ -1,8 +1,8 @@
 // Desktop widgets for the Yoga Book 9: clock, weather, calendar and machine
 // stats, stacked down the right edge of the upper panel (eDP-1).
 //
-// The surface sits on the background layer with an empty input mask, so it
-// draws over the wallpaper, below every window, and never steals a click.
+// The surface sits on the bottom layer with an empty input mask, so it draws
+// over the wallpaper, below every window, and never steals a click.
 // Hyprland blurs it through the yoga-widgets layer rule (hypr/yoga-widgets.lua).
 //
 // Type and colour follow the Omarchy shell: the family is the fontconfig
@@ -547,7 +547,13 @@ ShellRoot {
       screen: modelData
       visible: modelData.name === root.monitorName
 
-      WlrLayershell.layer: WlrLayer.Background
+      // Bottom, not Background: Omarchy draws the wallpaper as its own
+      // background-level surface, and within one level the surface created
+      // last is on top. After a reboot the shell created its wallpaper after
+      // the widgets and covered them completely; a theme change or
+      // omarchy-restart-shell did the same. Bottom is above every background
+      // surface and still below every window, whatever starts first.
+      WlrLayershell.layer: WlrLayer.Bottom
       WlrLayershell.namespace: "yoga-widgets"
       exclusionMode: ExclusionMode.Ignore
       color: "transparent"

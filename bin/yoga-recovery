@@ -24,6 +24,7 @@ PATTERNS=(
     '.config/vivaldi-stable.conf', '.config/mimeapps.list',
     '.config/mise/config.toml',
     '.config/omarchy/hooks/post-update.d/*yoga*',
+    '.config/quickshell/yoga-widgets/*',
     '.local/share/applications/*yoga*.desktop',
     '.local/share/yoga-panel/**/*',
 )
@@ -88,7 +89,7 @@ def restore(target):
         os.replace(temporary,destination)
     subprocess.run(['systemctl','--user','daemon-reload'],check=True)
     units=json.loads((target/'enabled-units.json').read_text())
-    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','voxtype.service'}
+    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-widgets.service','voxtype.service'}
     units=[unit for unit in units if unit in allowed]
     if units:
         subprocess.run(['systemctl','--user','enable',*units],check=True)
@@ -98,8 +99,32 @@ def restore(target):
     if errors.stdout.strip():raise RuntimeError('Hyprland config errors after recovery: '+errors.stdout.strip())
     print('User files restored. Original pre-recovery files remain in the snapshot above.')
 
-def check():
+def hyprctl_json(*args):
+    result=subprocess.run(['hyprctl',*args,'-j'],capture_output=True,text=True,check=False)
+    try:return json.loads(result.stdout or '{}') if not result.returncode else {}
+    except ValueError:return {}
+
+def widget_failures():
+    # `yoga-widgets off` disables the unit, so a disabled one is a choice, not a fault.
+    if subprocess.run(['systemctl','--user','is-enabled','yoga-widgets.service'],capture_output=True,text=True,check=False).returncode:return []
     failures=[]
+    if subprocess.run(['systemctl','--user','is-active','yoga-widgets.service'],capture_output=True,text=True,check=False).returncode:
+        failures.append('yoga-widgets.service is enabled but not running')
+    for name in ('yoga-wallpaper-luma','yoga-ai-limits'):
+        if not os.access(HOME/'.local/bin'/name,os.X_OK):failures.append('Desktop widgets lost their helper: '+name)
+    # The wallpaper is a background-level surface and, within one level, whichever
+    # is created last is drawn on top: widgets on that level vanish after a reboot.
+    levels=hyprctl_json('layers').get('eDP-1',{}).get('levels',{})
+    placed=[int(level) for level,layers in levels.items() for layer in layers if layer.get('namespace')=='yoga-widgets']
+    if not placed:failures.append('Desktop widgets have no surface on eDP-1')
+    elif min(placed)<1:failures.append('Desktop widgets sit on the background layer, under the wallpaper')
+    # Omarchy ships blur off; without it the translucent cards are a film over a sharp wallpaper.
+    blur=hyprctl_json('getoption','decoration:blur:enabled')
+    if not blur.get('bool',blur.get('int')):failures.append('Hyprland blur is off: the desktop widgets need it (config/hypr/looknfeel.lua)')
+    return failures
+
+def check():
+    failures=widget_failures()
     for unit in ('yoga-panel.service','yoga-brightness-sync.service','voxtype.service'):
         for state in ('is-enabled','is-active'):
             result=subprocess.run(['systemctl','--user',state,unit],capture_output=True,text=True)
@@ -120,7 +145,7 @@ def check():
         print('\n'.join(failures),file=sys.stderr)
         print('After a system update, log out and back in so the panel can rebuild against the new Hyprland. Backups: '+str(BACKUPS),file=sys.stderr)
         return 1
-    print('OK: panel, brightness sync, dictation, input libraries, touch plugin and lock-screen keyboard')
+    print('OK: panel, brightness sync, dictation, input libraries, touch plugin, lock-screen keyboard and desktop widgets')
     return 0
 
 def main():

@@ -50,6 +50,33 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue((before/'native-build/yoga-keyboard').exists())
         self.assertFalse((recovery.HOME/'.local/share/yoga-panel/build').exists())
         self.assertIn(['systemctl','--user','restart','yoga-panel.service'],self.commands)
+    def test_snapshot_carries_desktop_widgets(self):
+        widgets=recovery.HOME/'.config/quickshell/yoga-widgets';widgets.mkdir(parents=True)
+        (widgets/'shell.qml').write_text('// widgets');(widgets/'material.js').write_text('// material')
+        manifest=recovery.validate(recovery.snapshot())
+        self.assertIn('.config/quickshell/yoga-widgets/shell.qml',manifest)
+        self.assertIn('.config/quickshell/yoga-widgets/material.js',manifest)
+    def widgets(self,enabled=True,active=True,level='1',blur=True):
+        bin_dir=recovery.HOME/'.local/bin';bin_dir.mkdir(parents=True,exist_ok=True)
+        for name in ('yoga-wallpaper-luma','yoga-ai-limits'):
+            helper=bin_dir/name;helper.write_text('#!/bin/sh');helper.chmod(0o755)
+        layers={'eDP-1':{'levels':{'0':[{'namespace':'omarchy-background'}],level:[{'namespace':'yoga-widgets'}]}}}
+        def run(args,**kwargs):
+            code=0;out=''
+            if args[-2:]==['is-enabled','yoga-widgets.service']:code=0 if enabled else 1
+            elif args[-2:]==['is-active','yoga-widgets.service']:code=0 if active else 3
+            elif args[:2]==['hyprctl','layers']:out=json.dumps(layers)
+            elif args[:2]==['hyprctl','getoption']:out=json.dumps({'option':'decoration:blur:enabled','bool':blur})
+            return SimpleNamespace(returncode=code,stdout=out,stderr='')
+        with patch.object(recovery.subprocess,'run',side_effect=run):return recovery.widget_failures()
+    def test_widget_check(self):
+        self.assertEqual(self.widgets(),[])
+        # Switched off with `yoga-widgets off`: a choice, not a fault.
+        self.assertEqual(self.widgets(enabled=False,active=False,level='0',blur=False),[])
+        self.assertTrue(any('not running' in f for f in self.widgets(active=False)))
+        # Background level: the wallpaper, created after them on boot, covers them.
+        self.assertTrue(any('under the wallpaper' in f for f in self.widgets(level='0')))
+        self.assertTrue(any('blur is off' in f for f in self.widgets(blur=False)))
     def test_traversal_rejected_before_mutation(self):
         target=recovery.snapshot()
         (target/'manifest.json').write_text(json.dumps({'../outside':'x'}))
