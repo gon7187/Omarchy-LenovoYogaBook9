@@ -47,6 +47,7 @@ def main():
         SOURCE.parent/'config/quickshell/yoga-widgets/shell.qml':HOME/'.config/quickshell/yoga-widgets/shell.qml',
         # The card material, shared by the widgets and test_widget_material.cjs.
         SOURCE.parent/'config/quickshell/yoga-widgets/material.js':HOME/'.config/quickshell/yoga-widgets/material.js',
+        SOURCE.parent/'config/quickshell/yoga-widgets/visibility.js':HOME/'.config/quickshell/yoga-widgets/visibility.js',
         SOURCE.parent/'config/omarchy/shell.toml':HOME/'.config/omarchy/shell.toml',
         SOURCE.parent/'config/foot/foot.ini':HOME/'.config/foot/foot.ini',
         **{path:HOME/'.config/omarchy/plugins'/path.relative_to(SOURCE.parent/'config/omarchy/plugins')

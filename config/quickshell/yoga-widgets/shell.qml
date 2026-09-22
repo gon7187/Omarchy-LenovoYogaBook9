@@ -15,9 +15,11 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import "material.js" as Material
+import "visibility.js" as Visibility
 
 ShellRoot {
   id: root
@@ -552,7 +554,32 @@ ShellRoot {
       id: panel
       required property var modelData
       screen: modelData
-      visible: modelData.name === root.monitorName
+      readonly property int topMargin: root.px(4.0)
+      readonly property int rightMargin: root.px(2.6)
+      property bool covered: true
+      visible: modelData.name === root.monitorName && !covered
+
+      // Hyprland's events omit geometry. Refresh its in-process snapshot so
+      // dragging or resizing a window updates the whole stack.
+      Timer {
+        interval: 750; running: panel.modelData.name === root.monitorName
+        repeat: true; triggeredOnStart: true
+        onTriggered: {
+          const monitor = Hyprland.monitors.values.find(m => m.name === panel.modelData.name)
+          if (monitor && monitor.activeWorkspace) {
+            const data = monitor.lastIpcObject
+            const special = data && data.specialWorkspace ? data.specialWorkspace.id : 0
+            panel.covered = Visibility.covers(
+              Hyprland.toplevels.values.map(w => w.lastIpcObject), monitor.id,
+              monitor.activeWorkspace.id, special,
+              { x: monitor.x + panel.screen.width - panel.rightMargin - root.cardWidth,
+                y: monitor.y + panel.topMargin, width: root.cardWidth,
+                height: Math.min(stack.implicitHeight, panel.room) })
+          }
+          Hyprland.refreshToplevels()
+          Hyprland.refreshMonitors()
+        }
+      }
 
       // Bottom, not Background: Omarchy draws the wallpaper as its own
       // background-level surface, and within one level the surface created
@@ -566,7 +593,7 @@ ShellRoot {
       color: "transparent"
 
       anchors { top: true; right: true }
-      margins { top: root.px(4.0); right: root.px(2.6) }
+      margins { top: panel.topMargin; right: panel.rightMargin }
       implicitWidth: root.cardWidth
       readonly property int room: screen.height - margins.top - root.px(1.2)
       implicitHeight: Math.min(stack.implicitHeight, room)
@@ -583,6 +610,7 @@ ShellRoot {
         interval: 150
         onTriggered: if (panel.visible && stack.implicitHeight > panel.room && root.widgetBase > 8) root.shrink++
       }
+      onVisibleChanged: if (visible) fitCheck.restart()
 
       ColumnLayout {
         id: stack
