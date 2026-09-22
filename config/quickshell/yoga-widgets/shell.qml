@@ -255,7 +255,12 @@ ShellRoot {
 
   // ---- clock ---------------------------------------------------------------
   property date now: new Date()
-  Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
+  // Nothing shows seconds, and every assignment to now re-evaluates the calendar
+  // grid and repaints the layer: only publish a new minute.
+  Timer {
+    interval: 1000; running: true; repeat: true
+    onTriggered: { const d = new Date(); if (d.getMinutes() !== root.now.getMinutes() || d.getDate() !== root.now.getDate()) root.now = d }
+  }
 
   // ---- machine stats -------------------------------------------------------
   // Same sources as gon7187.sysstats: /proc for load and memory, hwmon for
@@ -364,7 +369,9 @@ ShellRoot {
   FileView { id: fanFile; path: "/run/yoga-fan"; blockLoading: true; printErrors: false }
   FileView { id: gpuFile; path: root.gpuActPath; blockLoading: true; printErrors: false }
 
-  Timer { interval: 2000; running: true; repeat: true; onTriggered: root.refreshStats() }
+  // Each refresh forks cat and animates every meter for 450 ms; at 2 s that kept
+  // Hyprland compositing almost continuously (~1.5 W on battery).
+  Timer { interval: 5000; running: true; repeat: true; onTriggered: root.refreshStats() }
 
   // ---- weather -------------------------------------------------------------
   // Open-Meteo: no key, answers in a fraction of a second. (wttr.in, which the
