@@ -496,6 +496,15 @@ Fold towards tablet: the number must **rise**.
 
 If it falls and clamps at 0 instead, the two halves are the other way round on your unit and tablet mode will never trigger; swap the order returned by `find_gyros()`.
 
+On this unit the instance order is the right way round. Two folds, traced once a second:
+
+```
+120 ... 185 280 338 360 360 ... 338 213 126 118 ...      fold, then unfold
+ 94 ... 180 288 336 360 360 ... 356 326 203 176 117      and again
+```
+
+It started at the 120° guess and came back to 119°, so the drift really is about a degree per fold, and the 360° end stop does the rest.
+
 **Starting up already folded.** The angle begins at the 120° guess, so a machine booted or resumed in tablet already will not be detected as one until it is unfolded and refolded past the threshold. There is no way around it: nothing reports the absolute angle.
 
 `yoga-autorotate` then picks tablet at ≥250° (leaving below 220°) unless the machine is upside down — tent sits near 305°, and with the start only guessed the hinge cannot tell tent from an inverted tablet, so upside down stays present. Tablet in or out is applied after one reading rather than two, since the hinge already confirms the fold.
