@@ -208,7 +208,18 @@ So the workaround below is not a stopgap awaiting something better — it is the
 > Node 0x03 [Audio Output]    Converter: stream=1, channel=0   <- tweeters
 > ```
 >
-> First reported in PR #14, and confirmed here. What is **not** reconciled yet is the mute test above, which gave silence from the woofer pin alone. It was run before this machine's amp calibration CRC was repaired on 2026-08-25 (see [Speaker amp calibration fails](#speaker-amp-calibration-fails); PR #14 proposes the repair as a script), which may or may not account for it. Until that is settled, treat the root-cause analysis above as unproven on SOF, and do not install `51-yoga-bass-speakers.conf` there. It stays in the repo for machines on the legacy `snd_hda_intel` driver, where it has not been tested either.
+> First reported in PR #14, and confirmed here.
+>
+> **The mute test does not reproduce (2026-09-23).** Re-run on SOF with the calibration applied, playing a tone of 60 Hz and 2500 Hz mixed at equal level, the result is the opposite of the one above:
+>
+> | mixer state | what plays |
+> |---|---|
+> | `numid=7 off`, `numid=9 on` — woofer pin `0x14` alone | full range, both tones, no drop in level |
+> | `numid=7 on`, `numid=9 off` — tweeter pin `0x17` alone | audibly quieter, the 60 Hz half largely gone |
+>
+> The first row is exactly the test above, and it gives **full sound rather than silence**. So `0x14` is fed, and the premise of the root-cause section — that a stereo stream reaches one DAC pair and the woofers receive nothing — does not hold on this driver. It is consistent with both converters carrying `stream=1` at `Amp-Out vals: [0x57 0x57]`. The second row is what a tweeter alone should sound like on a tone that is half bass.
+>
+> The original silent result was recorded before the amp calibration CRC was repaired on this machine (see [Speaker amp calibration fails](#speaker-amp-calibration-fails)); uncalibrated amps are the most likely explanation, but that cannot be proven now without breaking the calibration again. Either way, treat the root-cause analysis above as **disproven on SOF**, and do not install `51-yoga-bass-speakers.conf` there. It stays in the repo for machines on the legacy `snd_hda_intel` driver, where it has not been tested either.
 
 ### Fix (legacy `snd_hda_intel` only — not needed on SOF)
 
