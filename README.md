@@ -622,6 +622,12 @@ systemctl --user restart pipewire pipewire-pulse wireplumber
 install -Dm755 bin/yoga-amp-calib ~/.local/bin/yoga-amp-calib
 install -Dm755 bin/yoga-speaker-test ~/.local/bin/yoga-speaker-test
 yoga-amp-calib fix
+
+# ...and keep the speaker PCM open, or the amps drop that calibration on the
+# first close/open cycle.
+install -Dm644 config/wireplumber/52-yoga-speakers-keep-open.conf \
+  ~/.config/wireplumber/wireplumber.conf.d/52-yoga-speakers-keep-open.conf
+systemctl --user restart wireplumber
 wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 
 # Emulated touchpad: drop the phantom right button (root-owned path; libinput
@@ -845,6 +851,16 @@ sudo dmesg | grep tas2781_apply_calib      # expect nothing after a reboot
 ```
 
 Whether the repair audibly changed the sound has not been cleanly A/B'd on this machine, and **whether Windows minds the now-populated CRC field is untested** — hence the backup and `restore`.
+
+**The repaired calibration is dropped again on the first PCM close/open.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and its power-up block on `OPEN`, but the calibration is only rewritten when the DSP *configuration number* changes — `tasdevice_select_tuningprm_cfg` otherwise logs `Unneeded loading dsp conf` and returns. So the amps come back from the second open uncalibrated. WirePlumber suspends an idle sink after 5 s, which closes the PCM, so restarting a browser was enough to lose the effect until the next boot.
+
+Force a configuration reload to get it back without rebooting:
+
+```bash
+amixer -c0 cset numid=5 1; amixer -c0 cset numid=5 0   # Speaker Config Id
+```
+
+[`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) avoids the cycle instead, setting `session.suspend-timeout-seconds = 0` on the speaker sink so the PCM is never closed. That keeps the codec and the amps powered whenever the machine is awake; measured against an idle suspended sink, the cost is about **350 mW**, on an idle desktop drawing roughly 8 W: 8.40 W with the PCM held open against 8.04 W with it suspended (90 samples each, two alternating rounds; the difference came out at 293 mW and 439 mW, and per-sample spread is +/-0.3 W, so treat it as a few hundred mW rather than a precise figure). On this 69 Wh battery that is roughly 20 minutes of idle runtime, 4-5%. Runtime PM of the amps is **not** part of this: with the PCM held open they stay `active` anyway, and no udev rule is needed.
 
 The loaded topology is also the generic fallback rather than anything machine-specific:
 
