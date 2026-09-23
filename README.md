@@ -181,7 +181,7 @@ amixer -c 0 cset numid=7 off    # Speaker (0x17) off
 amixer -c 0 cset numid=9 on     # Bass Speaker (0x14) on
 ```
 
-Total silence means the woofers are getting nothing. Turn `numid=7` back on afterwards.
+Total silence means the woofers are getting nothing. Turn `numid=7` back on afterwards, or run [`bin/yoga-speaker-test`](bin/yoga-speaker-test), which steps through both pins and each one alone and switches both back on when it exits.
 
 Everything in the mixer looks correct, which is what makes this confusing: `Bass Speaker Playback Switch` is on, `DAC2 Playback Volume` is at maximum, the pin has `Pin-ctls: 0x40: OUT` and EAPD asserted. The problem is upstream of the mixer.
 
@@ -616,6 +616,12 @@ install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
   ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
 install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
 systemctl --user restart pipewire pipewire-pulse wireplumber
+
+# Speaker amp calibration: repair the zeroed CRC so the kernel stops
+# discarding it (one-off, takes effect on the next boot).
+install -Dm755 bin/yoga-amp-calib ~/.local/bin/yoga-amp-calib
+install -Dm755 bin/yoga-speaker-test ~/.local/bin/yoga-speaker-test
+yoga-amp-calib fix
 wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 
 # Emulated touchpad: drop the phantom right button (root-owned path; libinput
@@ -821,7 +827,24 @@ The TAS2781 smart amp rejects its calibration at every boot on a stock install. 
 
 **The cause is a zeroed checksum, and it is repairable.** The calibration lives in the UEFI variable `CALI_DATA-1f52d2a1-bb3a-457d-bc09-43a3f4310a92`: 128 bytes holding real data for two amps in the kernel's V1 layout — four 20-byte slots, a timestamp at byte 80 and a CRC at byte 84. Both the timestamp and the CRC are zero as shipped. The kernel checks `crc32(~0, data, 84) ^ ~0` against the CRC field (`tas2781_apply_calib` in `sound/hda/codecs/side-codecs/tas2781_hda.c`), so it discards the data.
 
-On this machine the correct CRC was written into the variable on 2026-08-25, with the original kept at `/root/CALI_DATA.original.bin`. The `V1 CRC error` has not appeared in any kernel log since. Whether that audibly changed the sound was never cleanly compared. PR #14 proposes the same repair as a script with a backup and a `restore` command.
+On this machine the correct CRC was written into the variable on 2026-08-25, with the original kept at `/root/CALI_DATA.original.bin`. The `V1 CRC error` has not appeared in any kernel log since.
+
+**[`bin/yoga-amp-calib`](bin/yoga-amp-calib) does the same repair reproducibly**, computing exactly the CRC the kernel checks and touching nothing else:
+
+```bash
+yoga-amp-calib check      # print both amps' slots, the stored CRC and the expected one
+yoga-amp-calib fix        # back the variable up, then write the CRC field (root)
+yoga-amp-calib restore    # write the backup back
+```
+
+`fix` copies the whole variable, attributes included, to `~/.local/state/yoga-book/CALI_DATA.orig` before its first write, and refuses to touch a variable whose layout is not the V1 one it expects. efivarfs marks the variable immutable; the script lifts `chattr -i` only for the write and puts it back even if the write fails. The driver reads calibration at probe, so it takes effect on the next boot:
+
+```bash
+yoga-amp-calib check                       # expect "OK: kernel will apply calibration"
+sudo dmesg | grep tas2781_apply_calib      # expect nothing after a reboot
+```
+
+Whether the repair audibly changed the sound has not been cleanly A/B'd on this machine, and **whether Windows minds the now-populated CRC field is untested** — hence the backup and `restore`.
 
 The loaded topology is also the generic fallback rather than anything machine-specific:
 
