@@ -22,7 +22,7 @@ actually running.
   yoga-hinge remove
   yoga-hinge devices    print the gyroscopes as they were identified
 """
-import glob, os, re, select, signal, struct, subprocess, sys, time
+import glob, grp, os, pwd, re, select, signal, struct, subprocess, sys, time
 
 RUNTIME = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
 OUT = f'{RUNTIME}/yoga-hinge'
@@ -163,6 +163,16 @@ def install():
     """
     node = '/dev/' + os.path.basename(find_gyros()[0][0])
     if not os.access(node, os.R_OK):
+        # Being in the group is not the same as this session having it: group
+        # membership is picked up at login, so right after usermod the access
+        # check still fails and that deserves its own answer.
+        try:
+            joined = pwd.getpwuid(os.getuid()).pw_name in grp.getgrnam('iio').gr_mem
+        except KeyError:
+            joined = False
+        if joined:
+            sys.exit(f'cannot read {node} yet: you are in the "iio" group, but this session '
+                     'predates that. Log out and back in, then run this again.')
         sys.exit(f'cannot read {node}: install config/udev/70-yoga-gyro-access.rules '
                  'and join the "iio" group first (see the README)')
     target = os.path.expanduser('~/.local/bin/yoga-hinge')
