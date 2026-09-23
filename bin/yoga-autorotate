@@ -26,6 +26,7 @@ Without yoga-hinge running, tablet is never chosen and the rest behaves as befor
 """
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -38,10 +39,12 @@ gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 POLL_SECONDS = 1
-STABLE_READINGS = 2   # ~2s of agreement before acting on orientation alone
+STABLE_READINGS = 4   # ~4s of agreement, standing in for the dead hinge sensor
+HINGE_READINGS = 2    # a live hinge reading rules out an accidental tilt, so half the wait
 TABLET_READINGS = 1   # the hinge already confirms a fold, so tablet in or out is immediate
 
-HINGE_FILE = Path("/run/yoga-hinge")
+# yoga-hinge runs as a user service, so its angle lives in the runtime dir.
+HINGE_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "yoga-hinge"
 TABLET_DEGREES = 250  # laptop ~110, tent ~305 (but upside down), tablet 360
 TABLET_EXIT = 220     # hysteresis, so a tablet resting near the threshold does not flap
 
@@ -211,8 +214,17 @@ def main():
         # settled but the layout does not match. `==` here meant a single failed
         # switch -- yoga-mode missing, hyprctl not up yet just after login --
         # was never retried, because count then ran past the value forever.
+        # Without yoga-hinge running there is no hinge reading, and the delay
+        # stays the 4 seconds every other machine has always had: the shorter
+        # wait is only justified by the hinge confirming the fold.
         folding = target.startswith("tablet") or bool(current and current.startswith("tablet"))
-        if count >= (TABLET_READINGS if folding else STABLE_READINGS) and target != current:
+        if folding:
+            needed = TABLET_READINGS
+        elif hinge() is not None:
+            needed = HINGE_READINGS
+        else:
+            needed = STABLE_READINGS
+        if count >= needed and target != current:
             apply_mode(target)
 
 

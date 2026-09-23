@@ -458,7 +458,7 @@ systemctl --user daemon-reload && systemctl --user enable --now yoga-autorotate
 
 All four positions switch automatically. An earlier version excluded present on the mistaken belief it was undetectable, which also required a guard suspending auto-switching while present was active — that would have trapped the machine in present mode once present became detectable. Both are gone.
 
-The missing hinge is covered by requiring an orientation to hold for about two seconds before acting — without it, a genuine fold and an incidental tilt look identical.
+The missing hinge is covered by requiring an orientation to hold for about four seconds before acting — without it, a genuine fold and an incidental tilt look identical. With `yoga-hinge` running that drops to two seconds, because a live hinge reading is what rules out an incidental tilt; machines without it keep the original four.
 
 Turn it on and off with `yoga-autorotate-toggle` (or the Omarchy menu entry), which starts and stops the service. There is deliberately **one** switch: an earlier version also had an `enabled` flag in a config file, so the menu could show auto-rotate ticked while the daemon sat inert, with nothing to explain why.
 
@@ -466,18 +466,37 @@ It reads the layout back from `hyprctl monitors` rather than trusting a recorded
 
 ### Tablet — the hinge angle from two gyroscopes
 
-Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (`gyro_3d` at `iio:device0` and `iio:device2`), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of `dev2.x − dev0.x` is the change in hinge angle. Recorded at 100 Hz:
+Folded 360° and held up, the upper panel reads `normal`, exactly as in laptop use, so orientation alone can never see tablet mode. The machine does carry what is needed: **one gyroscope in each half** (two `gyro_3d` devices), both with X along the hinge and mounted mirrored. Turning the whole machine moves both alike; folding turns one against the other. The integral of the difference between their X rates is the change in hinge angle. Recorded at 100 Hz:
 
 ```
 laptop -> tablet   +254°      tablet -> laptop   -242°
 laptop -> tent     +198°      tent   -> laptop   -200°      drift ~1° per fold
 ```
 
-[`bin/yoga-hinge`](bin/yoga-hinge) is a small root service (IIO buffers are root-only) that integrates this and writes the angle to `/run/yoga-hinge`. Only the starting angle is unknown: service start and every lid reopen assume a typical 120°, a closed lid is 0°, and the 0–360° end stops clamp accumulated error. Relative rates under 3°/s are ignored so bias cannot creep in at rest. About 1% of one core.
+[`bin/yoga-hinge`](bin/yoga-hinge) integrates this and writes the angle to `$XDG_RUNTIME_DIR/yoga-hinge`. Only the starting angle is unknown: service start and every lid reopen assume a typical 120°, a closed lid is 0°, and the 0–360° end stops clamp accumulated error. Relative rates under 3°/s are ignored so bias cannot creep in at rest.
+
+**It never addresses a sensor by `iio:deviceN`.** That number is enumeration order: it differs between units, and between boots of the same unit — seen as `(1, 3)` on one machine and `(0, 1)` on another — while the numbers in between belong to the accelerometer and the light sensor `iio-sensor-proxy` is streaming from. Writing `buffer/enable` on those would stop auto-rotation and auto-brightness dead. The daemon matches `name == "gyro_3d"`, reads the scale from `in_anglvel_scale`, and orders the pair by HID sensor instance (`HID-SENSOR-200076.15` and `.16`), which is the only thing distinguishing the two halves.
+
+**It runs as an ordinary user service, not as root.** Install [`config/udev/70-yoga-gyro-access.rules`](config/udev/70-yoga-gyro-access.rules) and join the `iio` group as described there, then:
 
 ```bash
-bin/yoga-hinge install      # sudo or pkexec; `remove` undoes it
+bin/yoga-hinge devices      # check the pair was found, and which is which
+bin/yoga-hinge install      # `remove` undoes it
 ```
+
+The unit is `PartOf=yoga-autorotate.service` and `WantedBy` it, so systemd starts it with auto-rotation and stops it again when auto-rotation stops. Nothing streams at 100 Hz while the feature that consumes it is off, and `systemctl --user stop` shuts the gyroscopes down properly: the daemon handles `SIGTERM`, which Python otherwise kills it on without running its cleanup.
+
+**FOLD SIGN — check this on your unit.** Ordering by instance fixes which gyroscope is subtracted from which, but whether that yields a *rising* angle as the machine folds is a physical fact about how the halves are mounted. Verify once:
+
+```bash
+bin/yoga-hinge      # run it from a terminal: it prints the angle as it changes
+```
+
+Fold towards tablet: the number must **rise**.
+
+If it falls and clamps at 0 instead, the two halves are the other way round on your unit and tablet mode will never trigger; swap the order returned by `find_gyros()`.
+
+**Starting up already folded.** The angle begins at the 120° guess, so a machine booted or resumed in tablet already will not be detected as one until it is unfolded and refolded past the threshold. There is no way around it: nothing reports the absolute angle.
 
 `yoga-autorotate` then picks tablet at ≥250° (leaving below 220°) unless the machine is upside down — tent sits near 305°, and with the start only guessed the hinge cannot tell tent from an inverted tablet, so upside down stays present. Tablet in or out is applied after one reading rather than two, since the hinge already confirms the fold.
 

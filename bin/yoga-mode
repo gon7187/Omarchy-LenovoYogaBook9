@@ -52,7 +52,10 @@ lower_input() {
 }
 
 park() {
-  lower_input true &&
+  # Only when coming back from tablet. hl.device replaces a device's whole
+  # rule, so re-applying it on every mode switch would silently wipe anything
+  # else input.lua configures for these two devices.
+  if lower_disabled; then lower_input true || return 1; fi
   apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"$PARK\", scale = 2, transform = 0, mirror = \"none\", disabled = false })"
 }
 
