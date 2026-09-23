@@ -219,7 +219,18 @@ So the workaround below is not a stopgap awaiting something better — it is the
 >
 > The first row is exactly the test above, and it gives **full sound rather than silence**. So `0x14` is fed, and the premise of the root-cause section — that a stereo stream reaches one DAC pair and the woofers receive nothing — does not hold on this driver. It is consistent with both converters carrying `stream=1` at `Amp-Out vals: [0x57 0x57]`. The second row is what a tweeter alone should sound like on a tone that is half bass.
 >
-> The original silent result was recorded before the amp calibration CRC was repaired on this machine (see [Speaker amp calibration fails](#speaker-amp-calibration-fails)); uncalibrated amps are the most likely explanation, but that cannot be proven now without breaking the calibration again. Either way, treat the root-cause analysis above as **disproven on SOF**, and do not install `51-yoga-bass-speakers.conf` there. It stays in the repo for machines on the legacy `snd_hda_intel` driver, where it has not been tested either.
+> **The two pins are not equivalent outputs, and the codec says so.** Only `0x14` drives an external amplifier:
+>
+> ```
+> Node 0x14  Pincap 0x00010014: OUT EAPD Detect      EAPD 0x2: EAPD   <- powers the TAS2781s
+> Node 0x17  Pincap 0x0000001c: OUT HP Detect                         <- no EAPD at all
+> ```
+>
+> So `0x14` is the amplified path and `0x17` is a bare codec output. That is why `0x17` alone is quieter, on a pure 2.5 kHz tone played straight to the hardware sink with the EQ bypassed as well as on programme material — expected behaviour, not a fault.
+>
+> It also explains the original silent result, which was recorded before the calibration CRC was repaired (see [Speaker amp calibration fails](#speaker-amp-calibration-fails)). Uncalibrated TAS2781s run a conservative protection model and give very little output, so leaving only `0x14` — the amplified path — left almost nothing audible, while `0x17` kept playing because it needs no amplifier. Hence "the woofers are never fed". With the calibration applied the relationship inverts, which is what the table above measures.
+>
+> Treat the root-cause analysis above as **disproven on SOF**, and do not install `51-yoga-bass-speakers.conf` there. It stays in the repo for machines on the legacy `snd_hda_intel` driver, where it has not been tested either.
 
 ### Fix (legacy `snd_hda_intel` only — not needed on SOF)
 
