@@ -278,6 +278,7 @@ static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
 static SP<CEventLoopTimer> textInputTimer;
 static TabletAutoShow tabletAutoShow;
 static WP<CWLSurfaceResource> tabletInputSurface;
+static PHLMONITORREF tabletInputMonitor;
 static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto lower = State::monitorState()->query().name("eDP-2").run();
     const auto upper = State::monitorState()->query().name("eDP-1").run();
@@ -296,7 +297,9 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
         const auto surface = wanted ? input->focusedSurface() : nullptr;
         const bool activated = tapped || surface != tabletInputSurface;
         tabletInputSurface = surface;
-        const auto action = tabletAutoShow.step(wanted,visible,activated);
+        const bool relocated = monitor && tabletInputMonitor && monitor != tabletInputMonitor.lock();
+        if (monitor) tabletInputMonitor=monitor;
+        const auto action = tabletAutoShow.step(wanted,wanted ? !!panel : visible,activated,relocated);
         if (action == TabletAutoShow::Action::Show) runPanel("show");
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
         if (panel) {

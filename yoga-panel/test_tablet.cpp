@@ -25,6 +25,15 @@ int main() {
     manualClose.step(true,true,false);
     assert(manualClose.step(true,false,false) == Action::None);
     assert(manualClose.step(true,false,true) == Action::Show);
+    TabletAutoShow moving;
+    moving.step(true,false,false);
+    moving.step(true,true,false);
+    assert(moving.step(true,false,false,true) == Action::None);
+    assert(moving.owned && !moving.dismissed);
+    moving.step(true,true,false);
+    moving.step(false,true,false);
+    moving.step(false,true,false);
+    assert(moving.step(false,true,false) == Action::Hide);
     TabletAutoShow retry;
     retry.step(true,false,false);
     for (int i=0;i<4;++i) assert(retry.step(true,false,false) == Action::None);
