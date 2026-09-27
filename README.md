@@ -486,6 +486,16 @@ bin/yoga-hinge install      # `remove` undoes it
 
 The unit is `PartOf=yoga-autorotate.service` and `WantedBy` it, so systemd starts it with auto-rotation and stops it again when auto-rotation stops. Nothing streams at 100 Hz while the feature that consumes it is off, and `systemctl --user stop` shuts the gyroscopes down properly: the daemon handles `SIGTERM`, which Python otherwise kills it on without running its cleanup.
 
+While the system battery is discharging, gyroscopes run at 25 Hz; AC power
+keeps the original 100 Hz. Power state is checked every 30 seconds and a rate
+change preserves the integrated angle. The 40 ms battery sampling interval
+stays below the 100 ms stale-sample guard. A short same-session measurement
+reduced daemon CPU from 2.47% to 0.75% of one core and context switches from
+106.5/s to 28.3/s; whole-machine battery savings were not established.
+Auto-rotation polls every two seconds, retaining the four-second orientation
+stability delay (two seconds with a hinge reading); tablet transitions can
+take up to two seconds. Check the power policy with `python3 bin/test_hinge_power.py`.
+
 **FOLD SIGN — check this on your unit.** Ordering by instance fixes which gyroscope is subtracted from which, but whether that yields a *rising* angle as the machine folds is a physical fact about how the halves are mounted. Verify once:
 
 ```bash
@@ -526,7 +536,9 @@ Install separately from the user services (Python 3 standard library only):
 
 ```bash
 # Preserve the old unit if this workaround was already installed locally.
-sudo cp -a /etc/systemd/system/yoga-sensor-keepalive.service "/etc/systemd/system/yoga-sensor-keepalive.service.bak.$(date +%s)" # if present
+if [ -f /etc/systemd/system/yoga-sensor-keepalive.service ]; then
+  sudo cp -a /etc/systemd/system/yoga-sensor-keepalive.service "/etc/systemd/system/yoga-sensor-keepalive.service.bak.$(date +%s)"
+fi
 sudo install -m 755 bin/yoga-sensor-keepalive /usr/local/bin/
 sudo install -m 644 config/systemd/yoga-sensor-keepalive.service /etc/systemd/system/
 sudo systemctl daemon-reload

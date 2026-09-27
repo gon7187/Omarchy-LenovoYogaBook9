@@ -36,17 +36,19 @@ from pathlib import Path
 import gi
 
 gi.require_version("Gio", "2.0")
-from gi.repository import Gio, GLib  # noqa: E402
+from gi.repository import Gio, GLib  # type: ignore[attr-defined]
 
-POLL_SECONDS = 1
-STABLE_READINGS = 4   # ~4s of agreement, standing in for the dead hinge sensor
-HINGE_READINGS = 2    # a live hinge reading rules out an accidental tilt, so half the wait
-TABLET_READINGS = 1   # the hinge already confirms a fold, so tablet in or out is immediate
+POLL_SECONDS = 2
+STABLE_READINGS = 2  # ~4s of agreement, standing in for the dead hinge sensor
+HINGE_READINGS = 1  # retain the ~2s delay when the hinge confirms the fold
+TABLET_READINGS = 1  # tablet transitions are checked on the next 2s poll
 
 # yoga-hinge runs as a user service, so its angle lives in the runtime dir.
-HINGE_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "yoga-hinge"
+HINGE_FILE = (
+    Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "yoga-hinge"
+)
 TABLET_DEGREES = 250  # laptop ~110, tent ~305 (but upside down), tablet 360
-TABLET_EXIT = 220     # hysteresis, so a tablet resting near the threshold does not flap
+TABLET_EXIT = 220  # hysteresis, so a tablet resting near the threshold does not flap
 
 TABLET_BY_ORIENTATION = {
     "normal": "tablet",
@@ -66,9 +68,9 @@ ORIENTATION_TO_MODE = {
 # identified by eDP-1 mirroring rather than by position, since a mirroring
 # output's coordinates are not meaningful.
 LAYOUTS = {
-    "stand":     {"eDP-1": (0, 0, 2),   "eDP-2": (0, 900, 0)},
-    "book":      {"eDP-1": (900, 0, 3), "eDP-2": (0, 0, 1)},
-    "book-flip": {"eDP-1": (0, 0, 1),   "eDP-2": (900, 0, 3)},
+    "stand": {"eDP-1": (0, 0, 2), "eDP-2": (0, 900, 0)},
+    "book": {"eDP-1": (900, 0, 3), "eDP-2": (0, 0, 1)},
+    "book-flip": {"eDP-1": (0, 0, 1), "eDP-2": (900, 0, 3)},
 }
 
 
@@ -82,8 +84,13 @@ def current_mode():
     daemon would decline to correct it because it believed it already had.
     """
     try:
-        out = subprocess.run(["hyprctl", "monitors", "all", "-j"],
-                             capture_output=True, text=True, timeout=10).stdout
+        out = subprocess.run(
+            ["hyprctl", "monitors", "all", "-j"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        ).stdout
         monitors = {m["name"]: m for m in json.loads(out)}
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
         return None
@@ -93,13 +100,21 @@ def current_mode():
 
     if monitors.get("eDP-2", {}).get("disabled"):
         transform = monitors.get("eDP-1", {}).get("transform")
-        return {2: "tablet", 0: "tablet-upside", 3: "tablet-left", 1: "tablet-right"}.get(transform)
+        return {
+            2: "tablet",
+            0: "tablet-upside",
+            3: "tablet-left",
+            1: "tablet-right",
+        }.get(transform)
 
     for name, expected in LAYOUTS.items():
         if all(
-            (monitors.get(panel, {}).get("x"),
-             monitors.get(panel, {}).get("y"),
-             monitors.get(panel, {}).get("transform")) == want
+            (
+                monitors.get(panel, {}).get("x"),
+                monitors.get(panel, {}).get("y"),
+                monitors.get(panel, {}).get("transform"),
+            )
+            == want
             for panel, want in expected.items()
         ):
             return name
@@ -117,22 +132,31 @@ def target_mode(orientation, current):
     """The mode for this orientation, folded into a tablet when the hinge says so."""
     angle = hinge()
     in_tablet = bool(current and current.startswith("tablet"))
-    if orientation != "bottom-up" and angle is not None and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES):
+    if (
+        orientation != "bottom-up"
+        and angle is not None
+        and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES)
+    ):
         # Lying flat reports no usable orientation; keep the tablet as it is held.
-        return TABLET_BY_ORIENTATION.get(orientation, current if in_tablet else "tablet")
+        return TABLET_BY_ORIENTATION.get(
+            orientation, current if in_tablet else "tablet"
+        )
     return ORIENTATION_TO_MODE.get(orientation)
 
 
 def apply_mode(mode):
     try:
-        result = subprocess.run(["yoga-mode", mode],
-                                capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ["yoga-mode", mode], capture_output=True, text=True, timeout=15, check=False
+        )
         if result.returncode != 0:
-            print(f"yoga-mode {mode} failed: {result.stderr.strip()}",
-                  file=sys.stderr, flush=True)
+            print(
+                f"yoga-mode {mode} failed: {result.stderr.strip()}",
+                file=sys.stderr,
+                flush=True,
+            )
     except (OSError, subprocess.SubprocessError) as exc:
-        print(f"could not run yoga-mode {mode}: {exc}",
-              file=sys.stderr, flush=True)
+        print(f"could not run yoga-mode {mode}: {exc}", file=sys.stderr, flush=True)
 
 
 class Accelerometer:
@@ -148,28 +172,46 @@ class Accelerometer:
 
     def _claim(self):
         self.bus.call_sync(
-            "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
-            "net.hadess.SensorProxy", "ClaimAccelerometer", None, None,
-            Gio.DBusCallFlags.NONE, -1, None,
+            "net.hadess.SensorProxy",
+            "/net/hadess/SensorProxy",
+            "net.hadess.SensorProxy",
+            "ClaimAccelerometer",
+            None,
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
         )
 
     def release(self):
         try:
             self.bus.call_sync(
-                "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
-                "net.hadess.SensorProxy", "ReleaseAccelerometer", None, None,
-                Gio.DBusCallFlags.NONE, -1, None,
+                "net.hadess.SensorProxy",
+                "/net/hadess/SensorProxy",
+                "net.hadess.SensorProxy",
+                "ReleaseAccelerometer",
+                None,
+                None,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
             )
         except GLib.Error:
             pass
 
     def orientation(self):
         value = self.bus.call_sync(
-            "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
-            "org.freedesktop.DBus.Properties", "Get",
-            GLib.Variant("(ss)", ("net.hadess.SensorProxy",
-                                  "AccelerometerOrientation")),
-            None, Gio.DBusCallFlags.NONE, -1, None,
+            "net.hadess.SensorProxy",
+            "/net/hadess/SensorProxy",
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            GLib.Variant(
+                "(ss)", ("net.hadess.SensorProxy", "AccelerometerOrientation")
+            ),
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
         )
         return value.unpack()[0]
 
@@ -217,7 +259,9 @@ def main():
         # Without yoga-hinge running there is no hinge reading, and the delay
         # stays the 4 seconds every other machine has always had: the shorter
         # wait is only justified by the hinge confirming the fold.
-        folding = target.startswith("tablet") or bool(current and current.startswith("tablet"))
+        folding = target.startswith("tablet") or bool(
+            current and current.startswith("tablet")
+        )
         if folding:
             needed = TABLET_READINGS
         elif hinge() is not None:

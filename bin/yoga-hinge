@@ -22,31 +22,48 @@ actually running.
   yoga-hinge remove
   yoga-hinge devices    print the gyroscopes as they were identified
 """
-import glob, grp, os, pwd, re, select, signal, struct, subprocess, sys, time
 
-RUNTIME = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
-OUT = f'{RUNTIME}/yoga-hinge'
-IIO_ROOT = '/sys/bus/iio/devices'
-RATE = 100                       # Hz; what the fold measurements were taken at
-DEG = 57.29578                   # in_anglvel_scale is rad/s
-DEADBAND = 3.0                   # deg/s of relative rate ignored, so bias cannot creep in at rest
+import glob
+import grp
+import os
+import pwd
+import re
+import select
+import signal
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+OUT = f"{RUNTIME}/yoga-hinge"
+IIO_ROOT = "/sys/bus/iio/devices"
+RATE = 100  # Hz; what the fold measurements were taken at
+BATTERY_RATE = 25  # 40 ms samples still fit the 100 ms integration gap guard
+POWER_CHECK_SECONDS = 30
+DEG = 57.29578  # in_anglvel_scale is rad/s
+DEADBAND = 3.0  # deg/s of relative rate ignored, so bias cannot creep in at rest
 OPEN_GUESS = 120.0
-UNIT = os.path.expanduser('~/.config/systemd/user/yoga-hinge.service')
+UNIT = os.path.expanduser("~/.config/systemd/user/yoga-hinge.service")
 
 
 def write(path, value):
-    with open(path, 'w') as f: f.write(str(value))
+    with open(path, "w") as f:
+        f.write(str(value))
 
 
 def lid_closed():
-    for state in glob.glob('/proc/acpi/button/lid/*/state'):
+    for state in glob.glob("/proc/acpi/button/lid/*/state"):
         with open(state) as f:
-            if 'closed' in f.read(): return True
+            if "closed" in f.read():
+                return True
     return False
 
 
 def read_attr(base, attr):
-    with open(base + attr) as f: return f.read().strip()
+    with open(base + attr) as f:
+        return f.read().strip()
 
 
 def find_gyros():
@@ -67,36 +84,54 @@ def find_gyros():
     is checked by folding: see FOLD SIGN in the README.
     """
     found = []
-    for path in sorted(glob.glob(f'{IIO_ROOT}/iio:device*')):
-        base = path + '/'
+    for path in sorted(glob.glob(f"{IIO_ROOT}/iio:device*")):
+        base = path + "/"
         try:
-            if read_attr(base, 'name') != 'gyro_3d': continue
-            scale = float(read_attr(base, 'in_anglvel_scale'))
+            if read_attr(base, "name") != "gyro_3d":
+                continue
+            scale = float(read_attr(base, "in_anglvel_scale"))
         except (OSError, ValueError):
             continue
-        instance = re.search(r'HID-SENSOR-[0-9a-fA-F]+\.(\d+)', os.path.realpath(path))
-        found.append(((int(instance.group(1)) if instance else 1 << 30, path), base, scale))
+        instance = re.search(r"HID-SENSOR-[0-9a-fA-F]+\.(\d+)", os.path.realpath(path))
+        found.append(
+            ((int(instance.group(1)) if instance else 1 << 30, path), base, scale)
+        )
     if len(found) != 2:
-        sys.exit(f'expected two gyro_3d devices in {IIO_ROOT}, found {len(found)}')
+        sys.exit(f"expected two gyro_3d devices in {IIO_ROOT}, found {len(found)}")
     found.sort(key=lambda g: g[0])
     return [(key[1], base, scale * DEG) for key, base, scale in found]
 
 
-def start(base):
-    write(base + 'buffer/enable', 0)
-    for axis in 'xyz': write(base + f'scan_elements/in_anglvel_{axis}_en', 1)
-    write(base + 'scan_elements/in_timestamp_en', 1)
-    write(base + 'in_anglvel_sampling_frequency', RATE)
-    write(base + 'buffer/length', 256)
-    write(base + 'buffer/enable', 1)
-    return os.open('/dev/' + os.path.basename(base.rstrip('/')), os.O_RDONLY | os.O_NONBLOCK)
+def sample_rate(root=Path("/sys/class/power_supply")):
+    # BAT* are system batteries; HID batteries must not change the laptop policy.
+    for status in root.glob("BAT*/status"):
+        try:
+            if status.read_text().strip() == "Discharging":
+                return BATTERY_RATE
+        except OSError:
+            pass
+    return RATE
+
+
+def start(base, sample_hz):
+    write(base + "buffer/enable", 0)
+    for axis in "xyz":
+        write(base + f"scan_elements/in_anglvel_{axis}_en", 1)
+    write(base + "scan_elements/in_timestamp_en", 1)
+    write(base + "in_anglvel_sampling_frequency", sample_hz)
+    write(base + "buffer/length", 256)
+    write(base + "buffer/enable", 1)
+    return os.open(
+        "/dev/" + os.path.basename(base.rstrip("/")), os.O_RDONLY | os.O_NONBLOCK
+    )
 
 
 def stop(base):
     try:
-        write(base + 'buffer/enable', 0)
-        write(base + 'in_anglvel_sampling_frequency', 10)
-    except OSError: pass
+        write(base + "buffer/enable", 0)
+        write(base + "in_anglvel_sampling_frequency", 10)
+    except OSError:
+        pass
 
 
 def run():
@@ -108,11 +143,13 @@ def run():
     gyros = find_gyros()
     (_, lower_base, lower_scale), (_, upper_base, upper_scale) = gyros
     scale = {lower_base: lower_scale, upper_base: upper_scale}
-    fds = {start(base): base for _, base, _ in gyros}
+    sample_hz = sample_rate()
     rate = {base: 0.0 for _, base, _ in gyros}
-    last_ts = {base: None for _, base, _ in gyros}
+    last_ts: dict[str, int | None] = {base: None for _, base, _ in gyros}
     angle, reported, was_closed, next_lid = OPEN_GUESS, None, False, 0.0
+    next_power = time.monotonic() + POWER_CHECK_SECONDS
     try:
+        fds = {start(base, sample_hz): base for _, base, _ in gyros}
         while True:
             ready, _, _ = select.select(list(fds), [], [], 1.0)
             for fd in ready:
@@ -120,34 +157,48 @@ def run():
                 data = os.read(fd, 24 * 64)
                 # Frame: x, y, z (s32), padding, timestamp (s64 ns).
                 for off in range(0, len(data) - 23, 24):
-                    x, _y, _z, _pad, ts = struct.unpack_from('<iiiiq', data, off)
+                    x, _y, _z, _pad, ts = struct.unpack_from("<iiiiq", data, off)
                     rate[dev] = x * scale[dev]
-                    if dev == upper_base and last_ts[dev] is not None:
-                        dt = (ts - last_ts[dev]) / 1e9
+                    previous_ts = last_ts[dev]
+                    if dev == upper_base and previous_ts is not None:
+                        dt = (ts - previous_ts) / 1e9
                         relative = rate[upper_base] - rate[lower_base]
                         # A gap (suspend, dropped buffer) must not integrate one stale rate over it.
                         if 0 < dt < 0.1 and abs(relative) > DEADBAND:
                             angle = min(360.0, max(0.0, angle + relative * dt))
                     last_ts[dev] = ts
             now = time.monotonic()
+            if now >= next_power:
+                wanted_hz = sample_rate()
+                if wanted_hz != sample_hz:
+                    for _, base, _ in gyros:
+                        write(base + "in_anglvel_sampling_frequency", wanted_hz)
+                    sample_hz = wanted_hz
+                next_power = now + POWER_CHECK_SECONDS
             if now >= next_lid:
                 next_lid = now + 1.0
                 closed = lid_closed()
-                if closed: angle = 0.0
-                elif was_closed: angle = OPEN_GUESS
+                if closed:
+                    angle = 0.0
+                elif was_closed:
+                    angle = OPEN_GUESS
                 was_closed = closed
             if reported is None or abs(angle - reported) >= 2:
-                tmp = OUT + '.tmp'
+                tmp = OUT + ".tmp"
                 write(tmp, round(angle))
                 os.chmod(tmp, 0o644)
                 os.replace(tmp, OUT)
                 reported = angle
                 # Run it from a terminal to check the fold sign: see the README.
-                if sys.stdout.isatty(): print(f'{round(angle):3d}', flush=True)
+                if sys.stdout.isatty():
+                    print(f"{round(angle):3d}", flush=True)
     finally:
-        for _, base, _ in gyros: stop(base)
-        try: os.unlink(OUT)
-        except OSError: pass
+        for _, base, _ in gyros:
+            stop(base)
+        try:
+            os.unlink(OUT)
+        except OSError:
+            pass
 
 
 def install():
@@ -161,52 +212,71 @@ def install():
     auto-rotation stops, so nothing streams at 100 Hz while the feature that
     consumes it is switched off.
     """
-    node = '/dev/' + os.path.basename(find_gyros()[0][0])
+    node = "/dev/" + os.path.basename(find_gyros()[0][0])
     if not os.access(node, os.R_OK):
         # Being in the group is not the same as this session having it: group
         # membership is picked up at login, so right after usermod the access
         # check still fails and that deserves its own answer.
         try:
-            joined = pwd.getpwuid(os.getuid()).pw_name in grp.getgrnam('iio').gr_mem
+            joined = pwd.getpwuid(os.getuid()).pw_name in grp.getgrnam("iio").gr_mem
         except KeyError:
             joined = False
         if joined:
-            sys.exit(f'cannot read {node} yet: you are in the "iio" group, but this session '
-                     'predates that. Log out and back in, then run this again.')
-        sys.exit(f'cannot read {node}: install config/udev/70-yoga-gyro-access.rules '
-                 'and join the "iio" group first (see the README)')
-    target = os.path.expanduser('~/.local/bin/yoga-hinge')
-    unit = ('[Unit]\nDescription=Yoga Book 9 hinge angle from the two gyroscopes\n'
-            'After=yoga-autorotate.service\nPartOf=yoga-autorotate.service\n'
-            'StartLimitIntervalSec=60\nStartLimitBurst=5\n\n'
-            '[Service]\nType=simple\nExecStart=%h/.local/bin/yoga-hinge\n'
-            'Restart=on-failure\nRestartSec=2\n\n'
-            '[Install]\nWantedBy=yoga-autorotate.service\n')
+            sys.exit(
+                f'cannot read {node} yet: you are in the "iio" group, but this session '
+                "predates that. Log out and back in, then run this again."
+            )
+        sys.exit(
+            f"cannot read {node}: install config/udev/70-yoga-gyro-access.rules "
+            'and join the "iio" group first (see the README)'
+        )
+    target = os.path.expanduser("~/.local/bin/yoga-hinge")
+    unit = (
+        "[Unit]\nDescription=Yoga Book 9 hinge angle from the two gyroscopes\n"
+        "After=yoga-autorotate.service\nPartOf=yoga-autorotate.service\n"
+        "StartLimitIntervalSec=60\nStartLimitBurst=5\n\n"
+        "[Service]\nType=simple\nExecStart=%h/.local/bin/yoga-hinge\n"
+        "Restart=on-failure\nRestartSec=2\n\n"
+        "[Install]\nWantedBy=yoga-autorotate.service\n"
+    )
     if os.path.realpath(__file__) != os.path.realpath(target):
-        subprocess.run(['install', '-Dm755', os.path.realpath(__file__), target], check=True)
+        subprocess.run(
+            ["install", "-Dm755", os.path.realpath(__file__), target], check=True
+        )
     os.makedirs(os.path.dirname(UNIT), exist_ok=True)
     write(UNIT, unit)
-    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
-    subprocess.run(['systemctl', '--user', 'enable', '--now', 'yoga-hinge'], check=True)
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", "--now", "yoga-hinge"], check=True)
 
 
 def remove():
-    subprocess.run(['systemctl', '--user', 'disable', '--now', 'yoga-hinge'], check=False)
-    for path in (UNIT, os.path.expanduser('~/.local/bin/yoga-hinge'), OUT):
-        try: os.unlink(path)
-        except OSError: pass
-    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=False)
+    subprocess.run(
+        ["systemctl", "--user", "disable", "--now", "yoga-hinge"], check=False
+    )
+    for path in (UNIT, os.path.expanduser("~/.local/bin/yoga-hinge"), OUT):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
 
 
 def devices():
-    for role, (path, _base, scale) in zip(('lower (subtracted)', 'upper (added)'), find_gyros()):
-        print(f'{role:20s} {path}  {scale:.6f} deg/s per count')
+    for role, (path, _base, scale) in zip(
+        ("lower (subtracted)", "upper (added)"), find_gyros()
+    ):
+        print(f"{role:20s} {path}  {scale:.6f} deg/s per count")
 
 
-if __name__ == '__main__':
-    arg = sys.argv[1] if len(sys.argv) > 1 else 'run'
-    if arg == 'run': run()
-    elif arg == 'install': install()
-    elif arg == 'remove': remove()
-    elif arg == 'devices': devices()
-    else: sys.exit(__doc__)
+if __name__ == "__main__":
+    arg = sys.argv[1] if len(sys.argv) > 1 else "run"
+    if arg == "run":
+        run()
+    elif arg == "install":
+        install()
+    elif arg == "remove":
+        remove()
+    elif arg == "devices":
+        devices()
+    else:
+        sys.exit(__doc__)
