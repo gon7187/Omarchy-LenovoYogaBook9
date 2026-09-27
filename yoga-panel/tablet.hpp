@@ -20,7 +20,9 @@ struct TabletAutoShow {
     bool owned=false, dismissed=false, wasVisible=false;
     int idle=0, pending=0;
 
-    Action step(bool wanted, bool visible, bool tapped) {
+    Action step(bool wanted, bool visible, bool tapped, bool relocated=false) {
+        // Changing a layer's output briefly unmaps it; this is not a manual close.
+        if (relocated && owned) { wasVisible=false; pending=5; }
         if (!wanted) {
             dismissed=false; wasVisible=visible;
             if (++idle>=3 && owned) { owned=false; pending=0; return Action::Hide; }
