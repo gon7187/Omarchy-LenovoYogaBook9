@@ -25,9 +25,9 @@ done
 [[ $window != null ]]
 sleep .5
 window=$(hyprctl clients -j | jq --arg id "$app_id" '[.[] | select(.class == $id)][0]')
-# Default padding 8 + button padding 6 + half of the 16px button.
-x=$(jq '.at[0] + .size[0] - 22' <<< "$window")
-y=$(jq '.at[1] + 12' <<< "$window")
+# Hit the enlarged button near its lower-left edge, outside the old 16px target.
+x=$(jq '.at[0] + .size[0] - 30' <<< "$window")
+y=$(jq '.at[1] + 22' <<< "$window")
 { printf 'a %s %s %s %s\n' "$x" "$y" "$width" "$height"; sleep .2; printf 'b 272 1\n'; sleep .1; printf 'b 272 0\n'; } | "$pointer"
 sleep .3
 hyprctl clients -j | jq -e --arg id "$app_id" 'all(.[]; .class != $id)' >/dev/null
