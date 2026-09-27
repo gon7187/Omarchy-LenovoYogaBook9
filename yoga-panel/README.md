@@ -462,3 +462,19 @@ node test_touchpad.cjs
 Активное окно размещается над клавиатурой.
 
 Проверка: `python3 test_tablet_keyboard.py --live --mode book --monitor eDP-2`.
+
+### Перенос окна пальцем между экранами
+
+Потяните окно за верхнюю сенсорную полосу и доведите палец до общего края
+экранов (последние 24 логических пикселя). Окно перейдёт на соседний экран
+и останется там до отпускания пальца. Для обратного переноса начните новый
+жест на другом экране. Внешний край экрана переноса не вызывает.
+
+Проверка геометрии запускается в `build-hyprbars.sh`. Для живой проверки
+на отдельном GTK-окне (на время меняет режим экранов):
+
+```bash
+g++ -std=c++23 -O1 -shared -fPIC -fno-gnu-unique $(pkg-config --cflags hyprland pixman-1 libinput wayland-server xkbcommon libdrm) test_touch_transfer_plugin.cpp -o /tmp/yoga-touch-transfer-test.so
+python3 test_touch_transfer_input.py book
+python3 test_touch_transfer_input.py book-flip
+```

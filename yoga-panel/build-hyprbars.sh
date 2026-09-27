@@ -18,6 +18,9 @@ src=$(mktemp -d); temporary=; trap 'rm -rf -- "$src" ${temporary:+"$temporary"}'
 git -C "$cache" archive "$commit" hyprbars | tar -x -C "$src"
 # Keep touch controls inside the window without reserving a title-bar row.
 patch --batch --fuzz=0 -d "$src" -p1 < hyprbars-overlay.patch
+cp -- touch_transfer.hpp "$src/hyprbars/touch_transfer.hpp"
+g++ -std=c++2b -O2 -Wall -Wextra -Werror -I"$src/hyprbars" test_touch_transfer.cpp -o "$src/test-touch-transfer"
+"$src/test-touch-transfer"
 temporary=$(mktemp build/hyprbars.XXXXXX.so)
 # pkg-config emits separate compiler arguments.
 # shellcheck disable=SC2046

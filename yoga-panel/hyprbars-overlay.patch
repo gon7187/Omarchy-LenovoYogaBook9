@@ -1,6 +1,14 @@
 --- a/hyprbars/barDeco.cpp
 +++ b/hyprbars/barDeco.cpp
-@@ -59,16 +59,10 @@
+@@ -25,6 +25,7 @@
+ 
+ #include "globals.hpp"
+ #include "BarPassElement.hpp"
++#include "touch_transfer.hpp"
+ 
+ #include <climits>
+ 
+@@ -59,16 +60,10 @@
  }
  
  SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
@@ -20,7 +28,7 @@
      return info;
  }
  
-@@ -84,7 +78,7 @@
+@@ -84,7 +79,7 @@
  }
  
  bool CHyprBar::inputIsValid() {
@@ -29,18 +37,82 @@
          return false;
  
      if (g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
-@@ -224,6 +218,10 @@
+@@ -165,9 +160,33 @@
+     if (!m_bDragPending || !m_bTouchEv || !validMapped(m_pWindow) || e.touchID != m_touchId)
          return;
+ 
+-    auto PMONITOR     = m_pWindow->m_monitor.lock();
+-    PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
+-    const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y);
++    info.cancelled = true;
++    g_pInputManager->m_lastInputTouch = false;
++    if (m_bTouchHandoff) return;
++    // Normalized touch coordinates belong to the source sensor for the entire contact.
++    const auto PMONITOR = m_touchMonitor.lock();
++    const auto PWINDOW = m_pWindow.lock();
++    if (!PMONITOR || !PMONITOR->m_enabled || !PWINDOW) return;
++    const auto COORDS = PMONITOR->m_position + e.pos * PMONITOR->m_size;
++    if (PMONITOR->m_name == "eDP-1" || PMONITOR->m_name == "eDP-2") {
++        const auto source = PMONITOR->logicalBox();
++        for (const auto& target : State::monitorState()->monitors()) {
++            if (target == PMONITOR || !target->m_enabled || !target->m_activeWorkspace ||
++                (target->m_name != "eDP-1" && target->m_name != "eDP-2")) continue;
++            const auto box = target->logicalBox();
++            if (!YogaTouchTransfer::crossesSharedInnerEdge({source.x,source.y,source.w,source.h},
++                    {box.x,box.y,box.w,box.h},COORDS.x,COORDS.y)) continue;
++            if (PWINDOW->m_pinned)
++                (void)Config::Actions::pinWindow(Config::Actions::TOGGLE_ACTION_DISABLE,PWINDOW);
++            if (!Config::Actions::moveToWorkspace(target->m_activeWorkspace,true,PWINDOW)) return;
++            Desktop::focusState()->fullWindowFocus(PWINDOW,Desktop::FOCUS_REASON_CLICK);
++            (void)Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE,PWINDOW);
++            // Drop once at the edge; jitter and retreat on the old sensor cannot undo it.
++            m_bTouchHandoff = true;
++            m_bDraggingThis = false;
++            return;
++        }
++    }
+ 
+     if (!m_bDraggingThis) {
+         // Initial setup for dragging a window.
+@@ -182,6 +201,8 @@
+ 
+ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch::SDownEvent> touchEvent) {
+     m_bTouchEv = touchEvent.has_value();
++    m_bTouchHandoff = false;
++    m_touchMonitor.reset();
+     if (m_bTouchEv)
+         m_touchId = touchEvent.value().touchID;
+ 
+@@ -198,6 +219,8 @@
+             }
+         }
+         PMONITOR = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
++        m_touchMonitor = PMONITOR;
++        if (!PMONITOR) return;
+         COORDS   = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y) - assignedBoxGlobal().pos();
      }
  
+@@ -223,6 +246,10 @@
+         m_bTouchEv      = false;
+         return;
+     }
++
 +    // Popups above the client retain their own input.
 +    if (PWINDOW->hasPopupAt(COORDS + assignedBoxGlobal().pos()))
 +        return;
-+
+ 
      if (Desktop::focusState()->window() != PWINDOW)
          Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
+@@ -267,6 +294,8 @@
+     m_bDragPending = false;
+     m_bTouchEv     = false;
+     m_touchId      = 0;
++    m_bTouchHandoff = false;
++    m_touchMonitor.reset();
+ }
  
-@@ -499,7 +497,7 @@
+ void CHyprBar::handleMovement() {
+@@ -499,7 +528,7 @@
      CBox       titleBarBox = {DECOBOX.x - pMonitor->m_position.x, DECOBOX.y - pMonitor->m_position.y, DECOBOX.w,
                                DECOBOX.h + ROUNDING * 3 /* to fill the bottom cuz we can't disable rounding there */};
  
@@ -49,7 +121,7 @@
  
      if (titleBarBox.w < 1 || titleBarBox.h < 1)
          return;
-@@ -618,24 +616,25 @@
+@@ -618,24 +647,25 @@
  }
  
  eDecorationLayer CHyprBar::getDecorationLayer() {
@@ -80,3 +152,14 @@
  }
  
  PHLWINDOW CHyprBar::getOwner() {
+--- a/hyprbars/barDeco.hpp
++++ b/hyprbars/barDeco.hpp
+@@ -111,6 +111,8 @@
+     bool                m_bDragPending   = false;
+     bool                m_bCancelledDown = false;
+     int                 m_touchId        = 0;
++    PHLMONITORREF       m_touchMonitor;
++    bool               m_bTouchHandoff = false;
+ 
+     // store hover state for buttons as a bitfield
+     unsigned int m_iButtonHoverState = 0;
