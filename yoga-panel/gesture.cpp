@@ -278,7 +278,7 @@ static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
 static SP<CEventLoopTimer> textInputTimer;
 static TabletAutoShow tabletAutoShow;
 static WP<CWLSurfaceResource> tabletInputSurface;
-static PHLMONITORREF tabletInputMonitor;
+static int undockedPolls=0;
 static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto lower = State::monitorState()->query().name("eDP-2").run();
     const auto upper = State::monitorState()->query().name("eDP-1").run();
@@ -292,14 +292,13 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto panel = internal ? panelOn(monitor) : PHLLS{};
     const bool visible = docked && (!!panelOn(upper) || !!panelOn(lower));
     if (docked && !g_pSessionLockManager->isSessionLocked()) {
+        undockedPolls=0;
         const auto input = g_pInputManager->m_relay.getFocusedTextInput();
         const bool wanted = window && internal && input && input->isEnabled();
         const auto surface = wanted ? input->focusedSurface() : nullptr;
         const bool activated = tapped || surface != tabletInputSurface;
         tabletInputSurface = surface;
-        const bool relocated = monitor && tabletInputMonitor && monitor != tabletInputMonitor.lock();
-        if (monitor) tabletInputMonitor=monitor;
-        const auto action = tabletAutoShow.step(wanted,wanted ? !!panel : visible,activated,relocated);
+        const auto action = tabletAutoShow.step(wanted,wanted ? !!panel : visible,activated);
         if (action == TabletAutoShow::Action::Show) runPanel("show");
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
         if (panel) {
@@ -309,7 +308,10 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     } else {
         if (g_pSessionLockManager->isSessionLocked() && tabletAutoShow.owned) runPanel("hide");
         // Returning to laptop keeps the keyboard on eDP-2, as before.
-        tabletAutoShow = {}; tabletInputSurface.reset();
+        // yoga-mode parks one output in landscape while swapping the book panels.
+        if (g_pSessionLockManager->isSessionLocked() || ++undockedPolls>=5) {
+            tabletAutoShow = {}; tabletInputSurface.reset();
+        }
     }
     if (!visible || !docked || g_pSessionLockManager->isSessionLocked()) restoreTabletWindows();
     self->updateTimeout(std::chrono::milliseconds(200));
