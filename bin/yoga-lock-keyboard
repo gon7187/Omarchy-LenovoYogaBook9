@@ -22,6 +22,9 @@ REPO_QML=$(dirname "$(readlink -f "$0")")/../config/omarchy/lock/TouchKeys.qml
 priv() { if [[ $EUID -eq 0 ]]; then "$@"; elif [[ -t 0 ]]; then sudo "$@"; else pkexec "$@"; fi; }
 
 apply() {
+  # Five seconds is too short to reach the touch keyboard before DPMS disables it.
+  sed -i '/id: idleBlankTimer/,/repeat: false/s/interval: 5000$/interval: 60000/' "$LOCK/Service.qml"
+  sed -n '/id: idleBlankTimer/,/repeat: false/p' "$LOCK/Service.qml" | grep -q 'interval: 60000$' || { echo "yoga-lock-keyboard: lock blank timer changed, patch not applied" >&2; exit 1; }
   install -Dm644 "$SRC" "$LOCK/TouchKeys.qml"
   grep -q TouchKeys "$LOCK/LockView.qml" || sed -i '0,/^    BorderSurface {/s//    TouchKeys { view: root }\n\n&/' "$LOCK/LockView.qml"
   # Upstream reshaping LockView.qml would silently leave no keys; say so in the pacman output.
@@ -38,6 +41,7 @@ case "${1:-check}" in
     ;;
   apply) apply ;;
   remove)
+    priv sed -i '/id: idleBlankTimer/,/repeat: false/s/interval: 60000$/interval: 5000/' "$LOCK/Service.qml"
     priv sh -c "sed -i '/^    TouchKeys { view: root }$/{N;d}' '$LOCK/LockView.qml'; rm -f '$LOCK/TouchKeys.qml' '$HOOK' '$RELOGIN' '$SRC' /usr/local/bin/yoga-lock-keyboard"
     ;;
 esac
