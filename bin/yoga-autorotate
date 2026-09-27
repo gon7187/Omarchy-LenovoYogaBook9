@@ -19,9 +19,9 @@ delay stands in for it: an orientation must persist before it is acted on.
 Tablet is the one mode orientation cannot see: folded 360 degrees and held up,
 the upper panel reads "normal" exactly as in laptop use. yoga-hinge measures
 the hinge from the two gyroscopes; past TABLET_DEGREES the lower panel faces
-away, so only the upper one stays on and turns with the machine. Upside down
-stays present: tent sits at ~305 degrees against the tablet's 360, and the
-starting angle is only a guess, so the hinge cannot tell those two apart.
+away, so only the upper one stays on and turns with the machine. An already active
+tablet stays a tablet upside down too. Entering upside down from another mode
+still selects present: tent sits at ~305 degrees and the initial angle is a guess.
 Without yoga-hinge running, tablet is never chosen and the rest behaves as before.
 """
 
@@ -54,6 +54,7 @@ TABLET_BY_ORIENTATION = {
     "normal": "tablet",
     "left-up": "tablet-left",
     "right-up": "tablet-right",
+    "bottom-up": "tablet-upside",
 }
 
 ORIENTATION_TO_MODE = {
@@ -132,9 +133,15 @@ def target_mode(orientation, current):
     """The mode for this orientation, folded into a tablet when the hinge says so."""
     angle = hinge()
     in_tablet = bool(current and current.startswith("tablet"))
-    if orientation != "bottom-up" and angle is not None and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES):
+    if (
+        (orientation != "bottom-up" or in_tablet)
+        and angle is not None
+        and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES)
+    ):
         # Lying flat reports no usable orientation; keep the tablet as it is held.
-        return TABLET_BY_ORIENTATION.get(orientation, current if in_tablet else "tablet")
+        return TABLET_BY_ORIENTATION.get(
+            orientation, current if in_tablet else "tablet"
+        )
     return ORIENTATION_TO_MODE.get(orientation)
 
 
