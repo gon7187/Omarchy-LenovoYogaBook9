@@ -251,7 +251,12 @@ def resize_and_place(address):
         "floating test geometry",
         lambda: with_client(
             lambda current: (
-                current["size"] == [width, height] and current["at"] == [x, y]
+                # GTK/compositor size rounding may differ by one logical pixel.
+                all(
+                    abs(actual - wanted) <= 1
+                    for actual, wanted in zip(current["size"], [width, height])
+                )
+                and current["at"] == [x, y]
             )
         ),
     )
