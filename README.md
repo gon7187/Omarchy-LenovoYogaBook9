@@ -511,6 +511,37 @@ It started at the 120° guess and came back to 119°, so the drift really is abo
 
 In tablet `yoga-mode` disables `eDP-2` and the lower touchscreen and stylus, and rotates `eDP-1` with the machine. Disabling a monitor hands its workspace to the other and makes it the visible one, and enabling it sends every workspace back where it came from — a window opened in tablet mode would reappear on the keyboard panel. `yoga-mode` keeps the workspace the upper panel showed and gathers windowed workspaces onto `eDP-1` on the way out. Without `yoga-hinge`, tablet is simply never chosen.
 
+### Keep the INGENIC serial watchdog reader alive
+
+Reading the INGENIC serial stream with plain `cat` caused 484 service restarts
+on this machine: the terminal line discipline treated binary `0x1c` as SIGQUIT
+and `0x04` as EOF. It could also echo bytes back to the device.
+[`bin/yoga-sensor-keepalive`](bin/yoga-sensor-keepalive) opens the port with
+`O_NOCTTY` before setting raw mode, then discards the stream without logging or
+writing sensor data. The flag prevents signals even in the interval between
+opening the device and configuring it; a separate `stty` followed by `cat`
+leaves that startup race open. The same descriptor stays open throughout.
+
+Install separately from the user services (Python 3 standard library only):
+
+```bash
+# Preserve the old unit if this workaround was already installed locally.
+sudo cp -a /etc/systemd/system/yoga-sensor-keepalive.service "/etc/systemd/system/yoga-sensor-keepalive.service.bak.$(date +%s)" # if present
+sudo install -m 755 bin/yoga-sensor-keepalive /usr/local/bin/
+sudo install -m 644 config/systemd/yoga-sensor-keepalive.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now yoga-sensor-keepalive.service
+sudo systemctl restart yoga-sensor-keepalive.service
+systemctl show yoga-sensor-keepalive.service -p ActiveState -p NRestarts
+```
+
+The unit retains its restricted dynamic user and restarts on device disconnect.
+Run `python3 bin/test_sensor_keepalive.py` without root or hardware to check
+the controlling-terminal boundary, all 256 byte values, draining and no echo
+or logging. On-device validation: raw mode, no controlling TTY, no restarts or
+new crashes over three minutes, working orientation changes. Suspend/replug
+recovery has not been exercised by this test.
+
 ---
 
 ## Volume keys do nothing with a DSP sink

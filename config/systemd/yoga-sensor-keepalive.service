@@ -1,0 +1,31 @@
+[Unit]
+Description=Keep Yoga Book INGENIC sensor watchdog alive
+Documentation=https://github.com/torvalds/linux/commit/e5ab27ddd74e2d67a94c51c6f2ad87b1ff13912b
+After=systemd-udevd.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=uucp
+ExecStart=/usr/local/bin/yoga-sensor-keepalive
+StandardOutput=null
+StandardError=journal
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+DevicePolicy=closed
+DeviceAllow=/dev/serial/by-id/usb-INGENIC_Gadget_Serial_and_keyboard_ingenic-if00 r
+
+[Install]
+WantedBy=multi-user.target
