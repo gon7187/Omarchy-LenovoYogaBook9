@@ -15,7 +15,7 @@ Key {
         anchors.left: parent.left; anchors.top: parent.top
         anchors.leftMargin: 13; anchors.topMargin: 7
         text: key.symbols.en.toUpperCase()
-        color: key.russianActive ? Theme.textDim : Theme.text
+        color: key.russianActive ? Theme.textDim : Theme.accent
         font.pixelSize: key.height<60 ? 21 : 25; font.weight: Font.Medium
     }
     Text {
