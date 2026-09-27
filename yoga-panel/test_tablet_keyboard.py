@@ -441,6 +441,7 @@ def live(mode):
         )
         assert during["fullscreenClient"] == before["fullscreenClient"] == 2, during
         set_mode(alternate(mode))
+        focus(address)
         layer = opened("OSK after rotation")
         wait_for(
             "fullscreen above rotated OSK",
@@ -451,6 +452,7 @@ def live(mode):
             ),
         )
         set_mode(mode)
+        focus(address)
         layer = opened("OSK after returning orientation")
         wait_for(
             "fullscreen above returned OSK",
