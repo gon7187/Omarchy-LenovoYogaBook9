@@ -115,6 +115,7 @@ ShellRoot {
         onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration,themeName:root.themeName,iconStyle:root.iconStyle,panelOpacity:root.panelOpacity,oledShift:root.oledShift,oledDim:root.oledDim}})
     }
     property string status: "Подключение…"
+    readonly property bool statusVisible: !["Готово","Говори…","Распознаю…"].includes(status)
     readonly property var bottom: Quickshell.screens.find(s => s.name === "eDP-2") ?? null
     // Tablet mode turns eDP-2 off; the keyboard then docks at the bottom of eDP-1
     // (without the touchpad) and the Hyprland plugin shows it for text fields.
@@ -457,13 +458,13 @@ ShellRoot {
             }
             RowLayout {
                 id: suggestionRow
-                visible: !root.settingsOpen && ((root.predictionEnabled && root.suggestions.length>0) || root.status!=="Готово")
+                visible: !root.settingsOpen && ((root.predictionEnabled && root.suggestions.length>0) || root.statusVisible)
                 Layout.fillWidth: true; Layout.preferredHeight: 28; Layout.minimumHeight: 28; Layout.maximumHeight: 28; spacing: 7
                 Repeater {
                     model: root.predictionEnabled ? root.suggestions : []
                     Key { required property string modelData; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 1; Layout.fillHeight: true; radius: 7; textSize: 15; label: modelData; onActivated: root.completeWord(modelData) }
                 }
-                Text { visible: root.status!=="Готово"; text: root.status; color: Theme.textMuted; font.pixelSize: 12 }
+                Text { visible: root.statusVisible; text: root.status; color: Theme.textMuted; font.pixelSize: 12 }
             }
             PanelSettings {
                 visible: root.settingsOpen && !root.appearanceOpen
@@ -486,7 +487,7 @@ ShellRoot {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 radius: 15
-                color: Theme.surface
+                color: Theme.touchpad
                 border.color: Theme.keyBorder
                 Text { visible: !root.padEnabled; anchors.centerIn: parent; text: "Тачпад выключен · Fn + F10"; color: Theme.textDim; font.pixelSize: 14 }
                 MultiPointTouchArea {
