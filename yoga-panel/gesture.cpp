@@ -8,6 +8,7 @@
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/pointer/PointerManager.hpp>
 #include <spawn.h>
 #include <cstdlib>
 #include <stdexcept>
@@ -15,11 +16,51 @@
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include "gesture.hpp"
+#include "cursor_bounds.hpp"
 
 extern char **environ;
 static TouchGestures recognizer;
 static bool claimed = false;
 static std::unordered_map<int32_t, PHLLSREF> panelTouches;
+static CFunctionHook* cursorHook = nullptr;
+static bool confining = false;
+
+static Vector2D confinedPosition(Vector2D position) {
+    if (g_pSessionLockManager->isSessionLocked()) return position;
+    const auto upper = State::monitorState()->query().name("eDP-1").run();
+    const auto lower = State::monitorState()->query().name("eDP-2").run();
+    if (!upper || !lower || !upper->m_enabled || !lower->m_enabled || !upper->m_dpmsStatus) return position;
+    for (const auto& weak : lower->m_layerSurfaceLayers[3]) {
+        const auto layer = weak.lock();
+        if (!layer || !layer->m_mapped || layer->m_namespace != "yoga-input-panel") continue;
+        const auto box = upper->logicalBox();
+        const auto [x,y] = confinePointer(position.x,position.y,box.x,box.y,box.w,box.h);
+        return {x,y};
+    }
+    return position;
+}
+
+// mouse.move fires AFTER the hardware cursor has moved. Clamp at the shared
+// cursor update instead, before the backend sees relative or absolute motion.
+static void cursorMoved(Pointer::CPointerManager* manager) {
+    const auto position = manager->position();
+    const auto target = confining ? position : confinedPosition(position);
+    if (target != position) {
+        confining = true;
+        manager->warpTo(target);
+        confining = false;
+        return;
+    }
+    reinterpret_cast<void(*)(Pointer::CPointerManager*)>(cursorHook->m_original)(manager);
+}
+
+static void confineCurrentPointer() {
+    const auto position = Pointer::mgr()->position();
+    const auto target = confinedPosition(position);
+    if (target == position) return;
+    Pointer::mgr()->warpTo(target);
+    g_pInputManager->simulateMouseMovement();
+}
 
 // Deliver panel touches without Hyprland's normal touchscreen refocus. Pointer
 // focus must stay at the virtual mouse position, not follow the user's finger.
@@ -150,10 +191,21 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() { return HYPRLAND_API_VERSION; }
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     if (std::string(__hyprland_api_get_hash()) != __hyprland_api_get_client_hash())
         throw std::runtime_error("Yoga gesture: Hyprland version mismatch; rebuild first");
+    for (const auto& match : HyprlandAPI::findFunctionsByName(handle,"onCursorMoved")) {
+        if (match.demangled != "Pointer::CPointerManager::onCursorMoved()") continue;
+        cursorHook = HyprlandAPI::createFunctionHook(handle,match.address,reinterpret_cast<void*>(cursorMoved));
+        break;
+    }
+    if (!cursorHook || !cursorHook->hook())
+        throw std::runtime_error("Yoga gesture: cursor confinement hook unavailable");
     static auto a=Event::bus()->m_events.input.touch.down.listen(down);
     static auto b=Event::bus()->m_events.input.touch.motion.listen(motion);
     static auto c=Event::bus()->m_events.input.touch.up.listen(up);
     static auto d=Event::bus()->m_events.input.touch.cancel.listen(cancel);
+    static auto e=Event::bus()->m_events.layer.opened.listen([](PHLLS layer) {
+        if (layer && layer->m_namespace == "yoga-input-panel") confineCurrentPointer();
+    });
+    confineCurrentPointer();
     textInputTimer = makeShared<CEventLoopTimer>(std::chrono::milliseconds(200), pollTextInput, nullptr);
     g_pEventLoopManager->addTimer(textInputTimer);
     // Changing the touch route mid-session must not leave Qt tracking fingers
@@ -199,6 +251,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     return {"yoga-panel-gesture","Yoga panel touch routing and multi-finger touchscreen gestures","local","0.4.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
+    if (cursorHook) { cursorHook->unhook(); cursorHook = nullptr; }
     if (textInputTimer) { g_pEventLoopManager->removeTimer(textInputTimer); textInputTimer.reset(); }
     for (const auto& [id, layer] : panelTouches) g_pSeatManager->sendTouchUp(0, id);
     if (!panelTouches.empty()) g_pSeatManager->sendTouchFrame();
