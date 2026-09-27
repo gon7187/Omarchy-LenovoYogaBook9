@@ -26,8 +26,8 @@ ColumnLayout {
                 palette.button: Theme.card; palette.buttonText: Theme.text; palette.base: Theme.card; palette.text: Theme.text; palette.highlight: Theme.keyDown; palette.highlightedText: Theme.text
             }
             Text { text: "Сейчас: "+Theme.name; color: Theme.textMuted; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-            SettingsSlider { label: "Непрозрачность фона"; value: settings.panelOpacity; minimum: .65; maximum: 1; step: .05; displayValue: Math.round(value*100)+"%"; onAdjusted: value => settings.panelOpacity=value }
-            Text { text: "Буквы и значки остаются чёткими.\nFn + пробел: OLED Black / тема ОС."; color: Theme.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            SettingsSlider { label: "Непрозрачность фона"; value: settings.panelOpacity; minimum: .65; maximum: 1; step: .01; displayValue: Math.round(value*100)+"%"; onAdjusted: value => settings.panelOpacity=value }
+            Text { text: "− / +: точно по 1%. Меньше — прозрачнее.\nБуквы и значки остаются чёткими.\nFn + пробел: OLED Black / тема ОС."; color: Theme.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Item { Layout.fillHeight: true }
         }
         SettingsCard {
