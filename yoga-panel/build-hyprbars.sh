@@ -16,7 +16,11 @@ if [[ -z $commit ]]; then git -C "$cache" fetch -q origin && git -C "$cache" che
 git -C "$cache" cat-file -e "$commit^{commit}" 2>/dev/null || git -C "$cache" fetch -q origin "$commit"
 src=$(mktemp -d); temporary=; trap 'rm -rf -- "$src" ${temporary:+"$temporary"}' EXIT
 git -C "$cache" archive "$commit" hyprbars | tar -x -C "$src"
+# Keep touch controls inside the window without reserving a title-bar row.
+patch --batch --fuzz=0 -d "$src" -p1 < hyprbars-overlay.patch
 temporary=$(mktemp build/hyprbars.XXXXXX.so)
+# pkg-config emits separate compiler arguments.
+# shellcheck disable=SC2046
 g++ -std=c++2b -O2 -shared -fPIC -fno-gnu-unique -w $(pkg-config --cflags pixman-1 libdrm hyprland libinput libudev wayland-server xkbcommon) \
   "$src"/hyprbars/{main,barDeco,BarPassElement}.cpp -o "$temporary"
 # Atomic replacement never truncates the inode mapped by a running compositor.
