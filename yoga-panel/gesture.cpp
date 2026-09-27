@@ -17,6 +17,12 @@
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include "gesture.hpp"
 #include "cursor_bounds.hpp"
+#include "tablet.hpp"
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/layout/target/Target.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 
 extern char **environ;
 static TouchGestures recognizer;
@@ -24,6 +30,7 @@ static bool claimed = false;
 static std::unordered_map<int32_t, PHLLSREF> panelTouches;
 static CFunctionHook* cursorHook = nullptr;
 static bool confining = false;
+static bool tabletTapped = false;
 
 static Vector2D confinedPosition(Vector2D position) {
     if (g_pSessionLockManager->isSessionLocked()) return position;
@@ -109,6 +116,7 @@ static void down(ITouch::SDownEvent event, Event::SCallbackInfo& info) {
             }
         }
     }
+    if (output == "eDP-1") tabletTapped = true;
     recognizer.down(event.touchID,event.timeMs,event.pos.x,event.pos.y);
     claim(info);
 }
@@ -163,27 +171,106 @@ static void cancel(ITouch::SCancelEvent event, Event::SCallbackInfo&) {
     panelTouches.erase(event.touchID);
     resetGesture();
 }
-// Tablet mode has no keyboard panel below, so bring the on-screen keyboard up on
-// the upper panel while an app has a text field active, and put it away after.
-// Hyprland has no event for text-input enable, hence a light poll; it acts only
-// with eDP-2 off, and only ever hides a keyboard it showed itself.
-static SP<CEventLoopTimer> textInputTimer;
-static bool autoShown = false;
-static int idlePolls = 0;
-static void pollTextInput(SP<CEventLoopTimer> self, void*) {
-    bool lowerOn = false;
-    for (const auto& monitor : State::monitorState()->monitors())
-        if (monitor->m_name == "eDP-2" && monitor->m_enabled) lowerOn = true;
-    const auto input = g_pInputManager->m_relay.getFocusedTextInput();
-    const bool wanted = !lowerOn && !g_pSessionLockManager->isSessionLocked() && input && input->isEnabled();
-    if (wanted) {
-        idlePolls = 0;
-        if (!autoShown) { autoShown = true; runPanel("show"); }
-    } else if (autoShown && ++idlePolls >= 3) {
-        // A field briefly disabled while a page re-renders must not flicker the keyboard.
-        autoShown = false; idlePolls = 0;
-        if (!lowerOn) runPanel("hide");
+// Keep client fullscreen state intact: only the compositor switches to its
+// maximized work area, so a browser does not exit fullscreen or lose text focus.
+struct TabletWindow {
+    PHLWINDOWREF window;
+    PHLMONITORREF monitor;
+    WORKSPACEID workspace;
+    Fullscreen::SFullscreenMode fullscreen;
+    CBox original, applied, monitorBox;
+};
+static std::vector<TabletWindow> tabletWindows;
+
+static CBox fittedBox(const CBox& box, const CBox& area) {
+    const auto b = fitTabletWindow({box.x,box.y,box.w,box.h},{area.x,area.y,area.w,area.h});
+    return {b[0],b[1],b[2],b[3]};
+}
+
+static void restoreTabletWindows() {
+    for (const auto& saved : tabletWindows) {
+        const auto window = saved.window.lock();
+        const auto monitor = saved.monitor.lock();
+        if (!window || !window->m_isMapped || !window->m_target || !monitor || !monitor->m_enabled ||
+            window->m_monitor != saved.monitor || window->workspaceID() != saved.workspace) continue;
+        const auto modes = Fullscreen::controller()->getFullscreenModes(window);
+        if (saved.fullscreen.internal == Fullscreen::FSMODE_FULLSCREEN) {
+            // A user/client mode change takes precedence over our old snapshot.
+            if (modes.internal == Fullscreen::FSMODE_MAXIMIZED && modes.client == saved.fullscreen.client)
+                Fullscreen::controller()->setFullscreenMode(window,saved.fullscreen.internal,saved.fullscreen.client);
+        } else if (window->m_target->floating() && modes.internal == Fullscreen::FSMODE_NONE &&
+                   window->m_target->position() == saved.applied) {
+            // Rotation may make the old rectangle unreachable. Keep it on screen.
+            const auto box = monitor->logicalBox();
+            g_layoutManager->setTargetGeom(box == saved.monitorBox ? saved.original : fittedBox(saved.original,box),window->m_target);
+        }
     }
+    tabletWindows.clear();
+}
+
+static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
+    if (!window || !window->m_isMapped || window->m_monitor != monitor || !window->m_target) return;
+    const auto modes = Fullscreen::controller()->getFullscreenModes(window);
+    auto saved = std::ranges::find_if(tabletWindows,[&](const auto& item) { return item.window == window; });
+    if (modes.internal == Fullscreen::FSMODE_FULLSCREEN) {
+        if (saved == tabletWindows.end())
+            tabletWindows.push_back({window,monitor,window->workspaceID(),modes,window->m_target->position(),{},monitor->logicalBox()});
+        Fullscreen::controller()->setFullscreenMode(window,Fullscreen::FSMODE_MAXIMIZED,modes.client);
+        return;
+    }
+    if (modes.internal != Fullscreen::FSMODE_NONE || !window->m_target->floating()) return;
+    auto area = monitor->m_reservedArea.apply(monitor->logicalBox());
+    area.h = std::min(area.h,panel->m_geometry.y-area.y);
+    const auto extents = window->getFullWindowExtents();
+    area.x += extents.topLeft.x; area.y += extents.topLeft.y;
+    area.w -= extents.topLeft.x+extents.bottomRight.x;
+    area.h -= extents.topLeft.y+extents.bottomRight.y;
+    const auto current = window->m_target->position();
+    const auto fit = fittedBox(current,area);
+    if (fit == current) return;
+    if (saved == tabletWindows.end()) {
+        tabletWindows.push_back({window,monitor,window->workspaceID(),modes,current,fit,monitor->logicalBox()});
+        saved = std::prev(tabletWindows.end());
+    } else if (current != saved->applied) {
+        // Preserve a deliberate drag/resize made while the keyboard was visible.
+        saved->original = current;
+    }
+    g_layoutManager->setTargetGeom(fit,window->m_target);
+    saved->applied = window->m_target->position();
+}
+
+// A light poll observes text-input activation and the actual mapped panel. No
+// text or titles are read. Manual show works even for apps without text-input.
+static SP<CEventLoopTimer> textInputTimer;
+static TabletAutoShow tabletAutoShow;
+static WP<CWLSurfaceResource> tabletInputSurface;
+static void pollTextInput(SP<CEventLoopTimer> self, void*) {
+    const auto lower = State::monitorState()->query().name("eDP-2").run();
+    const auto upper = State::monitorState()->query().name("eDP-1").run();
+    const bool tablet = upper && upper->m_enabled && (!lower || !lower->m_enabled);
+    const bool tapped = std::exchange(tabletTapped,false);
+    PHLLS panel;
+    if (tablet) for (const auto& weak : upper->m_layerSurfaceLayers[3]) {
+        const auto layer = weak.lock();
+        if (layer && layer->m_mapped && layer->m_namespace == "yoga-input-panel") { panel = layer; break; }
+    }
+    const auto window = Desktop::focusState()->window();
+    if (tablet && !g_pSessionLockManager->isSessionLocked()) {
+        const auto input = g_pInputManager->m_relay.getFocusedTextInput();
+        const bool wanted = window && window->m_monitor == upper && input && input->isEnabled();
+        const auto surface = wanted ? input->focusedSurface() : nullptr;
+        const bool activated = tapped || surface != tabletInputSurface;
+        tabletInputSurface = surface;
+        const auto action = tabletAutoShow.step(wanted,!!panel,activated);
+        if (action == TabletAutoShow::Action::Show) runPanel("show");
+        if (action == TabletAutoShow::Action::Hide) runPanel("hide");
+        if (panel) fitTabletWindow(window,upper,panel);
+    } else {
+        if (g_pSessionLockManager->isSessionLocked() && tabletAutoShow.owned) runPanel("hide");
+        // Returning to laptop keeps the keyboard on eDP-2, as before.
+        tabletAutoShow = {}; tabletInputSurface.reset();
+    }
+    if (!panel || !tablet || g_pSessionLockManager->isSessionLocked()) restoreTabletWindows();
     self->updateTimeout(std::chrono::milliseconds(200));
 }
 
@@ -251,6 +338,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     return {"yoga-panel-gesture","Yoga panel touch routing and multi-finger touchscreen gestures","local","0.4.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
+    restoreTabletWindows();
     if (cursorHook) { cursorHook->unhook(); cursorHook = nullptr; }
     if (textInputTimer) { g_pEventLoopManager->removeTimer(textInputTimer); textInputTimer.reset(); }
     for (const auto& [id, layer] : panelTouches) g_pSeatManager->sendTouchUp(0, id);

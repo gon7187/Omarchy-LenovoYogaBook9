@@ -5,6 +5,8 @@ mkdir -p build
 g++ -std=c++23 -Wall -Wextra -Werror test_gesture.cpp -o build/test-gesture
 build/test-gesture
 g++ -std=c++23 -Wall -Wextra -Werror test_cursor_bounds.cpp -o build/test-cursor-bounds
+g++ -std=c++23 -Wall -Wextra -Werror test_tablet.cpp -o build/test-tablet
+build/test-tablet
 build/test-cursor-bounds
 temporary=$(mktemp build/yoga-panel-gesture.XXXXXX.so)
 trap 'rm -f -- "$temporary"' EXIT
