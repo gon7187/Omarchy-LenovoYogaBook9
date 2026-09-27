@@ -49,11 +49,15 @@ apply() {
 # goes dark and deaf. Every other mode turns it back on: `disabled` persists
 # once set, exactly like `mirror`.
 lower_input() {
-  local dev
+  local dev transform="${2:-}"
   for dev in touchscreen stylus; do
     # hl.device replaces the device's whole rule: without output it forgets the
     # eDP-2 mapping from input.lua, and touches stop reaching the lower panel.
-    apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-$dev-bottom\", output = \"eDP-2\", enabled = $1 })" || return 1
+    if [[ $dev == touchscreen && -n $transform ]]; then
+      apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-$dev-bottom\", output = \"eDP-2\", transform = $transform, enabled = $1 })" || return 1
+    else
+      apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-$dev-bottom\", output = \"eDP-2\", enabled = $1 })" || return 1
+    fi
   done
 }
 
@@ -65,7 +69,7 @@ upper_touch() {
 
 park() {
   upper_touch 2 || return 1
-  lower_input true &&
+  lower_input true 0 &&
   apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"$PARK\", scale = 2, transform = 0, mirror = \"none\", $CM, disabled = false })"
 }
 
@@ -79,6 +83,8 @@ mode_stand() {
 # 900x1440 logical each once rotated, so the right-hand panel starts at x=900.
 mode_book() {
   park &&
+  upper_touch 3 &&
+  lower_input true 1 &&
   apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\", $CM })" &&
   apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\", $CM })"
 }
@@ -88,6 +94,8 @@ mode_book() {
 # mode_book, and the two swap sides.
 mode_book_flip() {
   park &&
+  upper_touch 1 &&
+  lower_input true 3 &&
   apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\", $CM })" &&
   apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\", $CM })"
 }

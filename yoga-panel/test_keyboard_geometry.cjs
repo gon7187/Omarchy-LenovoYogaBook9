@@ -14,6 +14,7 @@ TestCase {
  id: root; name: "KeyboardGeometry"; when: windowShown
  width: 1440; height: 500; visible: true
  property bool tablet: true
+ property bool book: false
  property bool settingsOpen: false
  property bool russian: true
  property bool shift: false
@@ -24,21 +25,24 @@ TestCase {
  property bool alt: false
  function holdMod(name,down) {}
  Item { id: panel; width: 900; property real areaHeight: 1440
+ property bool settingsVisible: false
+ property bool leftHalf: false
+ readonly property bool rightHalf: root.book && !leftHalf
  ${keyboard}
  }
  function test_bounds_data() {
-  let cases=[]; for(let w of [900,874,1440]) for(let ru of [true,false]) for(let fn of [false,true]) cases.push({tag:w+"-"+ru+"-"+fn,width:w,ru:ru,fn:fn}); cases.push({tag:"laptop",width:1440,ru:true,fn:false,laptop:true}); return cases;
+  let cases=[]; for(let w of [900,874,1440]) for(let ru of [true,false]) for(let fn of [false,true]) cases.push({tag:w+"-"+ru+"-"+fn,width:w,ru:ru,fn:fn}); cases.push({tag:"laptop",width:1440,ru:true,fn:false,laptop:true}); for(let left of [true,false]) for(let ru of [true,false]) cases.push({tag:"book-"+left+"-"+ru,width:900,ru:ru,fn:false,book:true,left:left}); return cases;
  }
  function test_bounds(data) {
-  tablet=!data.laptop; panel.width=data.width; panel.areaHeight=data.width<1000 ? 1440 : 900; russian=data.ru; fnActive=data.fn;
+  book=!!data.book; panel.leftHalf=!!data.left; tablet=!data.laptop && !book; panel.width=data.width; panel.areaHeight=data.width<1000 ? 1440 : 900; russian=data.ru; fnActive=data.fn;
   wait(50);
   let keys=[];
   function visit(item) {
-   if (item.label!==undefined && item.activated!==undefined) keys.push(item);
+   if (item.visible && item.label!==undefined && item.activated!==undefined) keys.push(item);
    for (let child of item.children || []) visit(child);
   }
   visit(keyboard);
-  verify(keys.length>50);
+  verify(keys.length>(book ? 20 : 50));
   for (let i=0;i<keys.length;i++) {
    let a=keys[i],p=a.mapToItem(keyboard,0,0);
    verify(p.x>=-1 && p.x+a.width<=keyboard.width+1,"Key outside keyboard: "+a.label);
@@ -57,7 +61,7 @@ TestCase {
    }
   }
   let up=upKey.mapToItem(keyboard,0,0),down=arrowKeys.itemAt(1).mapToItem(keyboard,0,0);
-  verify(Math.abs(up.x-down.x)<1,"Up arrow must align with Down");
+  verify(panel.leftHalf || Math.abs(up.x-down.x)<1,"Up arrow must align with Down");
  }
 }`);
  const result=cp.spawnSync('/usr/lib/qt6/bin/qmltestrunner',['-input',directory],{encoding:'utf8',env:{...process.env,QT_QPA_PLATFORM:'offscreen',QT_QUICK_BACKEND:'software'}});
