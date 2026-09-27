@@ -478,3 +478,7 @@ g++ -std=c++23 -O1 -shared -fPIC -fno-gnu-unique $(pkg-config --cflags hyprland 
 python3 test_touch_transfer_input.py book
 python3 test_touch_transfer_input.py book-flip
 ```
+
+В режиме двух горизонтальных экранов текстовое поле автоматически вызывает
+компактную планшетную клавиатуру на своём экране. Ручной вызов панели жестом
+или `yoga-panel show` сохраняет полную нижнюю клавиатуру с тачпадом.

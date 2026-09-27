@@ -14,6 +14,9 @@ PANEL = Path.home() / ".local/share/yoga-panel"
 MODE = Path.home() / ".local/bin/yoga-mode"
 UNIT = "yoga-autorotate.service"
 TARGET_SCREEN = "eDP-1"
+AUTO_NAMESPACE = "yoga-screen-keyboard"
+MANUAL_NAMESPACE = "yoga-input-panel"
+PANEL_NAMESPACES = {AUTO_NAMESPACE, MANUAL_NAMESPACE}
 
 
 def probe():
@@ -120,14 +123,22 @@ def panel_layers():
     for name, monitor in layers.items():
         for level in monitor["levels"].values():
             for layer in level:
-                if layer.get("namespace") == "yoga-input-panel":
+                if layer.get("namespace") in PANEL_NAMESPACES:
                     found.append({**layer, "monitor": name})
     return found
 
 
-def panel_layer():
+def panel_layer(namespace=None, screen_name=None):
+    if screen_name is None:
+        screen_name = TARGET_SCREEN
     return next(
-        (layer for layer in panel_layers() if layer["monitor"] == TARGET_SCREEN), None
+        (
+            layer
+            for layer in panel_layers()
+            if layer["monitor"] == screen_name
+            and (namespace is None or layer["namespace"] == namespace)
+        ),
+        None,
     )
 
 
@@ -138,9 +149,11 @@ def reserved(screen_name):
     return tuple(monitor["reserved"])
 
 
-def screen():
+def screen(screen_name=None):
+    if screen_name is None:
+        screen_name = TARGET_SCREEN
     monitor = next(
-        m for m in data("hyprctl", "monitors", "-j") if m["name"] == TARGET_SCREEN
+        m for m in data("hyprctl", "monitors", "-j") if m["name"] == screen_name
     )
     width, height = (
         monitor["width"] / monitor["scale"],
@@ -249,9 +262,9 @@ def with_client(predicate):
     return current if current and predicate(current) else None
 
 
-def opened(label):
+def opened(label, namespace=AUTO_NAMESPACE):
     def fitted_layer():
-        layer = panel_layer()
+        layer = panel_layer(namespace)
         if status() != "open" or not layer or len(panel_layers()) != 1:
             return None
         _, (x, y, width, height) = screen()
@@ -272,7 +285,8 @@ def above(layer):
 
 def alternate(mode):
     return {
-        "book": "book-flip",
+        "stand": "book",
+        "book": "stand",
         "book-flip": "book",
         "tablet": "tablet-left",
         "tablet-left": "tablet-right",
@@ -282,26 +296,27 @@ def alternate(mode):
 
 def set_mode(mode):
     run(str(MODE), mode, stdout=subprocess.DEVNULL)
+    expected = {
+        "stand": {"eDP-1": (False, 2), "eDP-2": (False, 0)},
+        "tablet": {"eDP-1": (False, 2), "eDP-2": (True, None)},
+        "tablet-left": {"eDP-1": (False, 3), "eDP-2": (True, None)},
+        "tablet-right": {"eDP-1": (False, 1), "eDP-2": (True, None)},
+        "book": {"eDP-1": (False, 3), "eDP-2": (False, 1)},
+        "book-flip": {"eDP-1": (False, 1), "eDP-2": (False, 3)},
+    }[mode]
+
+    def applied():
+        monitors = {m["name"]: m for m in data("hyprctl", "monitors", "all", "-j")}
+        return all(
+            name in monitors
+            and monitors[name]["disabled"] == disabled
+            and (transform is None or monitors[name]["transform"] == transform)
+            for name, (disabled, transform) in expected.items()
+        )
+
     wait_for(
         mode,
-        lambda: (
-            any(
-                m["name"] == "eDP-2" and m["disabled"] == (not mode.startswith("book"))
-                for m in data("hyprctl", "monitors", "all", "-j")
-            )
-            and next(
-                m["transform"]
-                for m in data("hyprctl", "monitors", "-j")
-                if m["name"] == "eDP-1"
-            )
-            == {
-                "tablet": 2,
-                "tablet-left": 3,
-                "tablet-right": 1,
-                "book": 3,
-                "book-flip": 1,
-            }[mode]
-        ),
+        applied,
     )
 
 
@@ -343,9 +358,11 @@ def live(mode):
 
         send(proc, "entry")
         layer = opened("automatic OSK open for tiled window")
+        if mode == "stand":
+            assert layer["h"] in (339, 377), layer
         tiled = wait_for("tiled window above OSK", lambda: above(layer))
         assert not tiled["floating"] and tiled["fullscreen"] == 0, tiled
-        if mode.startswith("book"):
+        if mode in ("book", "stand"):
             former_screen = TARGET_SCREEN
             TARGET_SCREEN = "eDP-2" if former_screen == "eDP-1" else "eDP-1"
             run(
@@ -363,6 +380,27 @@ def live(mode):
             )
         send(proc, "button")
         wait_for("automatic OSK hide after tiled window", lambda: status() == "closed")
+
+        if mode == "stand":
+            panel("openPanel")
+
+            def full_manual_pad():
+                layer = panel_layer(MANUAL_NAMESPACE, "eDP-2")
+                if status() != "open" or not layer or len(panel_layers()) != 1:
+                    return None
+                _, (x, y, width, height) = screen("eDP-2")
+                return (
+                    layer
+                    if abs(layer["x"] - x) <= 1
+                    and abs(layer["y"] - y) <= 1
+                    and abs(layer["w"] - width) <= 1
+                    and abs(layer["h"] - height) <= 1
+                    else None
+                )
+
+            wait_for("manual full lower pad", full_manual_pad)
+            panel("hide")
+            wait_for("manual pad hide", lambda: status() == "closed")
 
         # GTK requests real client fullscreen. The plugin must make only the internal
         # mode maximized while its eDP-1 layer is mapped, then put both values back.
@@ -512,7 +550,7 @@ if __name__ == "__main__":
     parser.add_argument("--probe", action="store_true")
     parser.add_argument(
         "--mode",
-        choices=("tablet", "tablet-left", "tablet-right", "book", "book-flip"),
+        choices=("stand", "tablet", "tablet-left", "tablet-right", "book", "book-flip"),
         default="tablet",
     )
     parser.add_argument("--monitor", choices=("eDP-1", "eDP-2"), default="eDP-1")

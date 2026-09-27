@@ -43,7 +43,7 @@ static PHLLS panelOn(PHLMONITOR monitor) {
     if (!monitor) return {};
     for (const auto& weak : monitor->m_layerSurfaceLayers[3]) {
         auto layer = weak.lock();
-        if (layer && layer->m_mapped && layer->m_namespace == "yoga-input-panel") return layer;
+        if (layer && layer->m_mapped && (layer->m_namespace == "yoga-input-panel" || layer->m_namespace == "yoga-screen-keyboard")) return layer;
     }
     return {};
 }
@@ -123,7 +123,7 @@ static void down(ITouch::SDownEvent event, Event::SCallbackInfo& info) {
             const auto global = monitor->m_position + event.pos * monitor->m_size;
             for (const auto& weak : monitor->m_layerSurfaceLayers[3]) {
                 auto layer = weak.lock();
-                if (!layer || !layer->m_mapped || layer->m_namespace != "yoga-input-panel" ||
+                if (!layer || !layer->m_mapped || (layer->m_namespace != "yoga-input-panel" && layer->m_namespace != "yoga-screen-keyboard") ||
                     !layer->m_geometry.containsPoint(global) || !layer->resource()) continue;
                 panelTouches[event.touchID] = layer;
                 resetGesture();
@@ -133,9 +133,7 @@ static void down(ITouch::SDownEvent event, Event::SCallbackInfo& info) {
             }
         }
     }
-    const auto upper = State::monitorState()->query().name("eDP-1").run();
-    const auto lower = State::monitorState()->query().name("eDP-2").run();
-    if (output == "eDP-1" || (output == "eDP-2" && bookMode(upper,lower))) tabletTapped = true;
+    tabletTapped = true;
     recognizer.down(event.touchID,event.timeMs,event.pos.x,event.pos.y);
     claim(info);
 }
@@ -283,12 +281,12 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto lower = State::monitorState()->query().name("eDP-2").run();
     const auto upper = State::monitorState()->query().name("eDP-1").run();
     const bool tablet = upper && upper->m_enabled && (!lower || !lower->m_enabled);
-    const bool book = bookMode(upper,lower);
-    const bool docked = tablet || book;
+    const bool dual = upper && lower && upper->m_enabled && lower->m_enabled && !upper->isMirror() && !lower->isMirror();
+    const bool docked = tablet || dual;
     const bool tapped = std::exchange(tabletTapped,false);
     const auto window = Desktop::focusState()->window();
     const auto monitor = window ? window->m_monitor.lock() : PHLMONITOR{};
-    const bool internal = monitor && (monitor == upper || (book && monitor == lower));
+    const bool internal = monitor && (monitor == upper || (dual && monitor == lower));
     const auto panel = internal ? panelOn(monitor) : PHLLS{};
     const bool visible = docked && (!!panelOn(upper) || !!panelOn(lower));
     if (docked && !g_pSessionLockManager->isSessionLocked()) {
@@ -298,10 +296,13 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
         const auto surface = wanted ? input->focusedSurface() : nullptr;
         const bool activated = tapped || surface != tabletInputSurface;
         tabletInputSurface = surface;
-        const auto action = tabletAutoShow.step(wanted,wanted ? !!panel : visible,activated);
-        if (action == TabletAutoShow::Action::Show) runPanel("show");
+        const auto lowerPanel = panelOn(lower);
+        const bool manual = lowerPanel && lowerPanel->m_namespace == "yoga-input-panel";
+        if (manual) { tabletAutoShow.owned=false; tabletAutoShow.pending=0; }
+        const auto action = tabletAutoShow.step(wanted,manual || (wanted ? !!panel : visible),activated);
+        if (action == TabletAutoShow::Action::Show) runPanel("auto");
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
-        if (panel) {
+        if (panel && panel->m_namespace == "yoga-screen-keyboard") {
             restoreTabletWindows(window);
             fitTabletWindow(window,monitor,panel);
         } else restoreTabletWindows();
