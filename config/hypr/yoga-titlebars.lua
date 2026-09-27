@@ -32,7 +32,7 @@ hl.config({
 })
 
 hl.plugin.hyprbars.add_button({
-  bg_color = colors.foreground,
+  bg_color = colors.accent or colors.foreground,
   fg_color = colors.background,
   size = 24,
   icon = "✕",
