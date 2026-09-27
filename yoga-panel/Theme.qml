@@ -33,6 +33,8 @@ QtObject {
     readonly property color textDim: mix(text,base,light ? .70 : .65)
     readonly property color textMuted: textDim
     readonly property color accent: token("accent","#d8d8d8")
+    // Monochrome accents can match inactive legends; foreground restores contrast.
+    readonly property color letterActive: mix(accent,text,.35)
     readonly property color accentDim: textDim
     readonly property color card: alpha(base)
     readonly property color cardBorder: surfaceBorder

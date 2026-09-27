@@ -15,16 +15,16 @@ Key {
         anchors.left: parent.left; anchors.top: parent.top
         anchors.leftMargin: 13; anchors.topMargin: 7
         text: key.symbols.en.toUpperCase()
-        color: key.russianActive ? Theme.textDim : Theme.accent
-        font.pixelSize: key.height<60 ? 21 : 25; font.weight: Font.Medium
+        color: key.russianActive ? Theme.textDim : Theme.letterActive
+        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Normal : Font.Bold
     }
     Text {
         visible: key.dual
         anchors.right: parent.right; anchors.bottom: parent.bottom
         anchors.rightMargin: 13; anchors.bottomMargin: key.height<60 ? 3 : 7
         text: key.symbols.ru.toUpperCase()
-        color: key.russianActive ? Theme.accent : Theme.accentDim
-        font.pixelSize: key.height<60 ? 21 : 25; font.weight: Font.Medium
+        color: key.russianActive ? Theme.letterActive : Theme.textDim
+        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Bold : Font.Normal
     }
     Text {
         visible: !key.dual
