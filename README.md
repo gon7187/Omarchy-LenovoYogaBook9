@@ -39,6 +39,29 @@
 
 Ниже сохранена исходная документация автора по оборудованию.
 
+### Стабильность службы датчиков INGENIC
+
+[`config/systemd/yoga-sensor-keepalive.service`](config/systemd/yoga-sensor-keepalive.service)
+держит открытым последовательный порт INGENIC и читает поток без записи данных
+в журнал. Порт обязательно настраивается в `raw -echo`: иначе бинарные байты
+принимаются за Ctrl+\\ / Ctrl+D, завершая `cat` с SIGQUIT или EOF. Настройка
+и чтение используют один открытый дескриптор; при переподключении устройства
+systemd повторяет запуск с настройкой нового порта.
+
+Системная служба устанавливается отдельно, с резервной копией существующего
+файла; `yoga-panel/install.py` по-прежнему не требует root и её не устанавливает:
+
+```bash
+sudo cp -a /etc/systemd/system/yoga-sensor-keepalive.service "/etc/systemd/system/yoga-sensor-keepalive.service.bak.$(date +%s)" # if already installed
+sudo install -m 644 config/systemd/yoga-sensor-keepalive.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now yoga-sensor-keepalive.service
+sudo systemctl restart yoga-sensor-keepalive.service
+systemctl show yoga-sensor-keepalive.service -p ActiveState -p NRestarts
+```
+
+Проверка без оборудования и root: `python3 bin/test_sensor_keepalive.py`.
+
 Notes and config for running [Omarchy](https://omarchy.org/) on a **Lenovo Yoga Book 9 13IRU8** (machine type `82YQ`) — the dual-screen laptop with two 13.3" 2880x1800 OLED panels.
 
 Omarchy installs and runs fine on this machine, but the dual-screen hardware hits a few things that no amount of clicking around will fix, because they need config that doesn't exist by default. This documents each one: what you see, what's actually causing it, and the fix.
