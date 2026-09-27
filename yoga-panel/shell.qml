@@ -128,7 +128,8 @@ ShellRoot {
     property string bookMonitor: "eDP-1"
     readonly property string focusedMonitor: Hyprland.activeToplevel?.monitor?.name ?? ""
     onFocusedMonitorChanged: {
-        if (focusedMonitor==="eDP-1" || focusedMonitor==="eDP-2") bookMonitor=focusedMonitor;
+        // Automatic placement belongs to the last confirmed text-input request.
+        if (!automaticKeyboard && (focusedMonitor==="eDP-1" || focusedMonitor==="eDP-2")) bookMonitor=focusedMonitor;
     }
     readonly property var keyboardScreen: tablet ? upper : docked ? (bookMonitor==="eDP-2" ? bottom : upper) : bottom
     onKeyboardScreenChanged: Theme.cancelInput()
@@ -312,7 +313,7 @@ ShellRoot {
         target: "panel"
         function toggle(): void { if (root.opened) root.closePanel(); else { root.automaticKeyboard=false; root.opened=true; } }
         function openPanel(): void { root.automaticKeyboard=false; root.opened=true; }
-        function openKeyboard(): void { root.automaticKeyboard=true; root.opened=true; }
+        function openKeyboard(monitor: string): void { if (monitor!=="eDP-1" && monitor!=="eDP-2") return; root.bookMonitor=monitor; root.automaticKeyboard=true; root.opened=true; }
         function hide(): void { root.closePanel(); }
         // Touchscreen gestures recognised by the Hyprland plugin; same actions as the pad's.
         function gesture(name: string): void {

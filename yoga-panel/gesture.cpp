@@ -93,12 +93,12 @@ static void consume(Event::SCallbackInfo& info) {
     g_pInputManager->m_lastInputTouch = false;
 }
 // Fixed executable and arguments; no shell or input-derived command text.
-static void runPanel(const char* verb) {
+static void runPanel(const char* verb, const char* monitor=nullptr) {
     const char* home = std::getenv("HOME");
     if (!home) return;
     std::string executable = std::string(home) + "/.local/bin/yoga-panel";
     std::string argument = verb;
-    char* args[]={executable.data(),argument.data(),nullptr};
+    char* args[]={executable.data(),argument.data(),const_cast<char*>(monitor),nullptr};
     pid_t child;
     posix_spawn(&child,executable.c_str(),nullptr,nullptr,args,environ);
 }
@@ -276,6 +276,7 @@ static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
 static SP<CEventLoopTimer> textInputTimer;
 static TabletAutoShow tabletAutoShow;
 static WP<CWLSurfaceResource> tabletInputSurface;
+static PHLMONITORREF tabletInputMonitor;
 static int undockedPolls=0;
 static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto lower = State::monitorState()->query().name("eDP-2").run();
@@ -294,15 +295,16 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
         const auto input = g_pInputManager->m_relay.getFocusedTextInput();
         const bool wanted = window && internal && input && input->isEnabled();
         const auto surface = wanted ? input->focusedSurface() : nullptr;
-        const bool activated = tapped || surface != tabletInputSurface;
+        const bool activated = tapped || surface != tabletInputSurface || (wanted && monitor != tabletInputMonitor);
         tabletInputSurface = surface;
+        tabletInputMonitor = wanted ? monitor : PHLMONITOR{};
         const auto lowerPanel = panelOn(lower);
         const bool manual = lowerPanel && lowerPanel->m_namespace == "yoga-input-panel";
         if (manual) { tabletAutoShow.owned=false; tabletAutoShow.pending=0; }
         const auto action = tabletAutoShow.step(wanted,manual || (wanted ? !!panel : visible),activated,!recognizer.idle());
-        if (action == TabletAutoShow::Action::Show) runPanel("auto");
+        if (action == TabletAutoShow::Action::Show) runPanel("auto",monitor->m_name.c_str());
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
-        if (panel && panel->m_namespace == "yoga-screen-keyboard") {
+        if (wanted && panel && panel->m_namespace == "yoga-screen-keyboard") {
             restoreTabletWindows(window);
             fitTabletWindow(window,monitor,panel);
         } else restoreTabletWindows();
@@ -311,7 +313,7 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
         // Returning to laptop keeps the keyboard on eDP-2, as before.
         // yoga-mode parks one output in landscape while swapping the book panels.
         if (g_pSessionLockManager->isSessionLocked() || ++undockedPolls>=5) {
-            tabletAutoShow = {}; tabletInputSurface.reset();
+            tabletAutoShow = {}; tabletInputSurface.reset(); tabletInputMonitor.reset();
         }
     }
     if (!visible || !docked || g_pSessionLockManager->isSessionLocked()) restoreTabletWindows();

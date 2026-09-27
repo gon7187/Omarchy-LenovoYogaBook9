@@ -72,3 +72,21 @@ for (const [docked,width,height,expectedKey] of [[true,1440,900,49],[true,900,14
     assert.equal(sizes.keyboardHeight,docked && width>height ? 273 : 357);
 }
 console.log('PASS: landscape tablet rows match numbers; portrait and laptop retain height');
+
+// An OSK opened on the lower screen must not follow focus onto an upper video.
+const focusState=vm.createContext({automaticKeyboard:true,bookMonitor:'eDP-2',focusedMonitor:'eDP-1',opened:true});
+focusState.root=focusState;
+const focusChange=qml.match(/onFocusedMonitorChanged: \{([\s\S]*?)\n    \}/)[1];
+vm.runInContext(focusChange,focusState);
+assert.equal(focusState.bookMonitor,'eDP-2','automatic keyboard must stay with its input owner');
+const openKeyboard=qml.match(/function openKeyboard\(monitor: string\): void \{([^\n]+)\}/)[1];
+focusState.monitor='eDP-2';
+vm.runInContext('(function(){'+openKeyboard+'})()',focusState);
+assert.equal(focusState.bookMonitor,'eDP-2','delayed IPC keeps its original input monitor');
+focusState.monitor='eDP-1';
+vm.runInContext('(function(){'+openKeyboard+'})()',focusState);
+assert.equal(focusState.bookMonitor,'eDP-1','confirmed text input moves the automatic keyboard');
+focusState.automaticKeyboard=false;focusState.focusedMonitor='eDP-2';
+vm.runInContext(focusChange,focusState);
+assert.equal(focusState.bookMonitor,'eDP-2','manual book keyboard still follows focus');
+console.log('PASS: automatic keyboard follows confirmed input, not arbitrary monitor focus');
