@@ -5,6 +5,7 @@
     "lock": 2000000
   },
   "bar": {
+    "id": "gon7187.bar",
     "position": "top",
     "transparent": true,
     "centerAnchor": "omarchy.clock",
