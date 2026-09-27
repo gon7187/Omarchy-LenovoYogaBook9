@@ -13,6 +13,7 @@ APP_ID = "org.gon7187.YogaTabletKeyboardTest"
 PANEL = Path.home() / ".local/share/yoga-panel"
 MODE = Path.home() / ".local/bin/yoga-mode"
 UNIT = "yoga-autorotate.service"
+TARGET_SCREEN = "eDP-1"
 
 
 def probe():
@@ -118,13 +119,18 @@ def panel_layer():
     for name, monitor in layers.items():
         for level in monitor["levels"].values():
             for layer in level:
-                if layer.get("namespace") == "yoga-input-panel":
+                if (
+                    name == TARGET_SCREEN
+                    and layer.get("namespace") == "yoga-input-panel"
+                ):
                     return {**layer, "monitor": name}
     return None
 
 
 def screen():
-    monitor = next(m for m in data("hyprctl", "monitors", "-j") if m["name"] == "eDP-1")
+    monitor = next(
+        m for m in data("hyprctl", "monitors", "-j") if m["name"] == TARGET_SCREEN
+    )
     width, height = (
         monitor["width"] / monitor["scale"],
         monitor["height"] / monitor["scale"],
@@ -235,7 +241,7 @@ def with_client(predicate):
 def opened(label):
     def fitted_layer():
         layer = panel_layer()
-        if status() != "open" or not layer or layer["monitor"] != "eDP-1":
+        if status() != "open" or not layer or layer["monitor"] != TARGET_SCREEN:
             return None
         _, (x, y, width, height) = screen()
         if abs(layer["x"] - x) > 1 or abs(layer["w"] - width) > 1:
@@ -255,6 +261,8 @@ def above(layer):
 
 def alternate(mode):
     return {
+        "book": "book-flip",
+        "book-flip": "book",
         "tablet": "tablet-left",
         "tablet-left": "tablet-right",
         "tablet-right": "tablet-left",
@@ -267,7 +275,7 @@ def set_mode(mode):
         mode,
         lambda: (
             any(
-                m["name"] == "eDP-2" and m["disabled"]
+                m["name"] == "eDP-2" and m["disabled"] == (not mode.startswith("book"))
                 for m in data("hyprctl", "monitors", "all", "-j")
             )
             and next(
@@ -275,7 +283,13 @@ def set_mode(mode):
                 for m in data("hyprctl", "monitors", "-j")
                 if m["name"] == "eDP-1"
             )
-            == {"tablet": 2, "tablet-left": 3, "tablet-right": 1}[mode]
+            == {
+                "tablet": 2,
+                "tablet-left": 3,
+                "tablet-right": 1,
+                "book": 3,
+                "book-flip": 1,
+            }[mode]
         ),
     )
 
@@ -305,6 +319,12 @@ def live(mode):
         expect(proc, "READY", timeout=8)
         own = wait_for("GTK window", client)
         address = own["address"]
+        run(
+            "hyprctl",
+            "eval",
+            f'hl.dispatch(hl.dsp.window.move({{window="address:{address}",monitor="{TARGET_SCREEN}",follow=true}}))',
+            stdout=subprocess.DEVNULL,
+        )
         focus(address)
 
         send(proc, "entry")
@@ -402,7 +422,9 @@ def live(mode):
             lambda: with_client(lambda c: (c["at"], c["size"]) == geometry),
         )
         assert after["floating"], after
-        print("PASS: tablet OSK auto-show, fullscreen and floating restoration")
+        print(
+            f"PASS: {mode} {TARGET_SCREEN} OSK auto-show, fullscreen and floating restoration"
+        )
     finally:
         cleanup_errors = []
 
@@ -459,9 +481,13 @@ if __name__ == "__main__":
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--probe", action="store_true")
     parser.add_argument(
-        "--mode", choices=("tablet", "tablet-left", "tablet-right"), default="tablet"
+        "--mode",
+        choices=("tablet", "tablet-left", "tablet-right", "book", "book-flip"),
+        default="tablet",
     )
+    parser.add_argument("--monitor", choices=("eDP-1", "eDP-2"), default="eDP-1")
     args = parser.parse_args()
+    TARGET_SCREEN = args.monitor
     if args.probe:
         probe()
     elif args.live:

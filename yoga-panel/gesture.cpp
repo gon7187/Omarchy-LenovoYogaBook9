@@ -33,11 +33,27 @@ static CFunctionHook* cursorHook = nullptr;
 static bool confining = false;
 static bool tabletTapped = false;
 
+static bool bookMode(PHLMONITOR upper, PHLMONITOR lower) {
+    if (!upper || !lower || !upper->m_enabled || !lower->m_enabled) return false;
+    const auto upperBox = upper->logicalBox(), lowerBox = lower->logicalBox();
+    return upperBox.h > upperBox.w && lowerBox.h > lowerBox.w;
+}
+
+static PHLLS panelOn(PHLMONITOR monitor) {
+    if (!monitor) return {};
+    for (const auto& weak : monitor->m_layerSurfaceLayers[3]) {
+        auto layer = weak.lock();
+        if (layer && layer->m_mapped && layer->m_namespace == "yoga-input-panel") return layer;
+    }
+    return {};
+}
+
 static Vector2D confinedPosition(Vector2D position) {
     if (g_pSessionLockManager->isSessionLocked()) return position;
     const auto upper = State::monitorState()->query().name("eDP-1").run();
     const auto lower = State::monitorState()->query().name("eDP-2").run();
     if (!upper || !lower || !upper->m_enabled || !lower->m_enabled || !upper->m_dpmsStatus) return position;
+    if (bookMode(upper,lower)) return position;
     for (const auto& weak : lower->m_layerSurfaceLayers[3]) {
         const auto layer = weak.lock();
         if (!layer || !layer->m_mapped || layer->m_namespace != "yoga-input-panel") continue;
@@ -117,7 +133,9 @@ static void down(ITouch::SDownEvent event, Event::SCallbackInfo& info) {
             }
         }
     }
-    if (output == "eDP-1") tabletTapped = true;
+    const auto upper = State::monitorState()->query().name("eDP-1").run();
+    const auto lower = State::monitorState()->query().name("eDP-2").run();
+    if (output == "eDP-1" || (output == "eDP-2" && bookMode(upper,lower))) tabletTapped = true;
     recognizer.down(event.touchID,event.timeMs,event.pos.x,event.pos.y);
     claim(info);
 }
@@ -201,12 +219,14 @@ static void setTabletFullscreen(PHLWINDOW window, Fullscreen::eFullscreenMode in
     sync.matchOptional(previous,priority);
 }
 
-static void restoreTabletWindows() {
+static void restoreTabletWindows(PHLWINDOW keep={}) {
+    std::vector<TabletWindow> pending;
     for (const auto& saved : tabletWindows) {
         const auto window = saved.window.lock();
         const auto monitor = saved.monitor.lock();
         if (!window || !window->m_isMapped || !window->m_target || !monitor || !monitor->m_enabled ||
             window->m_monitor != saved.monitor || window->workspaceID() != saved.workspace) continue;
+        if (keep && saved.window == keep) { pending.push_back(saved); continue; }
         const auto modes = Fullscreen::controller()->getFullscreenModes(window);
         if (saved.fullscreen.internal == Fullscreen::FSMODE_FULLSCREEN) {
             // A user/client mode change takes precedence over our old snapshot.
@@ -219,7 +239,7 @@ static void restoreTabletWindows() {
             g_layoutManager->setTargetGeom(box == saved.monitorBox ? saved.original : fittedBox(saved.original,box),window->m_target);
         }
     }
-    tabletWindows.clear();
+    tabletWindows = std::move(pending);
 }
 
 static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
@@ -262,29 +282,33 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto lower = State::monitorState()->query().name("eDP-2").run();
     const auto upper = State::monitorState()->query().name("eDP-1").run();
     const bool tablet = upper && upper->m_enabled && (!lower || !lower->m_enabled);
+    const bool book = bookMode(upper,lower);
+    const bool docked = tablet || book;
     const bool tapped = std::exchange(tabletTapped,false);
-    PHLLS panel;
-    if (tablet) for (const auto& weak : upper->m_layerSurfaceLayers[3]) {
-        const auto layer = weak.lock();
-        if (layer && layer->m_mapped && layer->m_namespace == "yoga-input-panel") { panel = layer; break; }
-    }
     const auto window = Desktop::focusState()->window();
-    if (tablet && !g_pSessionLockManager->isSessionLocked()) {
+    const auto monitor = window ? window->m_monitor.lock() : PHLMONITOR{};
+    const bool internal = monitor && (monitor == upper || (book && monitor == lower));
+    const auto panel = internal ? panelOn(monitor) : PHLLS{};
+    const bool visible = tablet ? !!panelOn(upper) : book ? !!panelOn(upper) && !!panelOn(lower) : false;
+    if (docked && !g_pSessionLockManager->isSessionLocked()) {
         const auto input = g_pInputManager->m_relay.getFocusedTextInput();
-        const bool wanted = window && window->m_monitor == upper && input && input->isEnabled();
+        const bool wanted = window && internal && input && input->isEnabled();
         const auto surface = wanted ? input->focusedSurface() : nullptr;
         const bool activated = tapped || surface != tabletInputSurface;
         tabletInputSurface = surface;
-        const auto action = tabletAutoShow.step(wanted,!!panel,activated);
+        const auto action = tabletAutoShow.step(wanted,visible,activated);
         if (action == TabletAutoShow::Action::Show) runPanel("show");
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
-        if (panel) fitTabletWindow(window,upper,panel);
+        if (panel) {
+            restoreTabletWindows(window);
+            fitTabletWindow(window,monitor,panel);
+        } else restoreTabletWindows();
     } else {
         if (g_pSessionLockManager->isSessionLocked() && tabletAutoShow.owned) runPanel("hide");
         // Returning to laptop keeps the keyboard on eDP-2, as before.
         tabletAutoShow = {}; tabletInputSurface.reset();
     }
-    if (!panel || !tablet || g_pSessionLockManager->isSessionLocked()) restoreTabletWindows();
+    if (!visible || !docked || g_pSessionLockManager->isSessionLocked()) restoreTabletWindows();
     self->updateTimeout(std::chrono::milliseconds(200));
 }
 
@@ -311,23 +335,19 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_pEventLoopManager->addTimer(textInputTimer);
     // Changing the touch route mid-session must not leave Qt tracking fingers
     // from the previous route (it can otherwise ignore new touch updates).
-    if (auto monitor = State::monitorState()->query().name("eDP-2").run()) {
-        for (const auto& weak : monitor->m_layerSurfaceLayers[3]) {
-            auto layer = weak.lock();
-            if (layer && layer->m_mapped && layer->m_namespace == "yoga-input-panel") {
-                g_pSeatManager->sendTouchCancel();
-                g_pSeatManager->sendTouchFrame();
-                break;
-            }
-        }
+    for (const auto& name : {"eDP-1","eDP-2"}) if (panelOn(State::monitorState()->query().name(name).run())) {
+        g_pSeatManager->sendTouchCancel();
+        g_pSeatManager->sendTouchFrame();
+        break;
     }
     HyprlandAPI::registerHyprCtlCommand(handle, {"yoga-tablet-status", true, [](eHyprCtlOutputFormat, std::string) -> std::string {
         const auto lower = State::monitorState()->query().name("eDP-2").run();
         const auto window = Desktop::focusState()->window();
         const auto input = g_pInputManager->m_relay.getFocusedTextInput();
-        return std::format("lower_enabled={} text_input={} owned={} adjusted={} focused_upper={}",
-            lower && lower->m_enabled, input && input->isEnabled(), tabletAutoShow.owned, tabletWindows.size(),
-            window && window->m_monitor && window->m_monitor->m_name == "eDP-1");
+        const auto upper = State::monitorState()->query().name("eDP-1").run();
+        return std::format("lower_enabled={} book={} text_input={} owned={} adjusted={} focused_internal={}",
+            lower && lower->m_enabled, bookMode(upper,lower), input && input->isEnabled(), tabletAutoShow.owned, tabletWindows.size(),
+            window && window->m_monitor && (window->m_monitor->m_name == "eDP-1" || window->m_monitor->m_name == "eDP-2"));
     }});
     HyprlandAPI::registerHyprCtlCommand(handle, {"yoga-gesture-last", true, [](eHyprCtlOutputFormat, std::string) -> std::string {
         const auto& l = recognizer.last;

@@ -1,6 +1,6 @@
 -- Windows launched from the lower-screen keyboard open under it: touching the
 -- panel focuses eDP-2, so the new window lands on that monitor's workspace.
--- While the panel is up, send every new window on eDP-2 to the upper screen.
+-- In laptop mode, send new windows under the panel to the upper screen.
 -- With the panel hidden the lower screen behaves normally.
 
 local function panel_open()
@@ -9,7 +9,8 @@ end
 
 hl.on("window.open", function(window)
   local monitor = window.monitor
-  if not monitor or monitor.name ~= "eDP-2" or not panel_open() then return end
+  -- Portrait book panels reserve space on both screens; keep their windows local.
+  if not monitor or monitor.name ~= "eDP-2" or monitor.transform % 2 ~= 0 or not panel_open() then return end
 
   local target = hl.get_active_workspace("eDP-1")
   if not target then return end
