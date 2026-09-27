@@ -16,7 +16,7 @@ Key {
         anchors.leftMargin: 13; anchors.topMargin: 7
         text: key.symbols.en.toUpperCase()
         color: key.russianActive ? Theme.textDim : Theme.letterActive
-        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Normal : Font.Bold
+        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Normal : Font.Medium
     }
     Text {
         visible: key.dual
@@ -24,7 +24,7 @@ Key {
         anchors.rightMargin: 13; anchors.bottomMargin: key.height<60 ? 3 : 7
         text: key.symbols.ru.toUpperCase()
         color: key.russianActive ? Theme.letterActive : Theme.textDim
-        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Bold : Font.Normal
+        font.pixelSize: key.height<60 ? 21 : 25; font.weight: key.russianActive ? Font.Medium : Font.Normal
     }
     Text {
         visible: !key.dual
