@@ -597,10 +597,24 @@ laptop -> tablet   +254°      tablet -> laptop   -242°
 laptop -> tent     +198°      tent   -> laptop   -200°      drift ~1° per fold
 ```
 
-[`bin/yoga-hinge`](bin/yoga-hinge) is a small root service (IIO buffers are root-only) that integrates this and writes the angle to `/run/yoga-hinge`. Only the starting angle is unknown: service start and every lid reopen assume a typical 120°, a closed lid is 0°, and the 0–360° end stops clamp accumulated error. Relative rates under 3°/s are ignored so bias cannot creep in at rest. About 1% of one core.
+[`bin/yoga-hinge`](bin/yoga-hinge) runs as a user service with the `iio` group
+permissions from [`config/udev/70-yoga-gyro-access.rules`](config/udev/70-yoga-gyro-access.rules).
+It integrates the gyroscopes and writes the angle to `$XDG_RUNTIME_DIR/yoga-hinge`.
+Service start and lid reopen assume 120 degrees; a closed lid anchors zero,
+end stops clamp the angle, and relative rates under 3 degrees/s are ignored.
+It starts and stops with `yoga-autorotate.service`.
+
+On battery, sampling is 25 Hz; on AC it remains 100 Hz. Power is checked every
+30 seconds without resetting the angle. In a short on-device comparison this
+reduced daemon CPU from 2.47% to 0.75% of one core and context switches from
+106.5/s to 28.3/s; a whole-machine power saving was not established.
+Auto-rotation polls every two seconds, retaining four seconds of orientation
+confirmation without a hinge reading and two seconds with one. Tablet
+transitions can take up to two seconds. Test the policy without hardware:
+`python3 bin/test_hinge_power.py`.
 
 ```bash
-bin/yoga-hinge install      # sudo or pkexec; `remove` undoes it
+bin/yoga-hinge install      # user service; `remove` undoes it
 ```
 
 `yoga-autorotate` then picks tablet at ≥250° (leaving below 220°) unless the machine is upside down — tent sits near 305°, and with the start only guessed the hinge cannot tell tent from an inverted tablet, so upside down stays present. Tablet in or out is applied after one reading rather than two, since the hinge already confirms the fold.
