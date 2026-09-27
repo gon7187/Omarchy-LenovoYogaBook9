@@ -387,8 +387,9 @@ ShellRoot {
                 // Integer sizes: the layout engine rounds every preferred size UP, so a
                 // fractional unit overflows the row by a pixel per key and the rows end
                 // past the touchpad edge. The remainder goes to the last key of each row.
-                readonly property int keyHeight: Math.floor((Math.min(380,panel.areaHeight*0.44)-28)/5)
-                readonly property int numberHeight: Math.round(keyHeight*0.7)
+                readonly property int baseKeyHeight: Math.floor((Math.min(380,panel.areaHeight*0.44)-28)/5)
+                readonly property int numberHeight: Math.round(baseKeyHeight*0.7)
+                readonly property int keyHeight: root.tablet && panel.width > panel.areaHeight ? numberHeight : baseKeyHeight
                 readonly property int keyboardHeight: keyHeight*4+numberHeight+28
                 readonly property int unit: Math.floor((panel.width - 32 - 14*7)/15)
                 Layout.minimumWidth: 0
