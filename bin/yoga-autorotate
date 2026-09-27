@@ -132,15 +132,9 @@ def target_mode(orientation, current):
     """The mode for this orientation, folded into a tablet when the hinge says so."""
     angle = hinge()
     in_tablet = bool(current and current.startswith("tablet"))
-    if (
-        orientation != "bottom-up"
-        and angle is not None
-        and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES)
-    ):
+    if orientation != "bottom-up" and angle is not None and angle >= (TABLET_EXIT if in_tablet else TABLET_DEGREES):
         # Lying flat reports no usable orientation; keep the tablet as it is held.
-        return TABLET_BY_ORIENTATION.get(
-            orientation, current if in_tablet else "tablet"
-        )
+        return TABLET_BY_ORIENTATION.get(orientation, current if in_tablet else "tablet")
     return ORIENTATION_TO_MODE.get(orientation)
 
 
@@ -172,46 +166,28 @@ class Accelerometer:
 
     def _claim(self):
         self.bus.call_sync(
-            "net.hadess.SensorProxy",
-            "/net/hadess/SensorProxy",
-            "net.hadess.SensorProxy",
-            "ClaimAccelerometer",
-            None,
-            None,
-            Gio.DBusCallFlags.NONE,
-            -1,
-            None,
+            "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+            "net.hadess.SensorProxy", "ClaimAccelerometer", None, None,
+            Gio.DBusCallFlags.NONE, -1, None,
         )
 
     def release(self):
         try:
             self.bus.call_sync(
-                "net.hadess.SensorProxy",
-                "/net/hadess/SensorProxy",
-                "net.hadess.SensorProxy",
-                "ReleaseAccelerometer",
-                None,
-                None,
-                Gio.DBusCallFlags.NONE,
-                -1,
-                None,
+                "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+                "net.hadess.SensorProxy", "ReleaseAccelerometer", None, None,
+                Gio.DBusCallFlags.NONE, -1, None,
             )
         except GLib.Error:
             pass
 
     def orientation(self):
         value = self.bus.call_sync(
-            "net.hadess.SensorProxy",
-            "/net/hadess/SensorProxy",
-            "org.freedesktop.DBus.Properties",
-            "Get",
-            GLib.Variant(
-                "(ss)", ("net.hadess.SensorProxy", "AccelerometerOrientation")
-            ),
-            None,
-            Gio.DBusCallFlags.NONE,
-            -1,
-            None,
+            "net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+            "org.freedesktop.DBus.Properties", "Get",
+            GLib.Variant("(ss)", ("net.hadess.SensorProxy",
+                                  "AccelerometerOrientation")),
+            None, Gio.DBusCallFlags.NONE, -1, None,
         )
         return value.unpack()[0]
 
@@ -259,9 +235,7 @@ def main():
         # Without yoga-hinge running there is no hinge reading, and the delay
         # stays the 4 seconds every other machine has always had: the shorter
         # wait is only justified by the hinge confirming the fold.
-        folding = target.startswith("tablet") or bool(
-            current and current.startswith("tablet")
-        )
+        folding = target.startswith("tablet") or bool(current and current.startswith("tablet"))
         if folding:
             needed = TABLET_READINGS
         elif hinge() is not None:
