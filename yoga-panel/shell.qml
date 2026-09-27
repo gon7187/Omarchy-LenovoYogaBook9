@@ -392,6 +392,7 @@ ShellRoot {
                 readonly property int keyHeight: root.tablet && panel.width > panel.areaHeight ? numberHeight : baseKeyHeight
                 readonly property int keyboardHeight: keyHeight*4+numberHeight+28
                 readonly property int unit: Math.floor((panel.width - 32 - 14*7)/15)
+                readonly property int navigationWidth: Math.min(keyHeight,unit)
                 Layout.minimumWidth: 0
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.numberHeight; Layout.minimumHeight: keyboard.numberHeight; Layout.maximumHeight: keyboard.numberHeight; spacing: 7
@@ -430,14 +431,14 @@ ShellRoot {
                     }
                     Item {
                         Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillWidth: true; Layout.fillHeight: true
-                        Key { anchors.left: parent.left; height: parent.height; width: Math.max(40,parent.width-2*(keyboard.keyHeight+7)); label: "Shift ⇧"; hintIcon: "overview"; hintActive: root.fnActive; selected: root.shift; onActivated: root.fnActive ? root.runAction("overview") : root.toggleShift(); onDownChanged: if (!down || !root.fnActive) root.holdMod("shift",down) }
-                        Key { id: upKey; anchors.right: parent.right; anchors.rightMargin: keyboard.keyHeight+7; width: keyboard.keyHeight; height: parent.height; label: "↑"; hintIcon: "page-up"; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey("Up") }
+                        Key { anchors.left: parent.left; height: parent.height; width: parent.width-2*(keyboard.navigationWidth+7); label: width<80 ? "⇧" : "Shift ⇧"; hintIcon: "overview"; hintActive: root.fnActive; selected: root.shift; onActivated: root.fnActive ? root.runAction("overview") : root.toggleShift(); onDownChanged: if (!down || !root.fnActive) root.holdMod("shift",down) }
+                        Key { id: upKey; anchors.right: parent.right; anchors.rightMargin: keyboard.navigationWidth+7; width: keyboard.navigationWidth; height: parent.height; label: "↑"; hintIcon: "page-up"; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey("Up") }
                     }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
-                    Key { id: fnKey; Layout.preferredWidth: keyboard.keyHeight; Layout.minimumWidth: keyboard.keyHeight; Layout.maximumWidth: keyboard.keyHeight; Layout.fillHeight: true; label: "Fn"; selected: root.fnActive; onActivated: root.fn=!root.fn; onDownChanged: root.holdMod("fn",down) }
+                    Key { id: fnKey; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: "Fn"; selected: root.fnActive; onActivated: root.fn=!root.fn; onDownChanged: root.holdMod("fn",down) }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: ""; controlIcon: "heart"; iconSize: 36; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
                     Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: ""; hintIcon: "oled"; hintActive: root.fnActive; onActivated: root.typeText(" ") }
@@ -449,11 +450,11 @@ ShellRoot {
                         onAborted: root.send({type:"voice",action:"cancel"})
                     }
                     Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Del"; textSize: 18; repeatable: true; onActivated: root.typeKey("Delete") }
-                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: root.russian ? "RU / en" : "ru / EN"; activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: keyboard.unit<65 ? (root.russian ? "RU" : "EN") : (root.russian ? "RU / en" : "ru / EN"); activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
                     Repeater {
                         id: arrowKeys
                         model: ["Left","Down","Right"]
-                        Key { required property string modelData; Layout.preferredWidth: keyboard.keyHeight; Layout.minimumWidth: keyboard.keyHeight; Layout.maximumWidth: keyboard.keyHeight; Layout.fillHeight: true; label: modelData==="Left" ? "←" : modelData==="Down" ? "↓" : "→"; hintIcon: Layouts.secondary[modelData].icon; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey(modelData) }
+                        Key { required property string modelData; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: modelData==="Left" ? "←" : modelData==="Down" ? "↓" : "→"; hintIcon: Layouts.secondary[modelData].icon; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey(modelData) }
                     }
                 }
             }
