@@ -6,11 +6,12 @@ pointer=${1:-build/yoga-pointer}
 app_id="yoga-titlebar-test-$$"
 focus=$(hyprctl activewindow -j | jq -r '.address')
 cursor=$(hyprctl cursorpos -j)
+read -r width height < <(hyprctl monitors -j | jq -r '[(map(.x + .width/.scale)|max), (map(.y + .height/.scale)|max)] | @tsv')
 probe=
 cleanup() {
   if [[ -n $probe ]]; then kill "$probe" 2>/dev/null || true; wait "$probe" 2>/dev/null || true; fi
-  hyprctl dispatch focuswindow "address:$focus" >/dev/null
-  hyprctl dispatch movecursor "$(jq -r '.x' <<< "$cursor") $(jq -r '.y' <<< "$cursor")" >/dev/null
+  hyprctl eval "hl.dispatch(hl.dsp.focus({window='address:$focus'}))" >/dev/null
+  printf 'a %s %s %s %s\n' "$(jq -r '.x' <<< "$cursor")" "$(jq -r '.y' <<< "$cursor")" "$width" "$height" | "$pointer"
 }
 trap cleanup EXIT
 foot --app-id="$app_id" sh -c 'sleep 30' &
@@ -24,7 +25,6 @@ done
 [[ $window != null ]]
 sleep .5
 window=$(hyprctl clients -j | jq --arg id "$app_id" '[.[] | select(.class == $id)][0]')
-read -r width height < <(hyprctl monitors -j | jq -r '[map(.x + .width/.scale)|max, empty] as $x | [$x[0], (map(.y + .height/.scale)|max)] | @tsv')
 # Default padding 8 + button padding 6 + half of the 16px button.
 x=$(jq '.at[0] + .size[0] - 22' <<< "$window")
 y=$(jq '.at[1] + 12' <<< "$window")
