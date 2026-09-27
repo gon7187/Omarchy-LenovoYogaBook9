@@ -359,7 +359,12 @@ def live(mode):
         send(proc, "entry")
         layer = opened("automatic OSK open for tiled window")
         if mode == "stand":
-            assert layer["h"] in (339, 377), layer
+            # Layer creation reports its initial height before QML receives the output width.
+            def compact_layer():
+                current = panel_layer()
+                return current if current and current["h"] in (339, 377) else None
+
+            layer = wait_for("compact landscape keyboard height", compact_layer)
         tiled = wait_for("tiled window above OSK", lambda: above(layer))
         assert not tiled["floating"] and tiled["fullscreen"] == 0, tiled
         if mode in ("book", "stand"):
