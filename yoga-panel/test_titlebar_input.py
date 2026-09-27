@@ -24,7 +24,7 @@ def probe():
         window = Gtk.ApplicationWindow(
             application=application, title="Yoga titlebar input test"
         )
-        window.set_titlebar(Gtk.Box())
+        window.set_decorated(False)
         window.set_default_size(600, 300)
         area = Gtk.Box()
         click = Gtk.GestureClick()
@@ -143,6 +143,8 @@ def main():
         print("PASS: top-row client clicks pass through outside visible controls")
         move(x + w - 50, y + 14)
         send("b 272 1")
+        time.sleep(0.1)
+        send("m 2 2")
         time.sleep(0.1)
         send("m 70 50")
         time.sleep(0.35)
