@@ -23,6 +23,7 @@
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
+#include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
 
 extern char **environ;
 static TouchGestures recognizer;
@@ -187,6 +188,17 @@ static CBox fittedBox(const CBox& box, const CBox& area) {
     return {b[0],b[1],b[2],b[3]};
 }
 
+static void setTabletFullscreen(PHLWINDOW window, Fullscreen::eFullscreenMode internal, Fullscreen::eFullscreenMode client) {
+    // The controller otherwise forces internal=client when sync_fullscreen is
+    // enabled. Match fullscreen_state dispatch without leaving a window override.
+    auto& sync = window->m_ruleApplicator->syncFullscreen();
+    constexpr auto priority = Desktop::Types::PRIORITY_SET_PROP;
+    const std::optional<bool> previous = sync.hasValue() && sync.getPriority() == priority ? std::optional{sync.value()} : std::nullopt;
+    sync.set(false,priority);
+    Fullscreen::controller()->setFullscreenMode(window,internal,client);
+    sync.matchOptional(previous,priority);
+}
+
 static void restoreTabletWindows() {
     for (const auto& saved : tabletWindows) {
         const auto window = saved.window.lock();
@@ -197,7 +209,7 @@ static void restoreTabletWindows() {
         if (saved.fullscreen.internal == Fullscreen::FSMODE_FULLSCREEN) {
             // A user/client mode change takes precedence over our old snapshot.
             if (modes.internal == Fullscreen::FSMODE_MAXIMIZED && modes.client == saved.fullscreen.client)
-                Fullscreen::controller()->setFullscreenMode(window,saved.fullscreen.internal,saved.fullscreen.client);
+                setTabletFullscreen(window,saved.fullscreen.internal,saved.fullscreen.client);
         } else if (window->m_target->floating() && modes.internal == Fullscreen::FSMODE_NONE &&
                    window->m_target->position() == saved.applied) {
             // Rotation may make the old rectangle unreachable. Keep it on screen.
@@ -215,7 +227,7 @@ static void fitTabletWindow(PHLWINDOW window, PHLMONITOR monitor, PHLLS panel) {
     if (modes.internal == Fullscreen::FSMODE_FULLSCREEN) {
         if (saved == tabletWindows.end())
             tabletWindows.push_back({window,monitor,window->workspaceID(),modes,window->m_target->position(),{},monitor->logicalBox()});
-        Fullscreen::controller()->setFullscreenMode(window,Fullscreen::FSMODE_MAXIMIZED,modes.client);
+        setTabletFullscreen(window,Fullscreen::FSMODE_MAXIMIZED,modes.client);
         return;
     }
     if (modes.internal != Fullscreen::FSMODE_NONE || !window->m_target->floating()) return;
