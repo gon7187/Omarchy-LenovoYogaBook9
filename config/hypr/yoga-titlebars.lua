@@ -9,7 +9,7 @@ if not (hl.plugin and hl.plugin.hyprbars) then return end
 hl.config({
   plugin = {
     hyprbars = {
-      bar_height = 24,
+      bar_height = 28,
       bar_text_size = 10,
       bar_padding = 8,
       bar_button_padding = 6,
@@ -23,7 +23,7 @@ hl.config({
 hl.plugin.hyprbars.add_button({
   bg_color = "rgb(e06c75)",
   fg_color = "rgb(1e1e2e)",
-  size = 16,
+  size = 24,
   icon = "✕",
   action = "hyprctl eval 'hl.dispatch(hl.dsp.window.close())'",
 })
