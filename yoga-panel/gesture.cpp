@@ -307,6 +307,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             }
         }
     }
+    HyprlandAPI::registerHyprCtlCommand(handle, {"yoga-tablet-status", true, [](eHyprCtlOutputFormat, std::string) -> std::string {
+        const auto lower = State::monitorState()->query().name("eDP-2").run();
+        const auto window = Desktop::focusState()->window();
+        const auto input = g_pInputManager->m_relay.getFocusedTextInput();
+        return std::format("lower_enabled={} text_input={} owned={} adjusted={} focused_upper={}",
+            lower && lower->m_enabled, input && input->isEnabled(), tabletAutoShow.owned, tabletWindows.size(),
+            window && window->m_monitor && window->m_monitor->m_name == "eDP-1");
+    }});
     HyprlandAPI::registerHyprCtlCommand(handle, {"yoga-gesture-last", true, [](eHyprCtlOutputFormat, std::string) -> std::string {
         const auto& l = recognizer.last;
         return std::format("fingers={} moved={} ms={} pinch_ratio={:.2f}", l.peak, l.moved, l.age, l.pinch);
@@ -335,7 +343,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         return "Expected down/move/up and lower touchscreen";
     }});
 #endif
-    return {"yoga-panel-gesture","Yoga panel touch routing and multi-finger touchscreen gestures","local","0.4.0"};
+    return {"yoga-panel-gesture","Yoga panel touch routing and multi-finger touchscreen gestures","local","0.5.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     restoreTabletWindows();
