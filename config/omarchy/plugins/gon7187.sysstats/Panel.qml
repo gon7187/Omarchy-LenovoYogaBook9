@@ -7,7 +7,6 @@ import qs.Commons
 // CPU load, available RAM and temperatures, read from /proc and hwmon every
 // few seconds. The Iris Xe iGPU shares the CPU package and has no sensor of
 // its own (i915 exposes none), so the package temperature covers it.
-// Fan speeds come from /run/yoga-fan (bin/yoga-fan), absent if not installed.
 // Click opens btop.
 BarWidget {
   id: root
@@ -21,7 +20,6 @@ BarWidget {
   property int cpuTemp: -1
   property int coreMaxTemp: -1
   property int ssdTemp: -1
-  property var fanRpm: []
   // hwmon numbering changes between boots; resolved once by sensor name.
   property var tempFiles: []
 
@@ -57,8 +55,6 @@ BarWidget {
   function refresh() {
     sampleCpu()
     sampleMem()
-    fanFile.reload()
-    root.fanRpm = fanFile.text().trim().split(/\s+/).map(Number).filter(v => v > 0)
     if (root.tempFiles.length && !tempProc.running) tempProc.running = true
   }
 
@@ -105,7 +101,6 @@ BarWidget {
   }
 
   FileView { id: statFile; path: "/proc/stat"; blockLoading: true; printErrors: false }
-  FileView { id: fanFile; path: "/run/yoga-fan"; blockLoading: true; printErrors: false }
   FileView { id: memFile; path: "/proc/meminfo"; blockLoading: true; printErrors: false }
 
   Timer {
@@ -137,7 +132,6 @@ BarWidget {
     tooltipText: "CPU загрузка: " + Math.max(root.cpuPercent, 0) + "%\n"
       + (root.cpuTemp < 0 ? "" : "CPU + видеоядро Iris Xe: " + root.cpuTemp + " °C (самое горячее ядро " + root.coreMaxTemp + " °C)\n")
       + (root.ssdTemp < 0 ? "" : "SSD: " + root.ssdTemp + " °C\n")
-      + (root.fanRpm.length ? "Вентиляторы: " + root.fanRpm.join(" / ") + " об/мин\n" : "")
       + "RAM свободно: " + Math.max(root.ramFreePercent, 0) + "% ("
       + root.ramAvailableGiB.toFixed(1) + " из " + root.ramTotalGiB.toFixed(1) + " ГиБ)"
     onPressed: function() { if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop") }
