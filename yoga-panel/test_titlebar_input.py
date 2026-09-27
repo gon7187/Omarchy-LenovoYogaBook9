@@ -52,8 +52,18 @@ def main():
     focus = data("hyprctl", "activewindow", "-j").get("address")
     cursor = data("hyprctl", "cursorpos", "-j")
     monitors = data("hyprctl", "monitors", "-j")
-    width = max(m["x"] + m["width"] / m["scale"] for m in monitors)
-    height = max(m["y"] + m["height"] / m["scale"] for m in monitors)
+    width = round(
+        max(
+            m["x"] + (m["height"] if m["transform"] % 2 else m["width"]) / m["scale"]
+            for m in monitors
+        )
+    )
+    height = round(
+        max(
+            m["y"] + (m["width"] if m["transform"] % 2 else m["height"]) / m["scale"]
+            for m in monitors
+        )
+    )
     touch_library = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
     loaded = False
     child = subprocess.Popen(
@@ -78,8 +88,10 @@ def main():
         )
 
     def move(x, y):
-        send(f"a {x} {y} {width} {height}")
+        send(f"a {round(x)} {round(y)} {width} {height}")
         time.sleep(0.12)
+        actual = data("hyprctl", "cursorpos", "-j")
+        assert abs(actual["x"] - x) < 2 and abs(actual["y"] - y) < 2, (actual, x, y)
 
     def click(x, y):
         move(x, y)
@@ -110,6 +122,10 @@ def main():
         assert own
         x, y = own["at"]
         w = own["size"][0]
+        click(x + 100, y + 100)
+        assert reader.select(1), "Probe content did not receive baseline click"
+        assert child.stdout.readline().startswith("CLICK ")
+        print("PASS: probe receives ordinary content clicks", flush=True)
         # Left/center, unused top-right, gap, outer edge and vertical margins.
         for dx, dy in [
             (20, 14),
