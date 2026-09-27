@@ -7,7 +7,9 @@ case "$action" in
     systemctl --user stop yoga-panel.service
     hyprctl plugin unload "$config/build/yoga-panel-gesture.so" || true
     exit ;;
-  show|auto|hide|toggle) ;;
+  auto)
+    [[ ${2:-} == eDP-1 || ${2:-} == eDP-2 ]] || { echo 'Usage: yoga-panel auto eDP-1|eDP-2' >&2; exit 2; } ;;
+  show|hide|toggle) ;;
   gesture)
     # From the touchscreen plugin: previous|next|minimize|restore|overview.
     [[ ${2:-} =~ ^(previous|next|minimize|restore|overview)$ ]] || { echo 'Usage: yoga-panel gesture previous|next|minimize|restore|overview' >&2; exit 2; } ;;
@@ -17,7 +19,7 @@ systemctl --user start yoga-panel.service
 for _attempt in {1..30}; do
   if quickshell ipc -p "$config" call panel status >/dev/null 2>&1; then
     [[ $action == show ]] && action=openPanel
-    [[ $action == auto ]] && action=openKeyboard
+    [[ $action == auto ]] && exec quickshell ipc -p "$config" call panel openKeyboard "$2"
     [[ $action == gesture ]] && exec quickshell ipc -p "$config" call panel gesture "$2"
     exec quickshell ipc -p "$config" call panel "$action"
   fi
