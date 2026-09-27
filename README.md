@@ -466,7 +466,7 @@ Four details that matter more than the sensor reading itself:
 
   | lux | brightness |
   |---|---|
-  | 0–20 | 10% |
+  | 1–20 | 5% |
   | 30 (sensor covered) | 25% |
   | 40–60 (normal indoor) | 55–65% |
   | 100 | 74% |
@@ -474,7 +474,9 @@ Four details that matter more than the sensor reading itself:
   | 300 | 91% |
   | 600+ | 100% |
 
-  The dark end is deliberately where it was — a dark room was already right. The indoor band is what moved: it gave 28–39%, legible but dim, and now gives about 60%. It is a band rather than a point because the sensor itself reads anywhere from 40 to 60 lux under the same ceiling light, drifting within a session and differing between boots. The top reaches 100% at 600 lux instead of flattening out at 85%.
+  These are battery values. AC power adds **15 percentage points** to the same curve (including custom anchors), capped at 100%; unplugging restores the battery curve. The existing 10-minute manual override still takes priority.
+
+  The dark end now reaches 5%. The indoor band is what moved: it gave 28–39%, legible but dim, and now gives about 60%. It is a band rather than a point because the sensor itself reads anywhere from 40 to 60 lux under the same ceiling light, drifting within a session and differing between boots. The top reaches 100% at 600 lux instead of flattening out at 85%.
 - **It fades rather than jumps.** A single write is a visible snap, which is most of what makes an automatic change feel like a fault. The daemon walks 1% at a time over roughly 0.7s, and smooths the sensor as well as the output. That second part matters more than it sounds: in a still room this ALS holds a reading for 20–60 s and then hops by about a quarter (50 → 39 → 53 → 42 lux in three minutes), and on the steep indoor stretch of the curve each hop was a 12% step. Readings are averaged in log space with a 5% dead band, which on that recording moves the screen once instead of six times and still follows the lights coming on in about 25 s. That also means a large change arrives over several two-second ticks, so the OSD is raised once for the whole glide rather than on every tick.
 - **It stands down when you adjust brightness by hand.** If the panel is not where the daemon last left it, someone else moved it, so it pauses for ten minutes rather than fighting you. A threshold also stops it hunting over small fluctuations — the ALS drifts a few lux at rest.
 
