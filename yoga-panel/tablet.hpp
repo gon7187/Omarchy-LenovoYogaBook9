@@ -18,17 +18,18 @@ inline TabletBox fitTabletWindow(TabletBox box, const TabletBox& area) {
 struct TabletAutoShow {
     enum class Action { None, Show, Hide };
     bool owned=false, dismissed=false, wasVisible=false;
-    int idle=0, pending=0;
+    int idle=0, pending=0, unmapped=0;
 
-    Action step(bool wanted, bool visible, bool tapped, bool relocated=false) {
-        // Changing a layer's output briefly unmaps it; this is not a manual close.
-        if (relocated && owned) { wasVisible=false; pending=5; }
+    Action step(bool wanted, bool visible, bool tapped) {
         if (!wanted) {
-            dismissed=false; wasVisible=visible;
+            unmapped=0; dismissed=false; wasVisible=visible;
             if (++idle>=3 && owned) { owned=false; pending=0; return Action::Hide; }
             return Action::None;
         }
         idle=0;
+        // A rotation can recreate the layer on the same output as well.
+        if (wasVisible && !visible && !tapped && owned && ++unmapped<5) return Action::None;
+        unmapped=0;
         if (wasVisible && !visible) dismissed=true;
         wasVisible=visible;
         if (visible) { pending=0; return Action::None; }
