@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import "KeyboardLayout.js" as Layouts
 
 ShellRoot {
@@ -53,7 +54,7 @@ ShellRoot {
                     if (state==="recording" || state==="transcribing" || state==="processing") {
                         root.voiceSawBusy=true; voiceSettled.stop();
                         root.status=state==="recording" ? "Говори…" : "Распознаю…";
-                    } else if (state==="idle" && root.voiceSawBusy && !micKey?.holding) voiceSettled.restart();
+                    } else if (state==="idle" && root.voiceSawBusy && !micKey.holding) voiceSettled.restart();
                 } catch (e) {}
             }
         }
@@ -85,7 +86,7 @@ ShellRoot {
         running: root.opened
         shiftEnabled: root.oledShift
         dimEnabled: root.oledDim
-        busy: Theme.heldKeys>0 || micKey?.holding || pad?.previousCount>0 || root.settingsOpen || root.voiceSession
+        busy: Theme.heldKeys>0 || micKey.holding || pad.previousCount>0 || root.settingsOpen || root.voiceSession
     }
     property bool predictionEnabled: false
     property bool autocorrectEnabled: true
@@ -104,12 +105,12 @@ ShellRoot {
     onOledThemeChanged: { if (settingsLoaded) saveSettings.restart(); }
     property real inertiaStrength: 1.5
     property real inertiaDuration: 650
-    onInertiaStrengthChanged: { pad?.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
-    onInertiaDurationChanged: { pad?.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
-    onInertiaEnabledChanged: { pad?.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
+    onInertiaStrengthChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
+    onInertiaDurationChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
+    onInertiaEnabledChanged: { pad.stopMomentum(); if (settingsLoaded) saveSettings.restart(); }
     onPointerSpeedChanged: if (settingsLoaded) saveSettings.restart()
     onPointerAccelChanged: if (settingsLoaded) saveSettings.restart()
-    onScrollSpeedChanged: { pad?.stopMomentum(); pad?.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
+    onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
         onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration,themeName:root.themeName,iconStyle:root.iconStyle,panelOpacity:root.panelOpacity,oledShift:root.oledShift,oledDim:root.oledDim}})
@@ -122,22 +123,14 @@ ShellRoot {
     readonly property var upper: Quickshell.screens.find(s => s.name === "eDP-1") ?? null
     readonly property bool tablet: bottom === null && upper !== null
     readonly property bool book: upper !== null && bottom !== null && upper.height>upper.width && bottom.height>bottom.width
-    onBookChanged: Theme.cancelInput()
     readonly property bool docked: tablet || book
-    readonly property var bookScreens: book ? [upper,bottom].sort((a,b)=>a.x-b.x) : []
-    readonly property var primaryPanel: panelWindows.instances[0] ?? null
-    readonly property var rightPanel: panelWindows.instances[panelWindows.instances.length-1] ?? null
-    readonly property var pad: primaryPanel?.touchpad ?? null
-    readonly property var micKey: (root.book ? rightPanel : primaryPanel)?.microphone ?? null
-    readonly property var digitKeys: primaryPanel?.digitDelegates ?? null
-    readonly property var letterKeys: primaryPanel?.letterDelegates ?? null
-    readonly property var functionKeys: primaryPanel?.functionDelegates ?? null
-    readonly property var fnKey: primaryPanel?.fnButton ?? null
-    readonly property var upKey: (root.book ? rightPanel : primaryPanel)?.upButton ?? null
-    readonly property var arrowKeys: (root.book ? rightPanel : primaryPanel)?.arrowDelegates ?? null
-    readonly property var spaceKey: primaryPanel?.spaceButton ?? null
-    readonly property var content: primaryPanel?.keyboardContent ?? null
-
+    property string bookMonitor: "eDP-1"
+    readonly property string focusedMonitor: Hyprland.activeToplevel?.monitor?.name ?? ""
+    onFocusedMonitorChanged: {
+        if (focusedMonitor==="eDP-1" || focusedMonitor==="eDP-2") bookMonitor=focusedMonitor;
+    }
+    readonly property var keyboardScreen: tablet ? upper : book ? (bookMonitor==="eDP-2" ? bottom : upper) : bottom
+    onKeyboardScreenChanged: Theme.cancelInput()
     readonly property string base: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "") + "/"
 
     function send(e) {
@@ -200,12 +193,12 @@ ShellRoot {
     function runAction(action) {
         let navigation={home:"Home",end:"End","page-up":"Prior","page-down":"Next"};
         if (navigation[action]) { typeKey(navigation[action]); return; }
-        clearWord(); pad?.stopMomentum();
+        clearWord(); pad.stopMomentum();
         if (action==="fn-lock") fnLocked=!fnLocked;
         else if (action==="pad") {
-            pad?.resetGesture(); send({type:"release"}); drag=false; padEnabled=!padEnabled;
+            pad.resetGesture(); send({type:"release"}); drag=false; padEnabled=!padEnabled;
         } else if (action==="words") predictionEnabled=!predictionEnabled;
-        else if (action==="panel-settings") { pad?.resetGesture(); settingsOpen=!settingsOpen; }
+        else if (action==="panel-settings") { pad.resetGesture(); settingsOpen=!settingsOpen; }
         else if (action==="theme") themeName=themeName==="oled-black" ? "system" : "oled-black";
         else if (action==="overview") toggleOverview();
         else send({type:"action",action:action});
@@ -213,7 +206,7 @@ ShellRoot {
     }
     function typeKey(key) {
         if ((key==="Escape" ? fn : fnActive) && Layouts.secondary[key]) { runAction(Layouts.secondary[key].action); return; }
-        pad?.stopMomentum();
+        pad.stopMomentum();
         let mods = [];
         if (control) mods.push("ctrl");
         if (alt) mods.push("alt");
@@ -227,7 +220,7 @@ ShellRoot {
     }
     function typeText(char) {
         if (fnActive && Layouts.secondary[char]) { runAction(Layouts.secondary[char].action); return; }
-        pad?.stopMomentum();
+        pad.stopMomentum();
         if (Date.now()-lastTypedAt>8000) clearWord();
         let mods = [];
         if (control) mods.push("ctrl");
@@ -263,9 +256,9 @@ ShellRoot {
     }
     function closePanel() {
         Theme.cancelInput();
-        micKey?.cancel();
+        micKey.cancel();
         clearWord();
-        pad?.resetGesture();
+        pad.resetGesture();
         send({type:"release"}); drag = false; opened = false;
         shift = false; control = false; alt = false; logo = false; fn=false; fnLocked=false; held=({}); used=({});
     }
@@ -281,11 +274,11 @@ ShellRoot {
                         let s=JSON.parse(data).settings;
                         let message=JSON.parse(data);
                         if (message.appearance) root.appearance=message.appearance;
-                        if (message.focusChanged) { pad?.stopMomentum(); micKey?.cancel(); root.clearWord(); }
+                        if (message.focusChanged) { pad.stopMomentum(); micKey.cancel(); root.clearWord(); }
                         if (message.actionError) root.status=message.actionError;
                         if (message.voice) {
                             if (message.voice==="error") {
-                                if (micKey) micKey.holding=false; root.finishVoice(); root.status="Диктовка недоступна или занята";
+                                micKey.holding=false; root.finishVoice(); root.status="Диктовка недоступна или занята";
                             } else if (message.voice==="idle") root.finishVoice();
                             else {
                                 root.status=message.voice==="recording" ? "Говори…" : "Распознаю…";
@@ -330,21 +323,10 @@ ShellRoot {
         function setWords(enabled: bool): void { root.predictionEnabled=enabled; }
         function testPrediction(): void { root.russian=true; root.predictionEnabled=true; root.clearWord(); root.typeText("п"); root.typeText("р"); root.typeText("и"); }
         function acceptFirstPrediction(): void { if (root.suggestions.length) root.completeWord(root.suggestions[0]); }
-        function touchStatus(): string { return JSON.stringify({pressed:pad?.pressEvents,updated:pad?.updateEvents,samples:pad?.samples,moves:pad?.moveEvents,count:pad?.previousCount,peak:pad?.peakCount,histogram:pad?.histogram}); }
-        function bookStatus(): string {
-            return JSON.stringify({book:root.book,panels:panelWindows.instances.map(p=>({screen:p.screen.name,left:p.leftHalf,width:p.width,height:p.height,pad:p.touchpad.visible}))});
-        }
-        function testBookKeys(): void {
-            if (!root.book) return;
-            let old=[root.russian,root.shift,root.fn,root.fnLocked];
-            root.russian=true; root.shift=false; root.fn=false; root.fnLocked=false;
-            primaryPanel.letterDelegates.itemAt(0).activated();
-            rightPanel.letterDelegates.itemAt(5).activated();
-            root.toggleShift(); rightPanel.letterDelegates.itemAt(5).activated();
-            [root.russian,root.shift,root.fn,root.fnLocked]=old;
-        }
+        function touchStatus(): string { return JSON.stringify({pressed:pad.pressEvents,updated:pad.updateEvents,samples:pad.samples,moves:pad.moveEvents,count:pad.previousCount,peak:pad.peakCount,histogram:pad.histogram}); }
+        function bookStatus(): string { return JSON.stringify({book:root.book,panels:[{screen:panel.screen?.name,width:panel.width,height:panel.height,pad:pad.visible}]}); }
         function testKeys(): void { let old=root.russian; root.russian=true; digitKeys.itemAt(1).activated(); letterKeys.itemAt(0).activated(); root.typeText(" "); root.russian=old; }
-        function appearanceStatus(): string { return JSON.stringify({theme:Theme.name,selection:root.themeName,icons:Theme.icons,opacity:root.panelOpacity,themes:root.appearance.themes.length,dimmed:care.dimmed,shift:[care.targetX,care.targetY],busy:care.busy,held:Theme.heldKeys,scale:content?.Screen.devicePixelRatio}); }
+        function appearanceStatus(): string { return JSON.stringify({theme:Theme.name,selection:root.themeName,icons:Theme.icons,opacity:root.panelOpacity,themes:root.appearance.themes.length,dimmed:care.dimmed,shift:[care.targetX,care.targetY],busy:care.busy,held:Theme.heldKeys,scale:content.Screen.devicePixelRatio}); }
         function functionStatus(): string { return JSON.stringify({fn:root.fn,locked:root.fnLocked,padEnabled:root.padEnabled,keys:[fnKey,upKey,...[0,1,2].map(i=>arrowKeys.itemAt(i))].map(k=>({x:k.mapToGlobal(0,0).x,y:k.mapToGlobal(0,0).y,width:k.width,height:k.height}))}); }
         function testFunctionKeys(): void {
             let oldFn=root.fn, oldLock=root.fnLocked;
@@ -361,34 +343,17 @@ ShellRoot {
         }
     }
     Overview { id: overview }
-    Variants {
-        id: panelWindows
-        model: root.book ? root.bookScreens : [root.tablet ? root.upper : root.bottom].filter(s=>s!==null)
     PanelWindow {
         id: panel
-        property alias touchpad: pad
-        property alias microphone: micKey
-        property alias digitDelegates: digitKeys
-        property alias letterDelegates: letterKeys
-        property alias functionDelegates: functionKeys
-        property alias fnButton: fnKey
-        property alias upButton: upKey
-        property alias arrowDelegates: arrowKeys
-        property alias spaceButton: spaceKey
-        property alias keyboardContent: content
-        required property var modelData
-        readonly property bool leftHalf: root.book && modelData === root.bookScreens[0]
-        readonly property bool rightHalf: root.book && !leftHalf
-        readonly property bool settingsVisible: root.settingsOpen && !leftHalf
-        screen: modelData
-        visible: root.opened
+        screen: root.keyboardScreen
+        visible: (root.bottom !== null || root.tablet) && root.opened
         anchors { top: !root.docked; bottom: true; left: true; right: true }
         // Keyboard rows are sized from the screen, not from this window, which in
         // tablet mode is only as tall as the keyboard itself.
         readonly property real areaHeight: screen ? screen.height : height
-        implicitHeight: root.docked && panel.settingsVisible ? 446 : root.docked ? keyboard.keyboardHeight + 32 + 10 + 24 + (suggestionRow.visible ? 38 : 0) : 0
+        implicitHeight: root.docked && root.settingsOpen ? 446 : root.docked ? keyboard.keyboardHeight + 32 + 10 + 24 + (suggestionRow.visible ? 38 : 0) : 0
         color: Theme.canvas
-        // Tablet and book keyboards reserve space above their bottom-docked surfaces.
+        // Docked in tablet mode, windows shrink above it so the text field stays visible.
         exclusionMode: root.docked ? ExclusionMode.Auto : ExclusionMode.Ignore
         WlrLayershell.namespace: "yoga-input-panel"
         WlrLayershell.layer: WlrLayer.Overlay
@@ -410,8 +375,6 @@ ShellRoot {
                     model: ["Escape","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","Insert","Print"]
                     Key {
                         required property string modelData
-                        required property int index
-                        visible: !root.book || (panel.leftHalf ? index<8 : index>=8)
                         Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.minimumWidth: 0; Layout.fillHeight: true
                         radius: 7; textSize: 13; compactHint: true
                         label: modelData==="Escape" ? "Esc" : modelData==="Insert" ? "Ins" : modelData==="Print" ? "PrtSc" : modelData
@@ -421,12 +384,12 @@ ShellRoot {
                         onActivated: modelData==="Print" ? root.runAction("screenshot") : root.typeKey(modelData)
                     }
                 }
-                Key { visible: !panel.leftHalf; Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: root.settingsOpen ? "←" : ""; controlIcon: root.settingsOpen ? "" : "settings"; iconSize: 18; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
-                Key { visible: !panel.leftHalf; Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
+                Key { Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: root.settingsOpen ? "←" : ""; controlIcon: root.settingsOpen ? "" : "settings"; iconSize: 18; onActivated: { pad.resetGesture(); root.settingsOpen=!root.settingsOpen; } }
+                Key { Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32; Layout.fillHeight: true; radius: 7; textSize: 17; label: "✕"; onActivated: root.closePanel() }
             }
             ColumnLayout {
                 id: keyboard
-                visible: !panel.settingsVisible
+                visible: !root.settingsOpen
                 Layout.fillWidth: true
                 Layout.preferredHeight: keyboardHeight
                 Layout.maximumHeight: keyboardHeight
@@ -439,7 +402,7 @@ ShellRoot {
                 readonly property int numberHeight: Math.round(baseKeyHeight*0.7)
                 readonly property int keyHeight: root.tablet && panel.width > panel.areaHeight ? numberHeight : baseKeyHeight
                 readonly property int keyboardHeight: keyHeight*4+numberHeight+28
-                readonly property int unit: Math.floor((panel.width - 32 - 14*7)/(root.book ? 8.5 : 15))
+                readonly property int unit: Math.floor((panel.width - 32 - 14*7)/15)
                 readonly property int navigationWidth: Math.min(keyHeight,unit)
                 Layout.minimumWidth: 0
                 RowLayout {
@@ -447,38 +410,37 @@ ShellRoot {
                     Repeater {
                         id: digitKeys
                         model: Layouts.numbers
-                        LetterKey { required property var modelData; required property int index; visible: !root.book || (panel.leftHalf ? index<6 : index>=6); Layout.fillWidth: root.book; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { visible: !panel.leftHalf; Layout.preferredWidth: keyboard.unit; Layout.fillWidth: true; Layout.fillHeight: true; label: "⌫"; hintIcon: "power"; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey("BackSpace") }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.fillWidth: true; Layout.fillHeight: true; label: "⌫"; hintIcon: "power"; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey("BackSpace") }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillHeight: true; label: "Tab ⇥"; onActivated: root.typeKey("Tab") }
+                    Key { Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillHeight: true; label: "Tab ⇥"; onActivated: root.typeKey("Tab") }
                     Repeater {
                         id: letterKeys
                         model: Layouts.upper
-                        LetterKey { required property var modelData; required property int index; visible: !root.book || (panel.leftHalf ? index<5 : index>=5); Layout.fillWidth: root.book; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    LetterKey { visible: !panel.leftHalf; hintIcon: "audio"; hintActive: root.fnActive; symbols: Layouts.pair("\\","\\","|","/"); russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillWidth: true; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                    LetterKey { hintIcon: "audio"; hintActive: root.fnActive; symbols: Layouts.pair("\\","\\","|","/"); russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit*1.5+3.5; Layout.fillWidth: true; Layout.fillHeight: true; onActivated: root.typeText(character) }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*1.75+5.25; Layout.fillHeight: true; label: "Caps ⇪"; selected: root.caps; onActivated: root.caps=!root.caps }
+                    Key { Layout.preferredWidth: keyboard.unit*1.75+5.25; Layout.fillHeight: true; label: "Caps ⇪"; selected: root.caps; onActivated: root.caps=!root.caps }
                     Repeater {
                         model: Layouts.middle
-                        LetterKey { required property var modelData; required property int index; visible: !root.book || (panel.leftHalf ? index<5 : index>=5); Layout.fillWidth: root.book; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
-                    Key { visible: !panel.leftHalf; Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillWidth: true; Layout.fillHeight: true; label: "Enter ↵"; hintIcon: "night"; hintActive: root.fnActive; onActivated: root.typeKey("Return") }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillWidth: true; Layout.fillHeight: true; label: "Enter ↵"; hintIcon: "night"; hintActive: root.fnActive; onActivated: root.typeKey("Return") }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*2.25+8.75; Layout.fillHeight: true; label: "Shift ⇧"; selected: root.shift; onActivated: root.toggleShift(); onDownChanged: root.holdMod("shift", down) }
                     Repeater {
                         model: Layouts.lower
-                        LetterKey { required property var modelData; required property int index; visible: !root.book || (panel.leftHalf ? index<5 : index>=5); Layout.fillWidth: root.book; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
+                        LetterKey { required property var modelData; symbols: modelData; russianActive: root.russian; shifted: root.shift; caps: root.caps; Layout.preferredWidth: keyboard.unit; Layout.fillHeight: true; onActivated: root.typeText(character) }
                     }
                     Item {
-                        visible: !panel.leftHalf
                         Layout.preferredWidth: keyboard.unit*2.75+12.25; Layout.fillWidth: true; Layout.fillHeight: true
                         Key { anchors.left: parent.left; height: parent.height; width: parent.width-2*(keyboard.navigationWidth+7); label: width<80 ? "⇧" : "Shift ⇧"; hintIcon: "overview"; hintActive: root.fnActive; selected: root.shift; onActivated: root.fnActive ? root.runAction("overview") : root.toggleShift(); onDownChanged: if (!down || !root.fnActive) root.holdMod("shift",down) }
                         Key { id: upKey; anchors.right: parent.right; anchors.rightMargin: keyboard.navigationWidth+7; width: keyboard.navigationWidth; height: parent.height; label: "↑"; hintIcon: "page-up"; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey("Up") }
@@ -486,31 +448,30 @@ ShellRoot {
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.preferredHeight: keyboard.keyHeight; Layout.minimumHeight: keyboard.keyHeight; Layout.maximumHeight: keyboard.keyHeight; spacing: 7
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
-                    Key { visible: !panel.rightHalf; id: fnKey; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: "Fn"; selected: root.fnActive; onActivated: root.fn=!root.fn; onDownChanged: root.holdMod("fn",down) }
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: ""; controlIcon: "heart"; iconSize: 36; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
-                    Key { visible: !panel.rightHalf; Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Ctrl"; selected: root.control; onActivated: root.control=!root.control; onDownChanged: root.holdMod("control", down) }
+                    Key { id: fnKey; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: "Fn"; selected: root.fnActive; onActivated: root.fn=!root.fn; onDownChanged: root.holdMod("fn",down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: ""; controlIcon: "heart"; iconSize: 36; selected: root.logo; onActivated: root.logo=!root.logo; onDownChanged: root.holdMod("logo", down) }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25+1.75; Layout.minimumWidth: keyboard.unit*1.25+1.75; Layout.maximumWidth: keyboard.unit*1.25+1.75; Layout.fillHeight: true; label: "Alt"; selected: root.alt; onActivated: root.toggleAlt(); onDownChanged: root.holdMod("alt", down) }
                     Key { id: spaceKey; Layout.fillWidth: true; Layout.fillHeight: true; label: ""; hintIcon: "oled"; hintActive: root.fnActive; onActivated: root.typeText(" ") }
                     MicKey {
                         id: micKey
-                        visible: !panel.leftHalf
                         Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true
                         onStarted: { voiceSettled.stop(); root.voiceRussian=root.russian; root.voiceSession=true; root.voiceSawBusy=false; root.clearWord(); root.shift=false; root.control=false; root.alt=false; root.logo=false; root.send({type:"voice",action:"start"}); }
                         onFinished: { root.clearWord(); root.send({type:"voice",action:"stop"}); }
                         onAborted: root.send({type:"voice",action:"cancel"})
                     }
-                    Key { visible: !panel.leftHalf; Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Del"; textSize: 18; repeatable: true; onActivated: root.typeKey("Delete") }
-                    Key { visible: !panel.leftHalf; Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: keyboard.unit<65 ? (root.russian ? "RU" : "EN") : (root.russian ? "RU / en" : "ru / EN"); activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
+                    Key { Layout.preferredWidth: keyboard.unit; Layout.minimumWidth: keyboard.unit; Layout.maximumWidth: keyboard.unit; Layout.fillHeight: true; label: "Del"; textSize: 18; repeatable: true; onActivated: root.typeKey("Delete") }
+                    Key { Layout.preferredWidth: keyboard.unit*1.25; Layout.minimumWidth: keyboard.unit*1.25; Layout.maximumWidth: keyboard.unit*1.25; Layout.fillHeight: true; label: keyboard.unit<65 ? (root.russian ? "RU" : "EN") : (root.russian ? "RU / en" : "ru / EN"); activateOnRelease: true; textSize: 18; onActivated: root.switchLanguage() }
                     Repeater {
                         id: arrowKeys
                         model: ["Left","Down","Right"]
-                        Key { visible: !panel.leftHalf; required property string modelData; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: modelData==="Left" ? "←" : modelData==="Down" ? "↓" : "→"; hintIcon: Layouts.secondary[modelData].icon; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey(modelData) }
+                        Key { required property string modelData; Layout.preferredWidth: keyboard.navigationWidth; Layout.minimumWidth: keyboard.navigationWidth; Layout.maximumWidth: keyboard.navigationWidth; Layout.fillHeight: true; label: modelData==="Left" ? "←" : modelData==="Down" ? "↓" : "→"; hintIcon: Layouts.secondary[modelData].icon; hintActive: root.fnActive; repeatable: true; onActivated: root.typeKey(modelData) }
                     }
                 }
             }
             RowLayout {
                 id: suggestionRow
-                visible: !panel.settingsVisible && ((root.predictionEnabled && root.suggestions.length>0) || root.statusVisible)
+                visible: !root.settingsOpen && ((root.predictionEnabled && root.suggestions.length>0) || root.statusVisible)
                 Layout.fillWidth: true; Layout.preferredHeight: 28; Layout.minimumHeight: 28; Layout.maximumHeight: 28; spacing: 7
                 Repeater {
                     model: root.predictionEnabled ? root.suggestions : []
@@ -519,7 +480,7 @@ ShellRoot {
                 Text { visible: root.statusVisible; text: root.status; color: Theme.textMuted; font.pixelSize: 12 }
             }
             PanelSettings {
-                visible: panel.settingsVisible && !root.appearanceOpen
+                visible: root.settingsOpen && !root.appearanceOpen
                 settings: root
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(420, panel.height * 0.50)
@@ -527,7 +488,7 @@ ShellRoot {
                 Layout.maximumHeight: root.docked ? 380 : Math.min(420, panel.height * 0.50)
             }
             AppearanceSettings {
-                visible: panel.settingsVisible && root.appearanceOpen
+                visible: root.settingsOpen && root.appearanceOpen
                 settings: root
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(420,panel.height*.50)
@@ -856,6 +817,5 @@ ShellRoot {
             Behavior on opacity { NumberAnimation { duration: care.dimmed ? 800 : 0 } }
         }
 
-    }
     }
 }

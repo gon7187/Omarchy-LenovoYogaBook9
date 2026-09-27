@@ -114,17 +114,28 @@ def client():
     )
 
 
-def panel_layer():
+def panel_layers():
     layers = data("hyprctl", "layers", "-j")
+    found = []
     for name, monitor in layers.items():
         for level in monitor["levels"].values():
             for layer in level:
-                if (
-                    name == TARGET_SCREEN
-                    and layer.get("namespace") == "yoga-input-panel"
-                ):
-                    return {**layer, "monitor": name}
-    return None
+                if layer.get("namespace") == "yoga-input-panel":
+                    found.append({**layer, "monitor": name})
+    return found
+
+
+def panel_layer():
+    return next(
+        (layer for layer in panel_layers() if layer["monitor"] == TARGET_SCREEN), None
+    )
+
+
+def reserved(screen_name):
+    monitor = next(
+        m for m in data("hyprctl", "monitors", "-j") if m["name"] == screen_name
+    )
+    return tuple(monitor["reserved"])
 
 
 def screen():
@@ -241,7 +252,7 @@ def with_client(predicate):
 def opened(label):
     def fitted_layer():
         layer = panel_layer()
-        if status() != "open" or not layer or layer["monitor"] != TARGET_SCREEN:
+        if status() != "open" or not layer or len(panel_layers()) != 1:
             return None
         _, (x, y, width, height) = screen()
         if abs(layer["x"] - x) > 1 or abs(layer["w"] - width) > 1:
@@ -295,6 +306,7 @@ def set_mode(mode):
 
 
 def live(mode):
+    global TARGET_SCREEN
     if not MODE.exists() or not PANEL.exists():
         raise SystemExit("Install yoga-panel first")
     original_mode = output(str(MODE), "status")
@@ -309,6 +321,8 @@ def live(mode):
         set_mode(mode)
         if status() == "open":
             panel("hide")
+        wait_for("OSK hidden before reservation snapshot", lambda: not panel_layers())
+        reserved_before_open = reserved(TARGET_SCREEN)
         proc = subprocess.Popen(
             [sys.executable, __file__, "--probe"],
             stdin=subprocess.PIPE,
@@ -331,6 +345,22 @@ def live(mode):
         layer = opened("automatic OSK open for tiled window")
         tiled = wait_for("tiled window above OSK", lambda: above(layer))
         assert not tiled["floating"] and tiled["fullscreen"] == 0, tiled
+        if mode.startswith("book"):
+            former_screen = TARGET_SCREEN
+            TARGET_SCREEN = "eDP-2" if former_screen == "eDP-1" else "eDP-1"
+            run(
+                "hyprctl",
+                "eval",
+                f'hl.dispatch(hl.dsp.window.move({{window="address:{address}",monitor="{TARGET_SCREEN}",follow=true}}))',
+                stdout=subprocess.DEVNULL,
+            )
+            focus(address)
+            layer = opened("OSK moved to active book screen")
+            wait_for("tiled window above moved OSK", lambda: above(layer))
+            wait_for(
+                "former screen reserved space restored",
+                lambda: reserved(former_screen) == reserved_before_open,
+            )
         send(proc, "button")
         wait_for("automatic OSK hide after tiled window", lambda: status() == "closed")
 
