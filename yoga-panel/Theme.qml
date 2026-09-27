@@ -25,6 +25,7 @@ QtObject {
     readonly property color surface: alpha(base)
     readonly property color surfaceBorder: black ? "#292929" : mix(text,base,.25)
     readonly property color key: alpha(token("lighter_background","#000000"))
+    readonly property color touchpad: alpha(mix(accent,token("lighter_background",base),.12))
     readonly property color keyBorder: mix(accent,base,light ? .80 : .55)
     readonly property color keyDown: alpha(token("selection","#242424"))
     readonly property color keySelected: keyDown
