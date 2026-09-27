@@ -406,6 +406,7 @@ def live(mode):
             wait_for("manual full lower pad", full_manual_pad)
             panel("hide")
             wait_for("manual pad hide", lambda: status() == "closed")
+            focus(address)
 
         # GTK requests real client fullscreen. The plugin must make only the internal
         # mode maximized while its eDP-1 layer is mapped, then put both values back.
