@@ -130,7 +130,21 @@ def wait_for(description, predicate, timeout=8):
         if value:
             return value
         time.sleep(0.1)
-    raise AssertionError("Timed out: " + description)
+    current = client()
+    details = (
+        {
+            key: current.get(key)
+            for key in ("at", "size", "fullscreen", "fullscreenClient")
+        }
+        if current
+        else None
+    )
+    state = subprocess.run(
+        ["hyprctl", "yoga-tablet-status"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+    raise AssertionError(
+        f"Timed out: {description}; window={details}; panel={panel_layer()}; plugin={state}"
+    )
 
 
 def expect(proc, expected, timeout=3):
