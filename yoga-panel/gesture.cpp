@@ -299,7 +299,7 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
         const auto lowerPanel = panelOn(lower);
         const bool manual = lowerPanel && lowerPanel->m_namespace == "yoga-input-panel";
         if (manual) { tabletAutoShow.owned=false; tabletAutoShow.pending=0; }
-        const auto action = tabletAutoShow.step(wanted,manual || (wanted ? !!panel : visible),activated);
+        const auto action = tabletAutoShow.step(wanted,manual || (wanted ? !!panel : visible),activated,!recognizer.idle());
         if (action == TabletAutoShow::Action::Show) runPanel("auto");
         if (action == TabletAutoShow::Action::Hide) runPanel("hide");
         if (panel && panel->m_namespace == "yoga-screen-keyboard") {

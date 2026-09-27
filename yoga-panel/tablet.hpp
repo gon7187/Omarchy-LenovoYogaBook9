@@ -18,11 +18,11 @@ inline TabletBox fitTabletWindow(TabletBox box, const TabletBox& area) {
 struct TabletAutoShow {
     enum class Action { None, Show, Hide };
     bool owned=false, dismissed=false, wasVisible=false;
-    int idle=0, pending=0, unmapped=0;
+    int idle=0, pending=0, unmapped=0, settling=0;
 
-    Action step(bool wanted, bool visible, bool tapped) {
+    Action step(bool wanted, bool visible, bool tapped, bool touching=false) {
         if (!wanted) {
-            unmapped=0; dismissed=false; wasVisible=visible;
+            settling=0; unmapped=0; dismissed=false; wasVisible=visible;
             if (++idle>=3 && owned) { owned=false; pending=0; return Action::Hide; }
             return Action::None;
         }
@@ -34,6 +34,10 @@ struct TabletAutoShow {
         wasVisible=visible;
         if (visible) { pending=0; return Action::None; }
         if (tapped) dismissed=false;
+        // Touch-down precedes the client's focus update, often sent on release.
+        // Wait through contact and two 200ms polls before trusting activation.
+        if (tapped || touching) settling=2;
+        if (settling>0) { --settling; return Action::None; }
         if (pending>0) {
             if (--pending>0) return Action::None;
             owned=false;
