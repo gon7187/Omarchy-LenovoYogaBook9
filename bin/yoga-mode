@@ -57,7 +57,14 @@ lower_input() {
   done
 }
 
+# The upper sensor is aligned in landscape (monitor transform 2). Libinput
+# needs the additional rotation explicitly; binding output alone does not do it.
+upper_touch() {
+  apply "hl.device({ name = \"ingenic-gadget-serial-and-keyboard-touchscreen-top\", output = \"eDP-1\", transform = $(( ($1 + 2) % 4 )) })"
+}
+
 park() {
+  upper_touch 2 || return 1
   lower_input true &&
   apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"$PARK\", scale = 2, transform = 0, mirror = \"none\", $CM, disabled = false })"
 }
@@ -127,6 +134,7 @@ print(' '.join(str(w['id']) for w in json.load(sys.stdin) if w['monitor']=='eDP-
 # Tablet: folded 360 degrees, only the upper panel on. It rotates with the
 # machine; $1 is the eDP-1 transform for how it is held.
 mode_tablet() {
+  upper_touch "$1" || return 1
   apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\", scale = 2, transform = $1, mirror = \"none\", $CM })" &&
   apply "hl.monitor({ output = \"eDP-2\", disabled = true })" &&
   lower_input false
