@@ -188,8 +188,12 @@ notify() {
 
 # Apply a mode, and only record and announce it if it actually took.
 switch_to() {
-  local name="$1" fn="$2" label="${3:-$1}" wanted_bar wrap=()
+  local name="$1" fn="$2" label="${3:-$1}" wanted_bar focused="" wrap=()
   wanted_bar="$(bar_position)"
+  # Parking and swapping portrait outputs can clear compositor focus.
+  if [[ $name == book* ]]; then
+    focused="$(hyprctl activewindow -j | python3 -c 'import json,sys; print(json.load(sys.stdin).get("address", ""))')"
+  fi
   # Entering or leaving tablet moves workspaces between panels; see keep_upper_after.
   if [[ $name == tablet* ]] || lower_disabled; then wrap=(keep_upper_after); fi
   if ! "${wrap[@]}" "$fn"; then
@@ -198,6 +202,9 @@ switch_to() {
   fi
   echo "$name" > "$MODE_FILE"
   restore_bar_position "$wanted_bar"
+  if [[ $focused =~ ^0x[0-9a-fA-F]+$ ]]; then
+    apply "hl.dispatch(hl.dsp.focus({ window = \"address:$focused\" }))" || return 1
+  fi
   notify "$label"
 }
 

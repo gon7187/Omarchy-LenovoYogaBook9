@@ -22,3 +22,14 @@ result=$(mode_book_flip)
 grep -F 'hl.device({ name = "ingenic-gadget-serial-and-keyboard-touchscreen-top", output = "eDP-1", transform = 3 })' <<< "$result" >/dev/null || { echo 'Book flip must rotate upper touch'; exit 1; }
 device_line touchscreen-bottom 3 <<< "$result" >/dev/null || { echo 'Book flip must rotate lower touch'; exit 1; }
 echo 'PASS: portrait touch rotation and book calibration restoration'
+
+# A book rotation must restore focus after monitor placement, not mid-switch.
+MODE_FILE=$(mktemp)
+trap 'rm -f "$MODE_FILE"' EXIT
+hyprctl() { echo '{"address":"0x123"}'; }
+bar_position() { :; }
+restore_bar_position() { echo settled; }
+notify() { :; }
+result=$(switch_to book mode_book)
+[[ $result == *$'settled\nhl.dispatch(hl.dsp.focus({ window = "address:0x123" }))' ]]
+echo 'PASS: book rotation preserves active window after settling'
