@@ -25,7 +25,7 @@ QtObject {
     readonly property color surface: alpha(base)
     readonly property color surfaceBorder: black ? "#292929" : mix(text,base,.25)
     readonly property color key: alpha(token("lighter_background","#000000"))
-    readonly property color keyBorder: black ? "#383838" : mix(text,base,.30)
+    readonly property color keyBorder: mix(accent,base,light ? .80 : .55)
     readonly property color keyDown: alpha(token("selection","#242424"))
     readonly property color keySelected: keyDown
     readonly property color keyActiveBorder: accent

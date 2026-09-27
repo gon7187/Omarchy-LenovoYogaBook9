@@ -7,3 +7,21 @@ ctx.themeName='dark';ctx.applyAppearance();assert.equal(ctx.Theme.palette.backgr
 ctx.themeName='system';ctx.applyAppearance();assert.equal(ctx.Theme.name,'light');
 ctx.appearance.current={name:'next',colors:{background:'#123456'}};ctx.applyAppearance();assert.equal(ctx.Theme.name,'next');
 console.log('PASS: selected, missing and live system theme selection');
+
+const letters=fs.readFileSync(__dirname+'/LetterKey.qml','utf8');
+const colors=[...letters.matchAll(/^        color: (.+)$/gm)].map(m=>m[1]);
+for (const russianActive of [false,true]) {
+    const context={key:{russianActive},Theme:{accent:'accent',text:'text',textDim:'dim',accentDim:'dim'}};
+    assert.equal(vm.runInNewContext(colors[russianActive ? 1 : 0],context),'accent');
+    assert.equal(vm.runInNewContext(colors[russianActive ? 0 : 1],context),'dim');
+}
+const theme=fs.readFileSync(__dirname+'/Theme.qml','utf8');
+const border=theme.match(/readonly property color keyBorder: (.+)/)[1];
+for (const light of [false,true]) {
+    const context={light,black:!light,text:1,base:0,accent:.8,mix:(a,b,w)=>a*w+b*(1-w)};
+    const first=vm.runInNewContext(border,context);
+    assert.ok(first>0 && first<context.accent,'resting border is a muted accent');
+    context.accent=.4;
+    assert.notEqual(vm.runInNewContext(border,context),first,'border follows theme accent');
+}
+console.log('PASS: symmetric layout accents and themed resting borders, including OLED');
