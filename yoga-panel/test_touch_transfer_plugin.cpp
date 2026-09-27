@@ -18,18 +18,19 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     if (std::string(__hyprland_api_get_hash())!=__hyprland_api_get_client_hash()) throw std::runtime_error("Test helper ABI mismatch");
     HyprlandAPI::registerHyprCtlCommand(handle,{"yoga-test-edge",false,[](eHyprCtlOutputFormat,std::string request) -> std::string {
         const auto window=Desktop::focusState()->window();
-        if (!window || window->m_class!="org.gon7187.YogaTabletKeyboardTest") return "Refusing: focus the test window";
+        if (!window || (window->m_class!="org.gon7187.YogaTabletKeyboardTest" && window->m_class!="org.gon7187.YogaTitlebarInputTest")) return "Refusing: focus the test window";
         const auto action=request.substr(request.find(' ')+1);
         stamp+=30;
-        if (action=="down") {
+        if (action=="down" || action=="client" || action=="gap") {
             source=window->m_monitor;
             const auto monitor=source.lock();
             if (!monitor) return "No monitor";
             const auto pos=window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
             const auto size=window->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
             y=(pos.y+12-monitor->m_position.y)/monitor->m_size.y;
+            const double x=action=="client" ? 20 : size.x-(action=="gap" ? 35 : 50);
             for (const auto& device:g_pInputManager->m_touches) if(device->m_boundOutput==monitor->m_name) {
-                g_pInputManager->onTouchDown({.timeMs=stamp,.touchID=0,.pos={(pos.x+size.x/2-monitor->m_position.x)/monitor->m_size.x,y},.device=device});
+                g_pInputManager->onTouchDown({.timeMs=stamp,.touchID=0,.pos={(pos.x+x-monitor->m_position.x)/monitor->m_size.x,y},.device=device});
                 g_pSeatManager->sendTouchFrame();return "ok";
             }
             return "No touchscreen";

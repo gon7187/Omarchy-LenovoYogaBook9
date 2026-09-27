@@ -1,5 +1,6 @@
--- Title bars for a machine driven by touch: drag a window by its bar, close it
--- with the button. From the hyprbars plugin, which yoga-panel builds and loads
+-- Touch controls: drag by the visible grip, close with the cross.
+-- The rest of the top row passes input to the application. yoga-panel builds
+-- and loads the hyprbars plugin
 -- (yoga-panel/build-hyprbars.sh, ensure-plugin.py). The plugin registers
 -- hl.plugin.hyprbars on load and reloads the config, so this block only runs
 -- once the plugin exists -- until then it must not be a config error.
@@ -37,4 +38,13 @@ hl.plugin.hyprbars.add_button({
   size = 24,
   icon = "✕",
   action = "hyprctl eval 'hl.dispatch(hl.dsp.window.close())'",
+})
+
+-- An empty action marks a drag grip in the local hyprbars patch.
+hl.plugin.hyprbars.add_button({
+  bg_color = colors.accent or colors.foreground,
+  fg_color = colors.background,
+  size = 24,
+  icon = "⠿",
+  action = "",
 })

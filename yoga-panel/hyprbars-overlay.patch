@@ -1,16 +1,16 @@
 --- a/hyprbars/barDeco.cpp
 +++ b/hyprbars/barDeco.cpp
 @@ -25,6 +25,7 @@
- 
+
  #include "globals.hpp"
  #include "BarPassElement.hpp"
 +#include "touch_transfer.hpp"
- 
+
  #include <climits>
- 
+
 @@ -59,16 +60,10 @@
  }
- 
+
  SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
 -    const auto                 HEIGHT     = g_pGlobalState->config.barHeight->value();
 -    const auto                 ENABLED    = g_pGlobalState->config.enabled->value();
@@ -27,20 +27,66 @@
 +    info.edges  = DECORATION_EDGE_TOP;
      return info;
  }
- 
-@@ -84,7 +79,7 @@
+
+@@ -83,15 +78,15 @@
+     return "Hyprbar";
  }
- 
- bool CHyprBar::inputIsValid() {
+
+-bool CHyprBar::inputIsValid() {
 -    if (m_hidden)
++bool CHyprBar::inputIsValid(Vector2D coords) {
 +    if (m_hidden || !g_pGlobalState->config.enabled->value())
          return false;
- 
+
      if (g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
-@@ -165,9 +160,33 @@
+         return false;
+
+-    const auto MOUSE    = g_pInputManager->getMouseCoordsInternal();
+-    auto       PMONITOR = Desktop::focusState()->monitor();
++    const auto MOUSE = coords;
++    auto PMONITOR = State::monitorState()->query().vec(coords).run();
+
+     if (!PMONITOR)
+         return false;
+@@ -100,10 +95,7 @@
+
+     const auto              WINDOWATCURSOR = hitTester.windowAt(MOUSE, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+
+-    auto                    focusState = Desktop::focusState();
+-    auto                    window     = focusState->window();
+-
+-    if (WINDOWATCURSOR != m_pWindow && m_pWindow != window)
++    if (WINDOWATCURSOR != m_pWindow)
+         return false;
+
+     PHLLS    foundSurface = nullptr;
+@@ -123,11 +115,9 @@
+ }
+
+ void CHyprBar::onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e) {
+-    if (!inputIsValid())
+-        return;
+-
+     if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
+-        handleUpEvent(info);
++        // A captured drag must release even after leaving the grip or window.
++        if (m_bCancelledDown && !m_bTouchEv) handleUpEvent(info);
+         return;
+     }
+
+@@ -136,7 +126,7 @@
+
+ void CHyprBar::onTouchDown(Event::SCallbackInfo& info, ITouch::SDownEvent e) {
+     // Don't do anything if you're already grabbed a window with another finger
+-    if (!inputIsValid() || e.touchID != 0)
++    if (e.touchID != 0)
+         return;
+
+     handleDownEvent(info, e);
+@@ -165,9 +155,33 @@
      if (!m_bDragPending || !m_bTouchEv || !validMapped(m_pWindow) || e.touchID != m_touchId)
          return;
- 
+
 -    auto PMONITOR     = m_pWindow->m_monitor.lock();
 -    PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
 -    const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y);
@@ -71,19 +117,19 @@
 +            return;
 +        }
 +    }
- 
+
      if (!m_bDraggingThis) {
          // Initial setup for dragging a window.
-@@ -182,6 +201,8 @@
- 
+@@ -182,6 +196,8 @@
+
  void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch::SDownEvent> touchEvent) {
      m_bTouchEv = touchEvent.has_value();
 +    m_bTouchHandoff = false;
 +    m_touchMonitor.reset();
      if (m_bTouchEv)
          m_touchId = touchEvent.value().touchID;
- 
-@@ -198,6 +219,8 @@
+
+@@ -198,18 +214,17 @@
              }
          }
          PMONITOR = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
@@ -91,75 +137,166 @@
 +        if (!PMONITOR) return;
          COORDS   = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y) - assignedBoxGlobal().pos();
      }
- 
-@@ -223,6 +246,10 @@
+
+-    const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
+-    const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
+-    const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
+-    const auto ALIGNBUTTONS     = g_pGlobalState->config.barButtonsAlignment->value();
+-    const auto ON_DOUBLE_CLICK  = g_pGlobalState->config.onDoubleClick->value();
+-
+-    const bool BUTTONSRIGHT = ALIGNBUTTONS != "left";
+-
+-    if (!VECINRECT(COORDS, 0, 0, assignedBoxGlobal().w, HEIGHT - 1)) {
++    const auto ON_DOUBLE_CLICK = g_pGlobalState->config.onDoubleClick->value();
++    const auto BUTTON = buttonAt(COORDS);
++
++    // Only visible controls own input; the rest of the overlay belongs to the client.
++    if (BUTTON < 0 || !inputIsValid(COORDS + assignedBoxGlobal().pos()) ||
++        PWINDOW->hasPopupAt(COORDS + assignedBoxGlobal().pos())) {
+
+         if (m_bDraggingThis) {
+             if (m_bTouchEv)
+@@ -221,6 +236,8 @@
+         m_bDraggingThis = false;
+         m_bDragPending  = false;
          m_bTouchEv      = false;
++        m_touchId = 0;
++        m_touchMonitor.reset();
          return;
      }
-+
-+    // Popups above the client retain their own input.
-+    if (PWINDOW->hasPopupAt(COORDS + assignedBoxGlobal().pos()))
+
+@@ -233,8 +250,12 @@
+     info.cancelled   = true;
+     m_bCancelledDown = true;
+
+-    if (doButtonPress(BARPADDING, BARBUTTONPADDING, HEIGHT, COORDS, BUTTONSRIGHT))
+-        return;
++    const auto& command = g_pGlobalState->buttons[BUTTON].cmd;
++    if (!command.empty()) {
++        g_pKeybindManager->m_dispatchers["exec"](command);
 +        return;
- 
-     if (Desktop::focusState()->window() != PWINDOW)
-         Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
-@@ -267,6 +294,8 @@
++    }
++    // An actionless visible button is the drag grip, never an empty shell command.
+
+     if (!ON_DOUBLE_CLICK.empty() &&
+         std::chrono::duration_cast<std::chrono::milliseconds>(Time::steadyNow() - m_lastMouseDown).count() < 400 /* Arbitrary delay I found suitable */) {
+@@ -267,6 +288,8 @@
      m_bDragPending = false;
      m_bTouchEv     = false;
      m_touchId      = 0;
 +    m_bTouchHandoff = false;
 +    m_touchMonitor.reset();
  }
- 
+
  void CHyprBar::handleMovement() {
-@@ -499,7 +528,7 @@
+@@ -276,23 +299,23 @@
+     return;
+ }
+
+-bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, const bool BUTTONSRIGHT) {
+-    //check if on a button
+-    float offset = barPadding;
+-
+-    for (auto& b : g_pGlobalState->buttons) {
+-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, barHeight};
+-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - barButtonPadding - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
+-
+-        if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + barButtonPadding, currentPos.y + b.size)) {
+-            // hit on close
+-            g_pKeybindManager->m_dispatchers["exec"](b.cmd);
+-            return true;
+-        }
+-
+-        offset += barButtonPadding + b.size;
+-    }
+-    return false;
++int CHyprBar::buttonAt(Vector2D coords) {
++    const auto padding = g_pGlobalState->config.barPadding->value();
++    const auto gap = g_pGlobalState->config.barButtonPadding->value();
++    const auto size = assignedBoxGlobal().size();
++    const bool right = g_pGlobalState->config.barButtonsAlignment->value() != "left";
++    const auto count = getVisibleButtonCount(gap, padding, size, 1);
++    double offset = padding;
++    for (size_t i = 0; i < count; ++i) {
++        const auto& button = g_pGlobalState->buttons[i];
++        // Match rendered button bounds; gaps must not steal client clicks either.
++        const double x = right ? size.x - offset - button.size : offset;
++        const double y = (size.y - button.size) / 2.0;
++        if (coords.x >= x && coords.x < x + button.size && coords.y >= y && coords.y < y + button.size)
++            return static_cast<int>(i);
++        offset += gap + button.size;
++    }
++    return -1;
+ }
+
+ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
+@@ -499,7 +522,7 @@
      CBox       titleBarBox = {DECOBOX.x - pMonitor->m_position.x, DECOBOX.y - pMonitor->m_position.y, DECOBOX.w,
                                DECOBOX.h + ROUNDING * 3 /* to fill the bottom cuz we can't disable rounding there */};
- 
+
 -    titleBarBox.translate(PWINDOW->m_floatingOffset).scale(pMonitor->m_scale).round();
 +    titleBarBox.scale(pMonitor->m_scale).round();
- 
+
      if (titleBarBox.w < 1 || titleBarBox.h < 1)
          return;
-@@ -618,24 +647,25 @@
+@@ -618,24 +641,26 @@
  }
- 
+
  eDecorationLayer CHyprBar::getDecorationLayer() {
 -    return DECORATION_LAYER_UNDER;
 +    return DECORATION_LAYER_OVER;
  }
- 
+
  uint64_t CHyprBar::getDecorationFlags() {
 -    return DECORATION_ALLOWS_MOUSE_INPUT | (g_pGlobalState->config.barPartOfWindow->value() ? DECORATION_PART_OF_MAIN_WINDOW : 0);
-+    return DECORATION_ALLOWS_MOUSE_INPUT;
++    // Global callbacks handle the buttons; a full-width input decoration blocks the client.
++    return 0;
  }
- 
+
  CBox CHyprBar::assignedBoxGlobal() {
      if (!validMapped(m_pWindow))
          return {};
- 
+
 -    CBox box = m_bAssignedBox;
 -    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, m_pWindow.lock()));
 +    const auto pos = m_pWindow->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +    CBox box = {pos.x, pos.y, m_pWindow->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT).x,
 +                static_cast<double>(g_pGlobalState->config.barHeight->value())};
- 
+
      const auto PWORKSPACE      = m_pWindow->m_workspace;
      const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
- 
+
 -    return box.translate(WORKSPACEOFFSET);
 +    return box.translate(m_pWindow->m_floatingOffset).translate(WORKSPACEOFFSET);
  }
- 
+
  PHLWINDOW CHyprBar::getOwner() {
 --- a/hyprbars/barDeco.hpp
 +++ b/hyprbars/barDeco.hpp
+@@ -83,7 +83,7 @@
+     void renderBarButtonsText(CBox* barBox, const float scale, const float a);
+     void damageOnButtonHover();
+
+-    bool inputIsValid();
++    bool inputIsValid(Vector2D coords);
+     void onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e);
+     void onTouchDown(Event::SCallbackInfo& info, ITouch::SDownEvent e);
+     void onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e);
+@@ -93,7 +93,7 @@
+     void handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch::SDownEvent> touchEvent);
+     void handleUpEvent(Event::SCallbackInfo& info);
+     void handleMovement();
+-    bool doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, bool BUTTONSRIGHT);
++    int buttonAt(Vector2D coords);
+
+     CBox assignedBoxGlobal();
+
 @@ -111,6 +111,8 @@
      bool                m_bDragPending   = false;
      bool                m_bCancelledDown = false;
      int                 m_touchId        = 0;
 +    PHLMONITORREF       m_touchMonitor;
 +    bool               m_bTouchHandoff = false;
- 
+
      // store hover state for buttons as a bitfield
      unsigned int m_iButtonHoverState = 0;
