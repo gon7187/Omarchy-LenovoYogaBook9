@@ -487,7 +487,7 @@ ShellRoot {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 radius: 15
-                color: Theme.touchpad
+                color: Theme.key
                 border.color: Theme.keyBorder
                 Text { visible: !root.padEnabled; anchors.centerIn: parent; text: "Тачпад выключен · Fn + F10"; color: Theme.textDim; font.pixelSize: 14 }
                 MultiPointTouchArea {

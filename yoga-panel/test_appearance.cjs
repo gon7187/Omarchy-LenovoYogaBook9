@@ -40,8 +40,8 @@ for (const statusVisible of [false,true]) for (const predictionEnabled of [false
     root.settingsOpen=true;
     assert.equal(vm.runInNewContext(rowVisible,{root}),false);
 }
-assert.ok(qml.includes('color: Theme.touchpad'));
-const padFill=theme.match(/readonly property color touchpad: (.+)/)[1];
+assert.ok(qml.includes('color: Theme.key\n                border.color: Theme.keyBorder'));
+const padFill=theme.match(/readonly property color key: (.+)/)[1];
 const {execFileSync}=require('child_process');
 const catalogue=JSON.parse(execFileSync('python3',['-c','import json; from themes import Appearance; print(json.dumps(Appearance().catalogue()))'],{cwd:__dirname,encoding:'utf8'}));
 const rgb=value=>Array.isArray(value) ? value : value.slice(1).match(/../g).map(v=>parseInt(v,16)/255);
@@ -52,7 +52,6 @@ for (const {name,colors} of catalogue) for (const opacity of [.65,.99,1]) {
         alpha:color=>[...rgb(color),opacity]};
     const fill=vm.runInNewContext(padFill,context);
     assert.equal(fill[3],opacity,name+' retains opacity');
-    assert.ok(fill.slice(0,3).some(v=>v>0),name+' is not black');
-    assert.notDeepEqual(fill.slice(0,3),rgb(colors.background),name+' has a distinct touchpad');
+    assert.deepEqual(fill.slice(0,3),rgb(colors.lighter_background || '#000000'),name+' matches keys exactly');
 }
 console.log(`PASS: touchpad fill for ${catalogue.length} installed themes; voice strip hidden, errors and suggestions retained`);
