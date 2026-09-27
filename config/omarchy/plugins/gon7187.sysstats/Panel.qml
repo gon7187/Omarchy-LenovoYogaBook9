@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import Quickshell.Services.UPower
 import qs.Ui
 import qs.Commons
 
@@ -108,7 +109,8 @@ BarWidget {
   FileView { id: memFile; path: "/proc/meminfo"; blockLoading: true; printErrors: false }
 
   Timer {
-    interval: root.setting("interval", 2) * 1000
+    // Avoid waking sensors every two seconds while discharging.
+    interval: Math.max(root.setting("interval", 2), UPower.onBattery ? 10 : 0) * 1000
     running: true
     repeat: true
     triggeredOnStart: true
