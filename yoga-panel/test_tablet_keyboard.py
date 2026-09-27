@@ -123,6 +123,17 @@ def panel_layer():
     return None
 
 
+def screen():
+    monitor = next(m for m in data("hyprctl", "monitors", "-j") if m["name"] == "eDP-1")
+    width, height = (
+        monitor["width"] / monitor["scale"],
+        monitor["height"] / monitor["scale"],
+    )
+    if monitor["transform"] % 2:
+        width, height = height, width
+    return monitor, (monitor["x"], monitor["y"], width, height)
+
+
 def wait_for(description, predicate, timeout=8):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -188,11 +199,12 @@ def restore_focus(address):
         focus(address)
 
 
-def resize_and_place(address, monitor):
-    width = min(800, int(monitor["width"] / monitor["scale"]) - 40)
-    height = min(500, int(monitor["height"] / monitor["scale"]) - 80)
-    x = int(monitor["x"]) + 20
-    y = int(monitor["y"] + monitor["height"] / monitor["scale"]) - height - 10
+def resize_and_place(address):
+    _, (screen_x, screen_y, screen_width, screen_height) = screen()
+    width = min(800, int(screen_width) - 40)
+    height = min(500, int(screen_height) - 80)
+    x = int(screen_x) + 20
+    y = int(screen_y + screen_height) - height - 10
     run(
         "hyprctl",
         "eval",
@@ -221,9 +233,18 @@ def with_client(predicate):
 
 
 def opened(label):
-    layer = wait_for(label, lambda: panel_layer() if status() == "open" else None)
-    assert layer["monitor"] == "eDP-1", layer
-    return layer
+    def fitted_layer():
+        layer = panel_layer()
+        if status() != "open" or not layer or layer["monitor"] != "eDP-1":
+            return None
+        _, (x, y, width, height) = screen()
+        if abs(layer["x"] - x) > 1 or abs(layer["w"] - width) > 1:
+            return None
+        return (
+            layer if y <= layer["y"] and layer["y"] + layer["h"] <= y + height else None
+        )
+
+    return wait_for(label, fitted_layer)
 
 
 def above(layer):
@@ -232,7 +253,34 @@ def above(layer):
     )
 
 
-def live():
+def alternate(mode):
+    return {
+        "tablet": "tablet-left",
+        "tablet-left": "tablet-right",
+        "tablet-right": "tablet-left",
+    }[mode]
+
+
+def set_mode(mode):
+    run(str(MODE), mode, stdout=subprocess.DEVNULL)
+    wait_for(
+        mode,
+        lambda: (
+            any(
+                m["name"] == "eDP-2" and m["disabled"]
+                for m in data("hyprctl", "monitors", "all", "-j")
+            )
+            and next(
+                m["transform"]
+                for m in data("hyprctl", "monitors", "-j")
+                if m["name"] == "eDP-1"
+            )
+            == {"tablet": 2, "tablet-left": 3, "tablet-right": 1}[mode]
+        ),
+    )
+
+
+def live(mode):
     if not MODE.exists() or not PANEL.exists():
         raise SystemExit("Install yoga-panel first")
     original_mode = output(str(MODE), "status")
@@ -244,14 +292,7 @@ def live():
     try:
         if original_auto:
             run("systemctl", "--user", "stop", UNIT)
-        run(str(MODE), "tablet", stdout=subprocess.DEVNULL)
-        wait_for(
-            "tablet mode",
-            lambda: any(
-                m["name"] == "eDP-2" and m["disabled"]
-                for m in data("hyprctl", "monitors", "all", "-j")
-            ),
-        )
+        set_mode(mode)
         if status() == "open":
             panel("hide")
         proc = subprocess.Popen(
@@ -291,6 +332,26 @@ def live():
             ),
         )
         assert during["fullscreenClient"] == before["fullscreenClient"] == 2, during
+        set_mode(alternate(mode))
+        layer = opened("OSK after rotation")
+        wait_for(
+            "fullscreen above rotated OSK",
+            lambda: with_client(
+                lambda c: (
+                    c["fullscreen"] == 1 and c["at"][1] + c["size"][1] <= layer["y"]
+                )
+            ),
+        )
+        set_mode(mode)
+        layer = opened("OSK after returning orientation")
+        wait_for(
+            "fullscreen above returned OSK",
+            lambda: with_client(
+                lambda c: (
+                    c["fullscreen"] == 1 and c["at"][1] + c["size"][1] <= layer["y"]
+                )
+            ),
+        )
         send(proc, "button")
         wait_for("automatic OSK hide", lambda: status() == "closed")
         after = wait_for(
@@ -303,6 +364,13 @@ def live():
             ),
         )
         assert after["fullscreen"] == after["fullscreenClient"] == 2, after
+        _, (x, y, width, height) = screen()
+        assert (
+            x <= after["at"][0]
+            and y <= after["at"][1]
+            and after["at"][0] + after["size"][0] <= x + width
+            and after["at"][1] + after["size"][1] <= y + height
+        ), after
         send(proc, "unfullscreen")
         wait_for(
             "leave fullscreen",
@@ -319,10 +387,7 @@ def live():
             stdout=subprocess.DEVNULL,
         )
         wait_for("floating GTK window", lambda: with_client(lambda c: c["floating"]))
-        monitor = next(
-            m for m in data("hyprctl", "monitors", "-j") if m["name"] == "eDP-1"
-        )
-        before = resize_and_place(address, monitor)
+        before = resize_and_place(address)
         geometry = (before["at"], before["size"])
         send(proc, "entry")
         layer = opened("automatic OSK open for floating window")
@@ -393,10 +458,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--probe", action="store_true")
+    parser.add_argument(
+        "--mode", choices=("tablet", "tablet-left", "tablet-right"), default="tablet"
+    )
     args = parser.parse_args()
     if args.probe:
         probe()
     elif args.live:
-        live()
+        live(args.mode)
     else:
         parser.error("pass --live; this test changes the display mode briefly")

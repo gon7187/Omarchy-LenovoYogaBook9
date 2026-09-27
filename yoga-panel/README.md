@@ -450,3 +450,6 @@ node test_touchpad.cjs
 Проверки: `bash build-gesture.sh` проверяет геометрию и состояния автопоказа;
 `python3 test_tablet_keyboard.py --live` временно включает планшетный режим,
 проверяет собственное GTK-окно и восстанавливает режим, панель и фокус.
+
+Для вертикальных ориентаций: `python3 test_tablet_keyboard.py --live --mode tablet-left`
+и `--mode tablet-right`. Проверка также поворачивает экран с открытой клавиатурой.
