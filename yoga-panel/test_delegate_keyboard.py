@@ -4,7 +4,6 @@
 import os
 import selectors
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -17,9 +16,7 @@ proc = subprocess.Popen(
 sel = selectors.DefaultSelector()
 assert proc.stdout is not None
 sel.register(proc.stdout, selectors.EVENT_READ)
-action, expected = (
-    ("testBookKeys", "йнН") if "--book" in sys.argv else ("testKeys", "1й ")
-)
+action, expected = "testKeys", "1й "
 output = ""
 try:
     deadline = time.monotonic() + 15

@@ -289,7 +289,7 @@ static void pollTextInput(SP<CEventLoopTimer> self, void*) {
     const auto monitor = window ? window->m_monitor.lock() : PHLMONITOR{};
     const bool internal = monitor && (monitor == upper || (book && monitor == lower));
     const auto panel = internal ? panelOn(monitor) : PHLLS{};
-    const bool visible = tablet ? !!panelOn(upper) : book ? !!panelOn(upper) && !!panelOn(lower) : false;
+    const bool visible = docked && (!!panelOn(upper) || !!panelOn(lower));
     if (docked && !g_pSessionLockManager->isSessionLocked()) {
         const auto input = g_pInputManager->m_relay.getFocusedTextInput();
         const bool wanted = window && internal && input && input->isEnabled();
