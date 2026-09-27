@@ -61,14 +61,14 @@ assert.equal(sent.at(-1).type,'keyboardGroup');
 console.log('PASS: no layout echo, modifier retention, stale events, rapid switch acknowledgments, external layout sync');
 
 // Evaluate the production height bindings for each screen orientation.
-for (const [tablet,width,height,expectedKey] of [[true,1440,900,49],[true,900,1440,70],[false,1440,900,70]]) {
-    const sizes=vm.createContext({root:{tablet},panel:{width,areaHeight:height}});
+for (const [docked,width,height,expectedKey] of [[true,1440,900,49],[true,900,1440,70],[false,1440,900,70]]) {
+    const sizes=vm.createContext({root:{docked},panel:{width,areaHeight:height}});
     for (const name of ['baseKeyHeight','numberHeight','keyHeight','keyboardHeight']) {
         const expression=qml.match(new RegExp(`readonly property int ${name}: ([^\\n]+)`))[1];
         sizes[name]=vm.runInContext(expression,sizes);
     }
     assert.equal(sizes.keyHeight,expectedKey);
     assert.equal(sizes.numberHeight,49);
-    assert.equal(sizes.keyboardHeight,tablet && width>height ? 273 : 357);
+    assert.equal(sizes.keyboardHeight,docked && width>height ? 273 : 357);
 }
 console.log('PASS: landscape tablet rows match numbers; portrait and laptop retain height');

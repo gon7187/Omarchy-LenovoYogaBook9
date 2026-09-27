@@ -123,13 +123,14 @@ ShellRoot {
     readonly property var upper: Quickshell.screens.find(s => s.name === "eDP-1") ?? null
     readonly property bool tablet: bottom === null && upper !== null
     readonly property bool book: upper !== null && bottom !== null && upper.height>upper.width && bottom.height>bottom.width
-    readonly property bool docked: tablet || book
+    property bool automaticKeyboard: false
+    readonly property bool docked: tablet || book || automaticKeyboard
     property string bookMonitor: "eDP-1"
     readonly property string focusedMonitor: Hyprland.activeToplevel?.monitor?.name ?? ""
     onFocusedMonitorChanged: {
         if (focusedMonitor==="eDP-1" || focusedMonitor==="eDP-2") bookMonitor=focusedMonitor;
     }
-    readonly property var keyboardScreen: tablet ? upper : book ? (bookMonitor==="eDP-2" ? bottom : upper) : bottom
+    readonly property var keyboardScreen: tablet ? upper : docked ? (bookMonitor==="eDP-2" ? bottom : upper) : bottom
     onKeyboardScreenChanged: Theme.cancelInput()
     readonly property string base: Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "") + "/"
 
@@ -259,7 +260,7 @@ ShellRoot {
         micKey.cancel();
         clearWord();
         pad.resetGesture();
-        send({type:"release"}); drag = false; opened = false;
+        send({type:"release"}); drag = false; opened = false; automaticKeyboard = false;
         shift = false; control = false; alt = false; logo = false; fn=false; fnLocked=false; held=({}); used=({});
     }
     Process {
@@ -309,8 +310,9 @@ ShellRoot {
     }
     IpcHandler {
         target: "panel"
-        function toggle(): void { if (root.opened) root.closePanel(); else root.opened = true; }
-        function openPanel(): void { root.opened = true; }
+        function toggle(): void { if (root.opened) root.closePanel(); else { root.automaticKeyboard=false; root.opened=true; } }
+        function openPanel(): void { root.automaticKeyboard=false; root.opened=true; }
+        function openKeyboard(): void { root.automaticKeyboard=true; root.opened=true; }
         function hide(): void { root.closePanel(); }
         // Touchscreen gestures recognised by the Hyprland plugin; same actions as the pad's.
         function gesture(name: string): void {
@@ -355,7 +357,7 @@ ShellRoot {
         color: Theme.canvas
         // Docked in tablet mode, windows shrink above it so the text field stays visible.
         exclusionMode: root.docked ? ExclusionMode.Auto : ExclusionMode.Ignore
-        WlrLayershell.namespace: "yoga-input-panel"
+        WlrLayershell.namespace: root.docked ? "yoga-screen-keyboard" : "yoga-input-panel"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         ColumnLayout {
@@ -400,7 +402,7 @@ ShellRoot {
                 // past the touchpad edge. The remainder goes to the last key of each row.
                 readonly property int baseKeyHeight: Math.floor((Math.min(380,panel.areaHeight*0.44)-28)/5)
                 readonly property int numberHeight: Math.round(baseKeyHeight*0.7)
-                readonly property int keyHeight: root.tablet && panel.width > panel.areaHeight ? numberHeight : baseKeyHeight
+                readonly property int keyHeight: root.docked && panel.width > panel.areaHeight ? numberHeight : baseKeyHeight
                 readonly property int keyboardHeight: keyHeight*4+numberHeight+28
                 readonly property int unit: Math.floor((panel.width - 32 - 14*7)/15)
                 readonly property int navigationWidth: Math.min(keyHeight,unit)

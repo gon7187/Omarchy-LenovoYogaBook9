@@ -14,6 +14,7 @@ TestCase {
  id: root; name: "KeyboardGeometry"; when: windowShown
  width: 1440; height: 500; visible: true
  property bool tablet: true
+ property bool docked: true
  property bool settingsOpen: false
  property bool russian: true
  property bool shift: false
@@ -30,7 +31,7 @@ TestCase {
   let cases=[]; for(let w of [900,874,1440]) for(let ru of [true,false]) for(let fn of [false,true]) cases.push({tag:w+"-"+ru+"-"+fn,width:w,ru:ru,fn:fn}); cases.push({tag:"laptop",width:1440,ru:true,fn:false,laptop:true}); return cases;
  }
  function test_bounds(data) {
-  tablet=!data.laptop; panel.width=data.width; panel.areaHeight=data.width<1000 ? 1440 : 900; russian=data.ru; fnActive=data.fn;
+  tablet=!data.laptop; docked=!data.laptop; panel.width=data.width; panel.areaHeight=data.width<1000 ? 1440 : 900; russian=data.ru; fnActive=data.fn;
   wait(50);
   let keys=[];
   function visit(item) {
