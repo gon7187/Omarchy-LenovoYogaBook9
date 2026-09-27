@@ -42,17 +42,20 @@
 ### Стабильность службы датчиков INGENIC
 
 [`config/systemd/yoga-sensor-keepalive.service`](config/systemd/yoga-sensor-keepalive.service)
-держит открытым последовательный порт INGENIC и читает поток без записи данных
-в журнал. Порт обязательно настраивается в `raw -echo`: иначе бинарные байты
+запускает [`bin/yoga-sensor-keepalive`](bin/yoga-sensor-keepalive), который держит
+открытым последовательный порт INGENIC и читает поток без записи данных
+в журнал. Порт обязательно настраивается в raw-режим без эха: иначе бинарные байты
 принимаются за Ctrl+\\ / Ctrl+D, завершая `cat` с SIGQUIT или EOF. Настройка
-и чтение используют один открытый дескриптор; при переподключении устройства
-systemd повторяет запуск с настройкой нового порта.
+и чтение используют один открытый дескриптор. Флаг `O_NOCTTY` исключает сигналы
+от порта даже до настройки raw-режима. При переподключении устройства systemd
+повторяет запуск с настройкой нового порта.
 
 Системная служба устанавливается отдельно, с резервной копией существующего
 файла; `yoga-panel/install.py` по-прежнему не требует root и её не устанавливает:
 
 ```bash
 sudo cp -a /etc/systemd/system/yoga-sensor-keepalive.service "/etc/systemd/system/yoga-sensor-keepalive.service.bak.$(date +%s)" # if already installed
+sudo install -m 755 bin/yoga-sensor-keepalive /usr/local/bin/
 sudo install -m 644 config/systemd/yoga-sensor-keepalive.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now yoga-sensor-keepalive.service

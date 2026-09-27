@@ -1,80 +1,69 @@
 #!/usr/bin/env python3
-"""Replay binary sensor bytes through the real unit command on an isolated PTY."""
+"""Exercise the real reader on an isolated PTY, never on the hardware."""
 
 import configparser
 import os
 import pty
-import resource
 import select
 import shlex
 import subprocess
-import sys
+import termios
 import time
 from pathlib import Path
 
 
-def check(unit: Path) -> None:
+def check() -> None:
+    root = Path(__file__).resolve().parents[1]
     config = configparser.ConfigParser(interpolation=None)
-    config.read(unit)
-    command = config["Service"]["ExecStart"]
-    device = "/dev/serial/by-id/usb-INGENIC_Gadget_Serial_and_keyboard_ingenic-if00"
-    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    for payload in (b"\x1c", b"\x04", bytes(range(256))):
-        master, slave = pty.openpty()
-        args = shlex.split(command.replace(device, os.ttyname(slave)))
-        with subprocess.Popen(
-            args,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        ) as process:
-            try:
-                # Wait for exec cat, after any serial setup in the unit command.
-                deadline = time.monotonic() + 3
-                while time.monotonic() < deadline:
-                    if process.poll() is not None:
-                        raise AssertionError(
-                            f"Unit exited during startup: {process.returncode}"
-                        )
-                    if (
-                        Path(f"/proc/{process.pid}/comm").read_text().strip() == "cat"
-                        and os.tcgetpgrp(master) == process.pid
-                    ):
-                        break
-                    time.sleep(0.01)
-                else:
-                    raise AssertionError("Reader did not acquire the serial port")
-                os.write(master, payload)
-                assert process.stdout is not None
-                received = b""
-                deadline = time.monotonic() + 2
-                while len(received) < len(payload) and time.monotonic() < deadline:
-                    if select.select([process.stdout], [], [], 0.1)[0]:
-                        chunk = os.read(process.stdout.fileno(), 4096)
-                        if not chunk:
-                            break
-                        received += chunk
-                assert received == payload, (
-                    f"Binary input lost: {payload!r}, exit={process.poll()}"
-                )
-                assert process.poll() is None, "Reader exited on binary input"
-                assert not select.select([master], [], [], 0.1)[0], (
-                    "Sensor data echoed back to device"
-                )
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                process.wait()
-                os.close(master)
-                os.close(slave)
-    print("PASS: QUIT, EOF and all 256 byte values remain data; no echo or exits")
+    config.read(root / "config/systemd/yoga-sensor-keepalive.service")
+    args = shlex.split(config["Service"]["ExecStart"])
+    args[0] = str(root / "bin" / Path(args[0]).name)
+    master, slave = pty.openpty()
+    with subprocess.Popen(
+        [*args, os.ttyname(slave)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    ) as process:
+        try:
+            deadline = time.monotonic() + 3
+            while termios.tcgetattr(slave)[3] & (
+                termios.ICANON | termios.ISIG | termios.ECHO
+            ):
+                assert process.poll() is None, "Reader exited during startup"
+                assert time.monotonic() < deadline, "Reader did not enter raw mode"
+                time.sleep(0.01)
+            # Catch the open/stty race without intentionally crashing processes:
+            # the session leader must never acquire this controlling TTY.
+            assert os.tcgetpgrp(master) == 0, "Reader acquired a controlling TTY"
+            os.set_blocking(master, False)
+            payload = b"\x1c\x04" + bytes(range(256)) * 256
+            sent = 0
+            deadline = time.monotonic() + 3
+            while sent < len(payload):
+                assert process.poll() is None, "Reader exited on binary sensor data"
+                assert time.monotonic() < deadline, "Reader stopped draining input"
+                if select.select([], [master], [], 0.1)[1]:
+                    try:
+                        sent += os.write(master, payload[sent:])
+                    except BlockingIOError:
+                        pass
+            assert not select.select([master], [], [], 0.1)[0], (
+                "Sensor data echoed back"
+            )
+            assert process.poll() is None, "Reader exited on binary sensor data"
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            stdout, stderr = process.communicate(timeout=3)
+            os.close(master)
+            os.close(slave)
+        assert not stdout and not stderr, "Reader logged sensor data or an error"
+    print(
+        "PASS: no controlling TTY; binary stream drained without exit, echo or logging"
+    )
 
 
 if __name__ == "__main__":
-    check(
-        Path(sys.argv[1])
-        if len(sys.argv) > 1
-        else Path(__file__).resolve().parents[1]
-        / "config/systemd/yoga-sensor-keepalive.service"
-    )
+    check()

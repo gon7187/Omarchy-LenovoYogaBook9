@@ -8,9 +8,7 @@ StartLimitIntervalSec=0
 Type=simple
 DynamicUser=yes
 SupplementaryGroups=uucp
-# Binary packets must not become terminal signals, EOF or echo. Keep the same
-# descriptor open through setup and exec so the driver cannot reset termios.
-ExecStart=/bin/sh -ec 'exec < /dev/serial/by-id/usb-INGENIC_Gadget_Serial_and_keyboard_ingenic-if00; /usr/bin/stty raw -echo; exec /usr/bin/cat'
+ExecStart=/usr/local/bin/yoga-sensor-keepalive
 StandardOutput=null
 StandardError=journal
 Restart=always
