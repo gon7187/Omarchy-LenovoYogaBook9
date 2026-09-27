@@ -9,7 +9,8 @@ Rectangle {
     property string hintIcon: ""
     property bool hintActive: false
     property bool compactHint: false
-    readonly property bool iconOnly: compactHint && hintActive && width < 60
+    readonly property bool compactContent: width < 60 || (!compactHint && height < 60)
+    readonly property bool iconOnly: hintActive && hintIcon!=="" && compactContent
     property bool selected: false
     property bool repeatable: false
     property bool activateOnRelease: false
@@ -33,6 +34,8 @@ Rectangle {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+        fontSizeMode: Text.Fit
+        minimumPixelSize: 11
         text: key.label
         color: Theme.text
         font.pixelSize: key.textSize
@@ -40,11 +43,11 @@ Rectangle {
     }
     ControlIcon { anchors.centerIn: parent; width: key.iconSize; height: width; kind: key.controlIcon; visible: key.controlIcon!=="" }
     KeyIcon {
-        visible: key.hintIcon!=="" && (!key.compactHint || key.width >= 60 || key.hintActive)
+        visible: key.hintIcon!=="" && (!key.compactContent || key.hintActive)
         name: key.hintIcon; tint: key.hintActive ? Theme.text : Theme.textDim
         width: 16; height: 16
         anchors.right: parent.right; anchors.rightMargin: key.iconOnly ? (parent.width-width)/2 : key.compactHint ? 5 : 9
-        y: key.compactHint ? (parent.height-height)/2 : parent.height-height-7
+        y: key.compactHint || key.iconOnly ? (parent.height-height)/2 : parent.height-height-7
     }
     TapHandler {
         // Holding a repeat key tolerates drift within its entire surface.
