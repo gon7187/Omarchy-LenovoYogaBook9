@@ -1,0 +1,82 @@
+--- a/hyprbars/barDeco.cpp
++++ b/hyprbars/barDeco.cpp
+@@ -59,16 +59,10 @@
+ }
+ 
+ SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
+-    const auto                 HEIGHT     = g_pGlobalState->config.barHeight->value();
+-    const auto                 ENABLED    = g_pGlobalState->config.enabled->value();
+-    const auto                 PRECEDENCE = g_pGlobalState->config.barPrecedenceOverBorder->value();
+-
++    // The touch strip overlays content and must not reserve layout space.
+     SDecorationPositioningInfo info;
+-    info.policy         = m_hidden ? DECORATION_POSITION_ABSOLUTE : DECORATION_POSITION_STICKY;
+-    info.edges          = DECORATION_EDGE_TOP;
+-    info.priority       = PRECEDENCE ? 10005 : 5000;
+-    info.reserved       = true;
+-    info.desiredExtents = {{0, m_hidden || !ENABLED ? 0 : HEIGHT}, {0, 0}};
++    info.policy = DECORATION_POSITION_ABSOLUTE;
++    info.edges  = DECORATION_EDGE_TOP;
+     return info;
+ }
+ 
+@@ -84,7 +78,7 @@
+ }
+ 
+ bool CHyprBar::inputIsValid() {
+-    if (m_hidden)
++    if (m_hidden || !g_pGlobalState->config.enabled->value())
+         return false;
+ 
+     if (g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
+@@ -224,6 +218,10 @@
+         return;
+     }
+ 
++    // Popups above the client retain their own input.
++    if (PWINDOW->hasPopupAt(COORDS + assignedBoxGlobal().pos()))
++        return;
++
+     if (Desktop::focusState()->window() != PWINDOW)
+         Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
+ 
+@@ -499,7 +497,7 @@
+     CBox       titleBarBox = {DECOBOX.x - pMonitor->m_position.x, DECOBOX.y - pMonitor->m_position.y, DECOBOX.w,
+                               DECOBOX.h + ROUNDING * 3 /* to fill the bottom cuz we can't disable rounding there */};
+ 
+-    titleBarBox.translate(PWINDOW->m_floatingOffset).scale(pMonitor->m_scale).round();
++    titleBarBox.scale(pMonitor->m_scale).round();
+ 
+     if (titleBarBox.w < 1 || titleBarBox.h < 1)
+         return;
+@@ -618,24 +616,25 @@
+ }
+ 
+ eDecorationLayer CHyprBar::getDecorationLayer() {
+-    return DECORATION_LAYER_UNDER;
++    return DECORATION_LAYER_OVER;
+ }
+ 
+ uint64_t CHyprBar::getDecorationFlags() {
+-    return DECORATION_ALLOWS_MOUSE_INPUT | (g_pGlobalState->config.barPartOfWindow->value() ? DECORATION_PART_OF_MAIN_WINDOW : 0);
++    return DECORATION_ALLOWS_MOUSE_INPUT;
+ }
+ 
+ CBox CHyprBar::assignedBoxGlobal() {
+     if (!validMapped(m_pWindow))
+         return {};
+ 
+-    CBox box = m_bAssignedBox;
+-    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, m_pWindow.lock()));
++    const auto pos = m_pWindow->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
++    CBox box = {pos.x, pos.y, m_pWindow->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT).x,
++                static_cast<double>(g_pGlobalState->config.barHeight->value())};
+ 
+     const auto PWORKSPACE      = m_pWindow->m_workspace;
+     const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
+ 
+-    return box.translate(WORKSPACEOFFSET);
++    return box.translate(m_pWindow->m_floatingOffset).translate(WORKSPACEOFFSET);
+ }
+ 
+ PHLWINDOW CHyprBar::getOwner() {
