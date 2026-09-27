@@ -263,9 +263,17 @@ def with_client(predicate):
 
 
 def opened(label, namespace=AUTO_NAMESPACE):
+    previous_geometry = None
+
     def fitted_layer():
+        nonlocal previous_geometry
         layer = panel_layer(namespace)
         if status() != "open" or not layer or len(panel_layers()) != 1:
+            return None
+        geometry = tuple(layer[k] for k in ("x", "y", "w", "h"))
+        stable = geometry == previous_geometry
+        previous_geometry = geometry
+        if not stable or layer.get("alpha", 1) < 0.99:
             return None
         _, (x, y, width, height) = screen()
         if abs(layer["x"] - x) > 1 or abs(layer["w"] - width) > 1:
@@ -278,6 +286,7 @@ def opened(label, namespace=AUTO_NAMESPACE):
 
 
 def above(layer):
+    layer = panel_layer() or layer
     return with_client(
         lambda current: current["at"][1] + current["size"][1] <= layer["y"]
     )
