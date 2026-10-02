@@ -33,6 +33,12 @@ def main():
         SOURCE.parent/'bin/smb-a24-mount':HOME/'.local/bin/smb-a24-mount',
         SOURCE.parent/'config/systemd/user/smb-a24.service':HOME/'.config/systemd/user/smb-a24.service',
         SOURCE.parent/'config/systemd/user/smb-a24.timer':HOME/'.config/systemd/user/smb-a24.timer',
+        # The speaker sink closes after 30 s of silence only because yoga-amp-arm makes
+        # every reopen reload the amp calibration; the two ship together. WirePlumber
+        # reads the rule on its next start.
+        SOURCE.parent/'bin/yoga-amp-arm':HOME/'.local/bin/yoga-amp-arm',
+        SOURCE.parent/'config/systemd/user/yoga-amp-arm.service':HOME/'.config/systemd/user/yoga-amp-arm.service',
+        SOURCE.parent/'config/wireplumber/52-yoga-speakers-keep-open.conf':HOME/'.config/wireplumber/wireplumber.conf.d/52-yoga-speakers-keep-open.conf',
         SOURCE.parent/'config/vivaldi/vivaldi-stable.conf':HOME/'.config/vivaldi-stable.conf',
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
@@ -60,7 +66,7 @@ def main():
     if args.dry_run:
         print('Build and install application:',TARGET)
         for destination in destinations.values(): print('Install:',destination)
-        print('Back up existing files; enable panel, brightness synchronization and speed test reaper services; install Omarchy post-update check.')
+        print('Back up existing files; enable panel, brightness synchronization, speed test reaper and speaker amp arming services; install Omarchy post-update check.')
         return
     for command in ['g++','gcc','pkg-config','wayland-scanner','quickshell','hyprctl','brightnessctl']:
         if not shutil.which(command): raise SystemExit('Missing dependency: '+command)
@@ -97,9 +103,11 @@ def main():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
     run('systemctl','--user','daemon-reload')
-    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service','smb-a24.timer')
+    run('systemctl','--user','enable','yoga-panel.service','yoga-brightness-sync.service','yoga-speedtest-reaper.service','yoga-amp-arm.service','smb-a24.timer')
     if not args.no_start:
         run('systemctl','--user','restart','yoga-brightness-sync.service','yoga-speedtest-reaper.service','yoga-panel.service')
+        # Not via run(): the oneshot may wait 30 s for its control and fail, which must not abort the install.
+        subprocess.run(['systemctl','--user','restart','--no-block','yoga-amp-arm.service'],check=False)
     if shutil.which('omarchy'):
         run('omarchy','hook','install','post-update',str(SOURCE.parent/'config/omarchy/hooks/90-yoga-check'))
         subprocess.run(['omarchy-shell','shell','rescanPlugins'],check=False)

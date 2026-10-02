@@ -1,0 +1,12 @@
+[Unit]
+Description=Reload the speaker amp calibration on every playback start
+# No ordering against WirePlumber: the first open after boot is calibrated anyway
+# (cur_conf starts at -1); the flag matters from the second open on.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/.local/bin/yoga-amp-arm
+
+[Install]
+WantedBy=default.target

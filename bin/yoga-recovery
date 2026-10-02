@@ -90,11 +90,14 @@ def restore(target):
         os.replace(temporary,destination)
     subprocess.run(['systemctl','--user','daemon-reload'],check=True)
     units=json.loads((target/'enabled-units.json').read_text())
-    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-widgets.service','yoga-hinge.service','yoga-speedtest-reaper.service','smb-a24.service','smb-a24.timer','voxtype.service'}
+    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-widgets.service','yoga-hinge.service','yoga-speedtest-reaper.service','smb-a24.service','smb-a24.timer','voxtype.service','yoga-amp-arm.service'}
     units=[unit for unit in units if unit in allowed]
     if units:
         subprocess.run(['systemctl','--user','enable',*units],check=True)
-        subprocess.run(['systemctl','--user','restart',*units],check=True)
+        # The amp arming oneshot may wait 30 s for its control and fail; it must not abort a restore.
+        blocking=[unit for unit in units if unit!='yoga-amp-arm.service']
+        if blocking:subprocess.run(['systemctl','--user','restart',*blocking],check=True)
+        if 'yoga-amp-arm.service' in units:subprocess.run(['systemctl','--user','restart','--no-block','yoga-amp-arm.service'],check=False)
     subprocess.run(['hyprctl','reload'],check=True)
     errors=subprocess.run(['hyprctl','configerrors'],capture_output=True,text=True,check=True)
     if errors.stdout.strip():raise RuntimeError('Hyprland config errors after recovery: '+errors.stdout.strip())
@@ -127,6 +130,9 @@ def check():
         for state in ('is-enabled','is-active'):
             result=subprocess.run(['systemctl','--user',state,unit],capture_output=True,text=True)
             if result.returncode:failures.append(unit+': '+result.stdout.strip())
+    # Without it the speakers come back thin after every 30 s of silence.
+    flag=subprocess.run(['amixer','-c','sofhdadsp','cget','iface=CARD,name=Speaker Force Firmware Load'],capture_output=True,text=True)
+    if 'values=on' not in flag.stdout:failures.append('Speaker Force Firmware Load is off: systemctl --user restart yoga-amp-arm')
     for name in ('yoga-keyboard','yoga-pointer'):
         path=HOME/'.local/share/yoga-panel/build'/name
         if not path.is_file():failures.append('Missing '+name);continue

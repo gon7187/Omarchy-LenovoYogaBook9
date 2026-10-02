@@ -292,7 +292,9 @@ A second suspect is the amplifier calibration: `tas2781_apply_calib: V1 CRC erro
 
 [`bin/yoga-amp-calib`](bin/yoga-amp-calib) `check` shows the data; `fix` backs the variable up to `~/.local/state/yoga-book/CALI_DATA.orig` and writes only the CRC field (crc32 of the first 84 bytes, the V1 check in `tas2781_hda.c`); `restore` puts the original back. It needs a reboot.
 
-**Calibration is lost again on the first PCM close/open.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and the power-up block on `OPEN`, but `tasdevice_select_tuningprm_cfg` only rewrites the calibration when the DSP configuration number changes ("Unneeded loading dsp conf" otherwise). WirePlumber suspends an idle sink after 5 s, which closes the PCM, so restarting the browser was enough to lose the bass until the next boot. Runtime PM of the amps (`config/udev/90-yoga-tas2781-no-runtime-pm.rules`) is not the trigger; the PCM close is. [`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) sets `session.suspend-timeout-seconds = 0` on the speaker sink so the PCM stays open and the cycle never happens, at some battery cost (codec and DSP stay powered). Toggling `Speaker Config Id` (`amixer -c0 cset numid=5 1; amixer -c0 cset numid=5 0`) forces a configuration reload and re-applies the calibration without a reboot.
+**Calibration is lost after the audio path sleeps.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and the power-up block on `OPEN`, and `tasdevice_select_tuningprm_cfg` rewrites the calibration only when an amp's loaded configuration differs from the requested one, which happens after a program change, a system resume, or with `Speaker Force Firmware Load` on ("Unneeded loading dsp conf" otherwise). A close/open of about a second keeps the calibration; once the codec and the SOF DSP runtime-suspend (1–2 s after the close) the amps come back uncalibrated, and the next open skips rewriting it. Tested by ear on 2026-10-02: after the codec and SOF DSP runtime-suspend, the sound is thin without the flag and has its bass with it. A system suspend is not affected, because `tas2781_system_resume` resets the cached configuration. Runtime PM of the amps (`config/udev/90-yoga-tas2781-no-runtime-pm.rules`) is not the trigger.
+
+The fix is [`bin/yoga-amp-arm`](bin/yoga-amp-arm), run at login by `yoga-amp-arm.service`: it sets `Speaker Force Firmware Load`, so every open reloads program, config and calibration from the firmware already in memory and takes about 1 s instead of 0.02 s. That lets [`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) close the speaker PCM after 30 s of silence. It used to keep the PCM open forever (`session.suspend-timeout-seconds = 0`), which ran silence through the DSP, HDA link, codec and amps: 0.65 W more on battery (90 s averages of `power_now`, 9.55–9.67 W open against 8.93 W closed, 2026-10-02). The cost now is that the first sound after 30 s of silence starts about 1 s late. A back-to-back toggle of `Speaker Config Id` does nothing: its handler only stores the number, and the next open reloads only if it differs from what the amps hold.
 
 **This was the missing bass.** With the EQ confirmed working digitally (+13 dB at 100 Hz measured on the sink monitor) there was still no low end by ear, with or without processing, and no amp profile changed that. After `yoga-amp-calib fix` and a reboot the `V1 CRC error` is gone and the bass is back. The uncalibrated amps were evidently running a conservative protection model that cut the low end.
 
@@ -359,15 +361,7 @@ The speakers are Bowers & Wilkins branded, and that voicing lives in the amplifi
 codec subsystem ID: 0x17aa3881
 ```
 
-**Do not leave `Speaker Force Firmware Load` switched on.** It is useful for testing — with calibration failing it was the only way to get the DSP profiles to appear at all — but forcing the load plausibly makes the driver use a generic profile instead of resolving the machine-specific file. Worse, **ALSA saves mixer state at shutdown and restores it**, so a control set once as an experiment silently persists across every subsequent reboot:
-
-```bash
-amixer -c 0 cget numid=3          # Speaker Force Firmware Load
-amixer -c 0 cset numid=3 off
-sudo alsactl store                # or it comes back
-```
-
-Whether this changes the sound is **untested** — the driver loads firmware only at init, so it needs a reboot to evaluate.
+**`Speaker Force Firmware Load` is meant to stay on** (see above). In kernel 7.2 its only effect is in `tasdevice_select_tuningprm_cfg`: it forces a reload of the program, config and calibration from the firmware the driver already loaded, and it does not change which firmware file is used. An older version of this section warned against leaving it on because it might select a generic profile; the source does not support that. ALSA saves it at shutdown, so if the unit is ever removed, also run `amixer -c sofhdadsp cset iface=CARD,name='Speaker Force Firmware Load' off; sudo alsactl store`. A codec rebind or module reload clears it until `systemctl --user restart yoga-amp-arm`.
 
 ### Tone correction on top
 

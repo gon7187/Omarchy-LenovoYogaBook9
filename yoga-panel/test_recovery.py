@@ -77,6 +77,25 @@ class RecoveryTests(unittest.TestCase):
         manifest=recovery.validate(recovery.snapshot())
         for name in names:self.assertIn('.config/systemd/user/'+name,manifest)
         self.assertNotIn('.config/systemd/user/restic-backup.timer',manifest)
+    def test_restore_rearms_speaker_amps_without_blocking(self):
+        units=recovery.HOME/'.config/systemd/user';units.mkdir(parents=True)
+        (units/'yoga-amp-arm.service').write_text('[Unit]')
+        wireplumber=recovery.HOME/'.config/wireplumber/wireplumber.conf.d';wireplumber.mkdir(parents=True)
+        (wireplumber/'52-yoga-speakers-keep-open.conf').write_text('# rule')
+        def run(args,**kwargs):
+            self.commands.append(args)
+            stdout='yoga-panel.service enabled enabled\nyoga-amp-arm.service enabled enabled\n' if 'list-unit-files' in args else ''
+            return SimpleNamespace(returncode=0,stdout=stdout,stderr='')
+        with patch.object(recovery.subprocess,'run',side_effect=run):
+            target=recovery.snapshot();manifest=recovery.validate(target)
+            self.assertIn('.config/systemd/user/yoga-amp-arm.service',manifest)
+            self.assertIn('.config/wireplumber/wireplumber.conf.d/52-yoga-speakers-keep-open.conf',manifest)
+            recovery.restore(target)
+        enable=next(c for c in self.commands if c[:3]==['systemctl','--user','enable'])
+        self.assertIn('yoga-amp-arm.service',enable)
+        # Its 30 s wait for the control must not hold up or abort the restore.
+        self.assertIn(['systemctl','--user','restart','yoga-panel.service'],self.commands)
+        self.assertIn(['systemctl','--user','restart','--no-block','yoga-amp-arm.service'],self.commands)
     def test_widget_check(self):
         self.assertEqual(self.widgets(),[])
         # Switched off with `yoga-widgets off`: a choice, not a fault.
