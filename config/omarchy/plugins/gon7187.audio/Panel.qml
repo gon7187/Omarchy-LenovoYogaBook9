@@ -34,9 +34,7 @@ Panel {
     var list = []
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i]
-      if (!n || !n.isSink || n.isStream) continue
-      if (yogaEqPresent && /HiFi__Speaker__sink$/.test(String(n.name))) continue
-      list.push(n)
+      if (n && n.isSink && !n.isStream) list.push(n)
     }
     return list
   }
@@ -91,8 +89,12 @@ Panel {
 
   readonly property var rawAudioSinks: {
     var list = []
-    for (var i = 0; i < candidateSinks.length; i++)
+    for (var i = 0; i < candidateSinks.length; i++) {
+      // Hidden here, not in candidateSinks: the tracker binds candidateSinks, and
+      // the volume slider drives this raw sink, which must stay bound.
+      if (yogaEqPresent && /HiFi__Speaker__sink$/.test(String(candidateSinks[i].name))) continue
       if (sinkAvailable(candidateSinks[i])) list.push(candidateSinks[i])
+    }
     if (sink && list.indexOf(sink) < 0) list.unshift(sink)
     return list
   }
