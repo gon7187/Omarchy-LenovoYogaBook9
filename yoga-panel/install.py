@@ -112,6 +112,8 @@ def main():
         run('omarchy','hook','install','post-update',str(SOURCE.parent/'config/omarchy/hooks/90-yoga-check'))
         subprocess.run(['omarchy-shell','shell','rescanPlugins'],check=False)
         subprocess.run(['omarchy','plugin','enable','gon7187.sysstats'],check=False)
+        # The clone hides the raw speaker sink behind yoga_dolby; enabling it replaces omarchy.audio.
+        subprocess.run(['omarchy','plugin','enable','gon7187.audio'],check=False)
         subprocess.run(['omarchy','bar','put','gon7187.sysstats','--after','omarchy.weather'],check=False)
     print('Installed. Previous files:',backup)
     print('Open with ~/.local/bin/yoga-panel show')
