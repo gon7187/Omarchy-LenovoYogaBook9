@@ -14,7 +14,6 @@ bytes) into the CRC field and changes nothing else.
 
 Takes effect on the next boot: the driver reads calibration only at probe.
 """
-import os
 import struct
 import subprocess
 import sys
@@ -35,7 +34,7 @@ def expected_crc(data):
 
 
 def check():
-    attrs, data = read()
+    _attrs, data = read()
     words = struct.unpack('<22I', data[:88])
     for dev in range(4):
         print(f'amp {dev}:', ' '.join(f'{w:08x}' for w in words[dev*5:dev*5+5]))
@@ -47,9 +46,13 @@ def check():
 
 def root_write(payload):
     # efivarfs marks variables immutable; lift it only for this write.
+    # The +i must go back on even if the write fails, or the variable is left
+    # writable by anything running as root.
     script = ('import sys,subprocess;p=sys.argv[1];subprocess.run(["chattr","-i",p],check=True)\n'
-              'f=open(p,"wb");f.write(sys.stdin.buffer.read());f.close()\n'
-              'subprocess.run(["chattr","+i",p],check=False)')
+              'try:\n'
+              '    f=open(p,"wb");f.write(sys.stdin.buffer.read());f.close()\n'
+              'finally:\n'
+              '    subprocess.run(["chattr","+i",p],check=False)')
     elevate = ['sudo'] if sys.stdin.isatty() else ['pkexec']
     subprocess.run([*elevate, 'python3', '-c', script, str(VAR)], input=payload, check=True)
 
