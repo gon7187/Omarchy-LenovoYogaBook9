@@ -1,0 +1,33 @@
+{
+  "kind": "all",
+  "project": "/home/gon7187/Projects/Omarchy-LenovoYogaBook9",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "effort": ""
+  },
+  "timeout": 1800,
+  "quorum": 2,
+  "mass": false,
+  "rounds": 2,
+  "jobs": 6,
+  "mode": "ro",
+  "agents": [
+    {
+      "id": "a1",
+      "model": "claude-fable-5-1",
+      "effort": "",
+      "wd": "/home/gon7187/Projects/Omarchy-LenovoYogaBook9"
+    },
+    {
+      "id": "a2",
+      "model": "gpt-6.1-sol",
+      "effort": "",
+      "wd": "/home/gon7187/Projects/Omarchy-LenovoYogaBook9"
+    }
+  ],
+  "hashes": {
+    "task": "a191868a10b6d8374dd579130da1dbffc80d25e95600f3f3da91680483fac1ba",
+    "map": "e6f854ce3e25e8b4dbc363ea5787455ab8aec1eae52d8277077be54685ee0cb0",
+    "options": "511749b49fba00d4ae84c1173af2d7e721ed4fba12abf96db1e65f5cb0bd6a6a"
+  }
+}

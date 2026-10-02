@@ -1,0 +1,15 @@
+swarm: SPEC                             ENGINE  COUNT
+swarm: claude-fable-5-1                 claude  1
+swarm: gpt-6.1-sol                      codex   1
+swarm: judge claude-opus-5-5
+swarm: 2 agents × 2 rounds + judge = 5 sessions; quorum 2; USD unknown
+swarm dir: /home/gon7187/Projects/Omarchy-LenovoYogaBook9/.swarm/20261002-162703-141463
+AGENT STATE COST(USD)
+final.rc done rc=0 COST=0.475622
+r1/a1.rc done rc=0 COST=4.0139147500000005
+r1/a2.rc done rc=0 COST=unknown TOKENS(in/out)=1229030/6674
+r2/a1.rc done rc=0 COST=0.8672295
+r2/a2.rc done rc=0 COST=unknown TOKENS(in/out)=692210/4940
+total COST=5.356766 + unknown
+board: 3 messages
+final: /home/gon7187/Projects/Omarchy-LenovoYogaBook9/.swarm/20261002-162703-141463/final.md
