@@ -171,7 +171,15 @@ def check():
         else:
             raise AssertionError("Unknown register accepted")
         assert not write.called
-    print("Fan staircase, hysteresis, cooling floor, ownership and rollback: PASS")
+    with tempfile.TemporaryDirectory() as directory:
+        hwmon = Path(directory)
+        for n, label in ((1, "Package id 0"), (2, "Core 0"), (3, "Core 4")):
+            (hwmon / f"temp{n}_input").write_text("40000\n")
+            (hwmon / f"temp{n}_label").write_text(label + "\n")
+        assert fan.cpu_sensors(hwmon) == [hwmon / "temp1_input"]
+        (hwmon / "temp1_label").unlink()
+        assert len(fan.cpu_sensors(hwmon)) == 3
+    print("Fan staircase, hysteresis, cooling floor, ownership, rollback and sensors: PASS")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ import subprocess
 import time
 
 CONFIG_PATH = Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'yoga-autobrightness.conf'
+# Written by `yoga-mode hdr on|off`; monitors.lua reads the same flag.
+HDR_FLAG = Path(os.environ.get('XDG_STATE_HOME',Path.home()/'.local/state'))/'yoga-hdr'
 # sdrbrightness at 100% backlight. Calibration knob: hdr_max_sdrbrightness in the config.
 DEFAULT_HDR_MAX = 3.0
 # Backlight 0% is dim, not black; keep HDR from going black at the bottom too.
@@ -68,7 +70,9 @@ def main():
             # Re-check every 2 s even without a change: yoga-mode or a Hyprland
             # reload resets the monitor rule and with it sdrbrightness.
             level = (primary/'brightness').read_text()
-            if level != last_level or time.monotonic()-last_hdr_check > 2:
+            # HDR is off by default; without it this spawned hyprctl every 2 s for nothing.
+            hdr = HDR_FLAG.is_file() and HDR_FLAG.read_text().strip() == 'on'
+            if hdr and (level != last_level or time.monotonic()-last_hdr_check > 2):
                 sync_hdr(primary)
                 last_level,last_hdr_check = level,time.monotonic()
             failed = False

@@ -302,6 +302,19 @@ def notify(message):
             client.sendto(message.encode(), address)
 
 
+def cpu_sensors(hwmon):
+    # Every coretemp read is an rdmsr IPI that wakes that core from deep idle:
+    # eleven sensors twice a second measured as 22 wakeups/s. The package
+    # sensor already tracks the hottest core (47 C vs a 47 C core max).
+    temps = sorted(hwmon.glob("temp*_input"))
+    labels = {p: p.with_name(p.name.replace("_input", "_label")) for p in temps}
+    package = [
+        p for p in temps
+        if labels[p].is_file() and labels[p].read_text().startswith("Package")
+    ]
+    return package or temps
+
+
 def run():
     RUNTIME.mkdir(mode=0o755, exist_ok=True)
     try:
@@ -323,7 +336,7 @@ def run():
         for p in Path("/sys/class/hwmon").glob("*")
         if (p / "name").read_text().strip() == "coretemp"
     )
-    temps = list(hwmon.glob("temp*_input"))
+    temps = cpu_sensors(hwmon)
     if not temps or int((hwmon / "temp1_crit").read_text()) != 100000:
         raise RuntimeError("Unknown CPU temperature sensor or critical limit")
 
