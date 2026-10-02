@@ -22,7 +22,7 @@ say() { echo "$1"; notify-send -t $((STEP * 1000)) "Тест звука" "$1"; }
 
 restore() {
   profile "$profile_before"
-  eq 3 -5 4 3 8
+  eq 3 -1 4 6 8
   "$HOME/.local/bin/yoga-volume" +0 >/dev/null 2>&1
   say "Готово, настройки возвращены"
 }
@@ -31,8 +31,8 @@ trap restore EXIT
 
 profile 0
 say "1/6 Без обработки";              eq 0 0 0 0 0;   sleep "$STEP"
-say "2/6 Эквалайзер Windows";         eq 3 -5 4 3 8;  sleep "$STEP"
-say "3/6 Эквалайзер + басы +14 дБ";   eq 3 -5 4 3 14; sleep "$STEP"
-say "4/6 Профиль усилителя 1";        eq 3 -5 4 3 8; profile 1; sleep "$STEP"
+say "2/6 Текущий эквалайзер";         eq 3 -1 4 6 8;  sleep "$STEP"
+say "3/6 Эквалайзер + басы +14 дБ";   eq 3 -1 4 6 14; sleep "$STEP"
+say "4/6 Профиль усилителя 1";        eq 3 -1 4 6 8; profile 1; sleep "$STEP"
 say "5/6 Профиль усилителя 2";        profile 2;      sleep "$STEP"
 say "6/6 Профиль 0 (как было)";       profile 0;      sleep "$STEP"
