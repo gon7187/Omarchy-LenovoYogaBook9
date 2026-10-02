@@ -13,11 +13,14 @@ one needs no network at all.
 import json
 import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 HOME=Path.home()
 CACHE=HOME/'.cache/yoga-widgets/limits.json'
 USAGE_URL='https://api.anthropic.com/api/oauth/usage'
+# Longer than the 5h window: past this a cached block is a guess, not a reading.
+MAX_AGE=6*3600
 
 def claude():
     creds=HOME/'.claude/.credentials.json'
@@ -42,7 +45,9 @@ def claude():
         window=data.get(key)
         if not window or window.get('utilization') is None: continue
         out[key]={'pct':round(float(window['utilization'])),'resets':window.get('resets_at')}
-    return out if len(out)>1 else None
+    if len(out)<2: return None
+    out['at']=int(time.time())
+    return out
 
 def codex():
     """Codex records its limits in every session log; take the newest one."""
@@ -69,18 +74,50 @@ def codex():
             out[key]={'pct':round(float(window['used_percent'])),
                       'window_minutes':window.get('window_minutes'),
                       'resets_at':window.get('resets_at')}
-        if len(out)>2: return out
+        if len(out)>2:
+            out['at']=int(out['seen'])
+            return out
     return None
 
+def reset_epoch(window):
+    """Reset time of one window as epoch seconds; Claude gives ISO, Codex epoch."""
+    value=window.get('resets_at',window.get('resets'))
+    if isinstance(value,(int,float)): return float(value)
+    try: return datetime.fromisoformat(value).timestamp()
+    except Exception: return None
+
+def fresh_block(block,now,max_age=None):
+    """Drop a provider block, or its windows, that no longer describe the present.
+
+    Each block carries its own fetch time ('at'), because the file-level stamp is
+    renewed on every poll and says nothing about when a provider last answered.
+    A window whose reset time has passed has rolled over, so its percentage is
+    for a period that is already over.
+    """
+    if not isinstance(block,dict): return None
+    if max_age is not None and now-block.get('at',0)>max_age: return None
+    out={key:value for key,value in block.items() if not isinstance(value,dict)}
+    for key,value in block.items():
+        if not isinstance(value,dict): continue
+        reset=reset_epoch(value)
+        if reset is not None and reset<now: continue
+        out[key]=value
+    return out if any(isinstance(value,dict) for value in out.values()) else None
+
 def main():
-    fresh={'claude':claude(),'codex':codex(),'at':int(time.time())}
+    now=int(time.time())
+    fresh={'claude':claude(),'codex':codex(),'at':now}
     cached={}
     if CACHE.exists():
         try: cached=json.loads(CACHE.read_text())
         except Exception: cached={}
-    # Keep whichever side answered; fall back per service, not all-or-nothing.
+    # Keep whichever side answered; fall back per service, not all-or-nothing,
+    # but only to a cached block that is still fresh (see fresh_block).
     for service in ('claude','codex'):
         if fresh[service] is None: fresh[service]=cached.get(service)
+        # Codex reads its own session log, exact until each window resets however old;
+        # Claude usage moves on other devices, so an old Claude block is only a guess.
+        fresh[service]=fresh_block(fresh[service],now,MAX_AGE if service=='claude' else None)
     CACHE.parent.mkdir(parents=True,exist_ok=True)
     CACHE.write_text(json.dumps(fresh))
     print(json.dumps(fresh))

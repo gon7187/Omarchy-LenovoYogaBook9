@@ -1,10 +1,11 @@
 #!/bin/bash
 # Listening test for the speakers: play music, run this, note which step
 # sounds best. Each step lasts STEP seconds and is announced by notification.
-# Everything is restored at the end (or on Ctrl+C).
+# Everything is restored at the end (or on Ctrl+C / terminal close).
 set -uo pipefail
 
 STEP="${1:-10}"
+[[ $STEP =~ ^[0-9]+$ ]] || { echo "usage: ${0##*/} [seconds per step]" >&2; exit 1; }
 id="$(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id' | head -1)"
 [[ -n $id ]] || { echo "yoga_dolby sink not found" >&2; exit 1; }
 profile_before="$(amixer -c 0 cget numid=1 | awk -F= '/: values/{print $2}')"
@@ -25,7 +26,8 @@ restore() {
   "$HOME/.local/bin/yoga-volume" +0 >/dev/null 2>&1
   say "Готово, настройки возвращены"
 }
-trap 'restore; exit' INT TERM
+# EXIT alone: bash runs it on INT/TERM/HUP too, so the cleanup runs exactly once.
+trap restore EXIT
 
 profile 0
 say "1/6 Без обработки";              eq 0 0 0 0 0;   sleep "$STEP"
@@ -34,4 +36,3 @@ say "3/6 Эквалайзер + басы +14 дБ";   eq 3 -5 4 3 14; sleep "$ST
 say "4/6 Профиль усилителя 1";        eq 3 -5 4 3 8; profile 1; sleep "$STEP"
 say "5/6 Профиль усилителя 2";        profile 2;      sleep "$STEP"
 say "6/6 Профиль 0 (как было)";       profile 0;      sleep "$STEP"
-restore

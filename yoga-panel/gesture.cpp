@@ -167,8 +167,9 @@ static void up(ITouch::SUpEvent event, Event::SCallbackInfo& info) {
     const char* name = nullptr;
     switch (gesture) {
         case Gesture::OpenPanel: name = "show"; break;
-        case Gesture::SwipeLeft: name = "previous"; break;
-        case Gesture::SwipeRight: name = "next"; break;
+        // Same mapping as the pad in shell.qml (left = next, right = previous); the touch position is already in visual coordinates.
+        case Gesture::SwipeLeft: name = "next"; break;
+        case Gesture::SwipeRight: name = "previous"; break;
         case Gesture::SwipeDown: name = "minimize"; break;
         case Gesture::SwipeUp: name = "restore"; break;
         case Gesture::Overview: name = "overview"; break;

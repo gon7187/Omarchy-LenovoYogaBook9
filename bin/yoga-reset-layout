@@ -1,0 +1,4 @@
+#!/bin/bash
+set -e
+systemctl --user disable --now yoga-autorotate.service
+exec "$HOME/.local/bin/yoga-mode" stand

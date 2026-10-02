@@ -37,8 +37,13 @@ def main():
         SOURCE.parent/'config/hypr/minimize.lua':HOME/'.config/hypr/minimize.lua',
         SOURCE.parent/'config/hypr/yoga-windows.lua':HOME/'.config/hypr/yoga-windows.lua',
         SOURCE.parent/'config/hypr/yoga-titlebars.lua':HOME/'.config/hypr/yoga-titlebars.lua',
+        # Omarchy reads menu extensions only from extensions/; the bar's auto-brightness
+        # switch and the menu's recovery entry call the two helpers.
+        SOURCE.parent/'config/omarchy/omarchy-menu.jsonc':HOME/'.config/omarchy/extensions/omarchy-menu.jsonc',
+        SOURCE.parent/'bin/yoga-autobrightness-toggle':HOME/'.local/bin/yoga-autobrightness-toggle',
+        SOURCE.parent/'bin/yoga-reset-layout':HOME/'.local/bin/yoga-reset-layout',
         # Desktop widgets: the Quickshell config, its unit and the blur rule.
-        # Turn them on from the Omarchy menu (Display mode -> Desktop widgets).
+        # Turn them on from the Omarchy menu (Yoga Book — экраны -> Виджеты верхнего экрана).
         SOURCE.parent/'bin/yoga-widgets':HOME/'.local/bin/yoga-widgets',
         SOURCE.parent/'config/systemd/user/yoga-widgets.service':HOME/'.config/systemd/user/yoga-widgets.service',
         SOURCE.parent/'config/hypr/yoga-widgets.lua':HOME/'.config/hypr/yoga-widgets.lua',

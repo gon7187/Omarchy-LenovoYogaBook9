@@ -1,6 +1,10 @@
 # Secure Boot and TPM unlock
 
-**Status: complete and verified.** Secure Boot is enabled with our own keys, and the disk unlocks from the TPM with no passphrase prompt and no keyboard. Confirmed across a reboot:
+**Status: a plan and a procedure, not what this machine runs now.** Secure Boot is currently **disabled** here: the `SecureBoot` EFI variable is `0`, `bootctl status` prints `Secure Boot: disabled`, and `sbctl` is not installed. The procedure below was worked out and recorded as applied on this unit (own keys enrolled with `-m`, files signed, TPM bound to PCR 7), but `bin/yoga-tpm-unlock` later enrolled the TPM without PCR 7. Treat the keys, signatures and the PCR 7 binding described below as a procedure to redo, not as current facts.
+
+What actually runs today is the PCR-less variant from [`bin/yoga-tpm-unlock`](bin/yoga-tpm-unlock): the systemd initramfs (`sd-encrypt`, `rd.luks.name=... rd.luks.options=...=tpm2-device=auto` on the command line) with a TPM2 token enrolled with `--tpm2-pcrs=` (empty). The key is released on every boot whatever the firmware state, so there is no passphrase prompt, and firmware or BIOS changes never bring it back. That protects a drive pulled out of the machine, not a stolen laptop, because nothing is measured. Keep the procedure here for when Secure Boot is turned on again; the PCR 7 variant replaces `--tpm2-pcrs=` with `--tpm2-pcrs=7` in the enrol step.
+
+The blocks below were the recorded checks of the earlier, Secure-Boot-on state, kept as the expected output of the procedure:
 
 ```
 $ cat /proc/cmdline          # rd.luks.name=<uuid>=root  (new unlock path in use)
@@ -36,7 +40,7 @@ Plus any rollback images, which are easy to miss and will refuse to boot under S
 
 `sbctl verify` catches these — it flagged the history image after the three obvious ones were done.
 
-## Done so far
+## Done so far (earlier run; not the current state)
 
 ```bash
 pacman -S --needed sbctl
@@ -103,7 +107,7 @@ Keep a USB keyboard attached throughout: firmware setup and the LUKS prompt both
 
 If anything refuses to boot, go into the BIOS and turn Secure Boot off. That restores exactly the previous behaviour. Signing and key creation are inert while Secure Boot is disabled.
 
-## Firmware state on this machine
+## Firmware state on this machine (before the Secure Boot work)
 
 ```
 Firmware:     UEFI 2.80 (INSYDE Corp. 321.00)

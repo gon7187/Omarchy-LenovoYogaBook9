@@ -10,7 +10,12 @@ Lenovo Yoga Book 9 13IRU8: 16 ГБ распаянной RAM, NVMe 1 ТБ, LUKS2 
 | swapfile | `/swap/swapfile` 15.3 ГБ, btrfs, приоритет 0 | `omarchy-hibernation-setup`, `/etc/fstab` |
 | zswap | выключен (`zswap.enabled=0`) | cmdline Omarchy |
 | sysctl | swappiness 150, page-cluster 0, watermark_scale_factor 125 | `/etc/sysctl.d/99-omarchy-sysctl.conf` |
-| resume | `resume=/dev/mapper/root resume_offset=…` | `/etc/limine-entry-tool.d/resume.conf`, `HOOKS+=(resume)` |
+| resume | `resume=/dev/mapper/root resume_offset=…` | `/etc/limine-entry-tool.d/resume.conf`; в initramfs хука `resume` нет (см. ниже) |
+
+Initramfs здесь systemd-овый (`base systemd … sd-vconsole … sd-encrypt`, drop-in
+`zz-sd-encrypt.conf` от `bin/yoga-tpm-unlock`). `omarchy_resume.conf` по-прежнему
+добавляет `HOOKS+=(resume)`, но этот drop-in хук `resume` убирает: возобновление
+из гибернации делает `systemd-hibernate-resume-generator` по `resume=` из cmdline.
 
 zram — основной своп: zstd сжимает примерно в 3 раза, полностью заполненный
 zram занимает около 5 ГБ RAM. Swapfile на диске используется, только если
@@ -26,8 +31,9 @@ zram переполнен, и для гибернации.
 
 ## Крышка: suspend-then-hibernate
 
-На этом ноутбуке доступен только s2idle (`/sys/power/mem_sleep`), он
-медленно разряжает батарею. Поэтому при закрытии крышки ноутбук засыпает,
+На этом ноутбуке `/sys/power/mem_sleep` показывает `[s2idle] deep`: `deep`
+предлагается, но работает выбранный по умолчанию s2idle, а `deep` в этом
+репозитории не проверялся. s2idle медленно разряжает батарею. Поэтому при закрытии крышки ноутбук засыпает,
 а через 2 часа на батарее уходит в гибернацию. От сети остаётся во сне.
 С внешним монитором (clamshell) закрытие крышки по-прежнему ничего не делает.
 

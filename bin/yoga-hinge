@@ -63,7 +63,7 @@ def read_attr(base, attr):
     with open(base + attr) as f: return f.read().strip()
 
 
-def find_gyros():
+def find_gyros(wait=False):
     """The two gyroscopes, in a fixed order: ascending HID sensor instance.
 
     Never by iio:deviceN. That is enumeration order, it differs between units
@@ -91,6 +91,7 @@ def find_gyros():
         instance = re.search(r'HID-SENSOR-[0-9a-fA-F]+\.(\d+)', os.path.realpath(path))
         found.append(((int(instance.group(1)) if instance else 1 << 30, path), base, scale))
     if len(found) != 2:
+        if wait: return []
         sys.exit(f'expected two gyro_3d devices in {IIO_ROOT}, found {len(found)}')
     found.sort(key=lambda g: g[0])
     return [(key[1], base, scale * DEG) for key, base, scale in found]
@@ -133,7 +134,13 @@ def run():
     # lets the finally below shut them down.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
-    gyros = find_gyros()
+    gyros, waited = find_gyros(wait=True), 0
+    while not gyros:
+        # The ISH brings the sensors up after boot. Wait rather than exit: a
+        # failure exit restarts every 2 s and trips StartLimitBurst=5 in 10 s,
+        # leaving the unit dead; a clean exit never retries.
+        if waited == 60: print(f'yoga-hinge: still waiting for two gyro_3d devices in {IIO_ROOT}', file=sys.stderr)
+        time.sleep(2); waited += 2; gyros = find_gyros(wait=True)
     (_, lower_base, lower_scale), (_, upper_base, upper_scale) = gyros
     scale = {lower_base: lower_scale, upper_base: upper_scale}
     sample_hz = sample_rate()

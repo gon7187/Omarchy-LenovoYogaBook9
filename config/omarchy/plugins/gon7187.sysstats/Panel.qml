@@ -4,7 +4,7 @@ import Quickshell.Services.UPower
 import qs.Ui
 import qs.Commons
 
-// CPU load, available RAM and temperatures, read from /proc and hwmon every
+// CPU load, used RAM and temperatures, read from /proc and hwmon every
 // few seconds. The Iris Xe iGPU shares the CPU package and has no sensor of
 // its own (i915 exposes none), so the package temperature covers it.
 // Click opens btop.
@@ -13,8 +13,8 @@ BarWidget {
   moduleName: "gon7187.sysstats"
 
   property int cpuPercent: -1
-  property int ramFreePercent: -1
-  property real ramAvailableGiB: 0
+  property int ramUsedPercent: -1
+  property real ramUsedGiB: 0
   property real ramTotalGiB: 0
   property var lastCpu: null
   property int cpuTemp: -1
@@ -47,8 +47,8 @@ BarWidget {
       if (m) values[m[1]] = Number(m[2])
     }
     if (!values.MemTotal || values.MemAvailable === undefined) return
-    root.ramFreePercent = Math.round(100 * values.MemAvailable / values.MemTotal)
-    root.ramAvailableGiB = values.MemAvailable / 1048576
+    root.ramUsedPercent = Math.round(100 * (values.MemTotal - values.MemAvailable) / values.MemTotal)
+    root.ramUsedGiB = (values.MemTotal - values.MemAvailable) / 1048576
     root.ramTotalGiB = values.MemTotal / 1048576
   }
 
@@ -124,16 +124,16 @@ BarWidget {
     // Theme's urgent colour once the package reaches throttling territory.
     active: root.cpuTemp >= root.setting("hotTemp", 90)
     text: root.vertical
-      ? (root.cpuPercent < 0 ? "…" : root.cpuPercent + "%") + "\n" + (root.ramFreePercent < 0 ? "…" : root.ramFreePercent + "%")
+      ? (root.cpuPercent < 0 ? "…" : root.cpuPercent + "%") + "\n" + (root.ramUsedPercent < 0 ? "…" : root.ramUsedPercent + "%")
         + (root.cpuTemp < 0 ? "" : "\n" + root.cpuTemp + "°")
       : "CPU " + (root.cpuPercent < 0 ? "…" : root.cpuPercent + "%")
-        + "  RAM " + (root.ramFreePercent < 0 ? "…" : root.ramFreePercent + "%")
+        + "  RAM " + (root.ramUsedPercent < 0 ? "…" : root.ramUsedPercent + "%")
         + (root.cpuTemp < 0 ? "" : "  " + root.cpuTemp + "°C")
     tooltipText: "CPU загрузка: " + Math.max(root.cpuPercent, 0) + "%\n"
       + (root.cpuTemp < 0 ? "" : "CPU + видеоядро Iris Xe: " + root.cpuTemp + " °C (самое горячее ядро " + root.coreMaxTemp + " °C)\n")
       + (root.ssdTemp < 0 ? "" : "SSD: " + root.ssdTemp + " °C\n")
-      + "RAM свободно: " + Math.max(root.ramFreePercent, 0) + "% ("
-      + root.ramAvailableGiB.toFixed(1) + " из " + root.ramTotalGiB.toFixed(1) + " ГиБ)"
+      + "RAM занято: " + Math.max(root.ramUsedPercent, 0) + "% ("
+      + root.ramUsedGiB.toFixed(1) + " из " + root.ramTotalGiB.toFixed(1) + " ГиБ)"
     onPressed: function() { if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop") }
   }
 }

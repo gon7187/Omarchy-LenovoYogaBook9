@@ -1,4 +1,3 @@
-
 [Default Applications]
 text/html=vivaldi-stable.desktop
 x-scheme-handler/http=vivaldi-stable.desktop
@@ -7,3 +6,8 @@ x-scheme-handler/about=vivaldi-stable.desktop
 x-scheme-handler/unknown=vivaldi-stable.desktop
 x-scheme-handler/mailto=HEY.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+x-scheme-handler/hiddify=hiddify.desktop
+x-scheme-handler/codex=chatgpt.desktop
+x-scheme-handler/claude=com.anthropic.Claude.desktop
+
+[Added Associations]

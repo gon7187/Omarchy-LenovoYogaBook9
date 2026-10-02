@@ -15,6 +15,7 @@ BACKUPS=HOME/'.local/state/yoga-book/backups'
 PATTERNS=(
     '.config/hypr/*.lua', '.config/yoga-panel/settings.json',
     '.config/voxtype/config.toml', '.config/systemd/user/yoga-*.service',
+    '.config/systemd/user/yoga-*.service.d/*.conf', '.config/systemd/user/smb-a24.*',
     '.config/systemd/user/voxtype.service', '.config/systemd/user/voxtype.service.d/*.conf', '.local/bin/yoga-*',
     '.config/wireplumber/wireplumber.conf.d/*yoga*',
     '.config/pipewire/pipewire.conf.d/*yoga*',
@@ -51,12 +52,12 @@ def snapshot():
         shutil.copy2(source,dest)
         manifest[relative]=digest(dest)
     (target/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
-    units=subprocess.run(['systemctl','--user','list-unit-files','--state=enabled','--no-legend','--no-pager','yoga-*.service','voxtype.service'],capture_output=True,text=True,check=True)
+    units=subprocess.run(['systemctl','--user','list-unit-files','--state=enabled','--no-legend','--no-pager','yoga-*.service','smb-a24.*','voxtype.service'],capture_output=True,text=True,check=True)
     (target/'enabled-units.json').write_text(json.dumps([line.split()[0] for line in units.stdout.splitlines() if line.split()])+ '\n')
     # System-owned customization is recorded, never automatically installed as root.
     service=Path('/etc/systemd/system/yoga-sensor-keepalive.service')
     if service.is_file():shutil.copy2(service,target/'system-sensor-keepalive.reference')
-    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules'),('system-lock-pam.reference','/etc/pam.d/omarchy-lock-password'),('system-lock-keyboard-hook.reference','/etc/pacman.d/hooks/yoga-lock-keyboard.hook'),('system-lock-keyboard-qml.reference','/usr/local/share/yoga-lock-keyboard/TouchKeys.qml'),('system-sddm-relogin.reference','/etc/sddm.conf.d/zz-yoga-relogin.conf'),('system-yoga-hinge.reference','/etc/systemd/system/yoga-hinge.service')):
+    for name,path in (('system-sleep.reference','/etc/systemd/sleep.conf.d/60-yoga-suspend-then-hibernate.conf'),('system-logind-lid.reference','/etc/systemd/logind.conf.d/60-yoga-lid.conf'),('system-sd-encrypt.reference','/etc/mkinitcpio.conf.d/zz-sd-encrypt.conf'),('system-limine-default.reference','/etc/default/limine'),('system-tas2781-udev.reference','/etc/udev/rules.d/90-yoga-tas2781-no-runtime-pm.rules'),('system-lock-pam.reference','/etc/pam.d/omarchy-lock-password'),('system-lock-keyboard-hook.reference','/etc/pacman.d/hooks/yoga-lock-keyboard.hook'),('system-lock-keyboard-qml.reference','/usr/local/share/yoga-lock-keyboard/TouchKeys.qml'),('system-sddm-relogin.reference','/etc/sddm.conf.d/zz-yoga-relogin.conf')):
         if Path(path).is_file():shutil.copy2(path,target/name)
     print(target)
     return target
@@ -89,7 +90,7 @@ def restore(target):
         os.replace(temporary,destination)
     subprocess.run(['systemctl','--user','daemon-reload'],check=True)
     units=json.loads((target/'enabled-units.json').read_text())
-    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-widgets.service','voxtype.service'}
+    allowed={'yoga-panel.service','yoga-brightness-sync.service','yoga-autobrightness.service','yoga-autorotate.service','yoga-shmem-watch.service','yoga-widgets.service','yoga-hinge.service','yoga-speedtest-reaper.service','smb-a24.service','smb-a24.timer','voxtype.service'}
     units=[unit for unit in units if unit in allowed]
     if units:
         subprocess.run(['systemctl','--user','enable',*units],check=True)
@@ -118,9 +119,6 @@ def widget_failures():
     placed=[int(level) for level,layers in levels.items() for layer in layers if layer.get('namespace')=='yoga-widgets']
     if not placed:failures.append('Desktop widgets have no surface on eDP-1')
     elif min(placed)<1:failures.append('Desktop widgets sit on the background layer, under the wallpaper')
-    # Omarchy ships blur off; without it the translucent cards are a film over a sharp wallpaper.
-    blur=hyprctl_json('getoption','decoration:blur:enabled')
-    if not blur.get('bool',blur.get('int')):failures.append('Hyprland blur is off: the desktop widgets need it (config/hypr/looknfeel.lua)')
     return failures
 
 def check():

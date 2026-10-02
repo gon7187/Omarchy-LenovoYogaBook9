@@ -1,5 +1,5 @@
 [font]
-base-size = 10
+base-size = 11
 
 # Bar only, ~25% over stock; these are pre-scaled by base-size/12.
 [bar]

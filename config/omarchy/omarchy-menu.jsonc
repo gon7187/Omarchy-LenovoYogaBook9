@@ -1,87 +1,75 @@
 {
-  // Extend the Quickshell Omarchy menu with JSONC.
-  //
-  // IDs are object keys. The parent is inferred from the dotted id, so
-  // "personal.notes" appears under "personal", and "personal" appears on the
-  // root menu. Reuse an existing id to override/extend it.
-  //
-  // Fields:
-  //   icon        Nerd Font glyph shown in the icon column.
-  //   label       Visible row title.
-  //   action      Shell command to run. If omitted, the row is a submenu.
-  //   target      Existing submenu id to open. Use for links/aliases.
-  //   provider    Runtime provider function/command returning JSON rows.
-  //   aliases     alternate `omarchy menu summon <name>` routes; also searchable.
-  //   description Optional subtitle and extra search text.
-  //   when        Shell condition; hide row when it fails.
-  //   checked     Shell condition; append ✓ when it succeeds.
-  //
-  // Examples:
-  // "personal": {"icon":"","label":"Personal"},
-  // "personal.notes": {"icon":"󰎞","label":"Notes","action":"omarchy-launch-editor ~/notes"},
-  // "personal.files": {"icon":"","label":"Files","action":"uwsm-app -- nautilus ~/Documents"},
-  //
-  // Only use provider when a provider_name function or command named "name"
-  // returns JSON rows. Static submenus only need dotted ids.
-  //
-  // Example: replace the default About action by reusing the same id. Existing
-  // fields are kept unless overridden.
-  // "about": {"icon":"","label":"About","action":"omarchy-launch-or-focus-tui \"zsh -c 'fastfetch; read -k 1'\""},
-
-  // ---- Yoga Book 9 display modes -------------------------------------------
-  // `checked` ticks whichever mode is active; yoga-mode records it in
-  // $XDG_RUNTIME_DIR/yoga-mode.
-  "display": {"icon":"\udb80\udf79","label":"Display mode","description":"Stand, book either way, or present"},
-
-  "display.stand": {
-    "icon":"\udb80\udf22","label":"Stand",
-    "description":"Stacked landscape - the everyday layout",
-    "action":"yoga-mode stand",
-    "checked":"[ \"$(yoga-mode status)\" = stand ]"
+  "yoga": {"icon": "󰍹", "label": "Yoga Book — экраны", "target": "setup.yoga"},
+  "setup.yoga": {
+    "icon": "󰍹",
+    "label": "Yoga Book — экраны",
+    "aliases": ["yoga"],
+    "description": "Режимы экранов, автоповорот и яркость"
   },
-  "display.book": {
-    "icon":"\udb81\udcba","label":"Book",
-    "description":"Turned 90 degrees - two portrait screens",
-    "action":"yoga-mode book",
-    "checked":"[ \"$(yoga-mode status)\" = book ]"
+  "setup.yoga.stand": {
+    "icon": "󰌢",
+    "label": "Обычный режим",
+    "description": "Два экрана друг над другом",
+    "action": "yoga-mode stand",
+    "checked": "[ \"$(yoga-mode status)\" = stand ]"
   },
-  "display.bookflip": {
-    "icon":"\udb81\udcba","label":"Book (other way)",
-    "description":"Book mode rotated the opposite direction",
-    "action":"yoga-mode book-flip",
-    "checked":"[ \"$(yoga-mode status)\" = book-flip ]"
+  "setup.yoga.book": {
+    "icon": "󰒺",
+    "label": "Книга",
+    "description": "Два вертикальных экрана рядом",
+    "action": "yoga-mode book",
+    "checked": "[ \"$(yoga-mode status)\" = book ]"
   },
-  "display.present": {
-    "icon":"\udb84\udc89","label":"Present",
-    "description":"Mirrored, upper panel facing the person opposite",
-    "action":"yoga-mode present",
-    "checked":"[ \"$(yoga-mode status)\" = present ]"
+  "setup.yoga.bookflip": {
+    "icon": "󰒺",
+    "label": "Книга — обратный поворот",
+    "description": "Вертикальные экраны с поворотом в другую сторону",
+    "action": "yoga-mode book-flip",
+    "checked": "[ \"$(yoga-mode status)\" = book-flip ]"
   },
-  "display.tablet": {
-    "icon":"\udb80\udcf6","label":"Tablet",
-    "description":"Folded 360 degrees - lower panel and its touch off",
-    "action":"yoga-mode tablet",
-    "checked":"yoga-mode status | grep -q ^tablet"
+  "setup.yoga.present": {
+    "icon": "󱂉",
+    "label": "Презентация",
+    "description": "Зеркальное изображение для собеседника",
+    "action": "yoga-mode present",
+    "checked": "[ \"$(yoga-mode status)\" = present ]"
   },
-
-  "display.widgets": {
-    "icon":"\uf009","label":"Desktop widgets",
-    "description":"Clock, weather, calendar and machine load on the upper screen",
-    "action":"yoga-widgets toggle",
-    "checked":"yoga-widgets status | grep -q on"
+  "setup.yoga.tablet": {
+    "icon": "󰓶",
+    "label": "Планшет",
+    "description": "Вывернут на 360°: нижний экран и тач на нём выключены",
+    "action": "yoga-mode tablet",
+    "checked": "yoga-mode status | grep -q ^tablet"
   },
-
-  "display.autorotate": {
-    "icon":"\udb80\udc68","label":"Auto-rotate",
-    "description":"All four positions: stand, book either way, and present",
-    "action":"yoga-autorotate-toggle",
-    "checked":"yoga-autorotate-toggle status | grep -q on"
+  "setup.yoga.widgets": {
+    "icon": "󰖯",
+    "label": "Виджеты верхнего экрана",
+    "description": "Показать или скрыть часы, погоду, календарь и загрузку",
+    "action": "yoga-widgets toggle",
+    "checked": "yoga-widgets status | grep -q on"
   },
-  "display.osd": {
-    "icon":"\udb80\udd33","label":"Brightness popup",
-    "description":"Show the slider when brightness adjusts automatically",
-    "action":"yoga-autobrightness-osd",
-    "checked":"yoga-autobrightness-osd status | grep -q on"
+  "setup.yoga.autorotate": {
+    "icon": "󰁨",
+    "label": "Автоповорот",
+    "description": "Включить или отключить поворот по датчику",
+    "action": "yoga-autorotate-toggle",
+    "checked": "yoga-autorotate-toggle status | grep -q on"
+  },
+  "setup.yoga.osd": {
+    "icon": "󰄳",
+    "label": "Индикатор яркости",
+    "description": "Показывать индикатор при автоматической регулировке",
+    "action": "yoga-autobrightness-osd",
+    "checked": "yoga-autobrightness-osd status | grep -q on"
+  },
+  "setup.yoga.recover": {
+    "label": "Вернуть обычные экраны",
+    "description": "Отключить автоповорот и вернуть расположение друг над другом",
+    "action": "/home/gon7187/.local/bin/yoga-reset-layout"
+  },
+  "setup.yoga.keyboard": {
+    "label": "Клавиатура и тачпад",
+    "description": "Панель ввода на нижнем экране",
+    "action": "/home/gon7187/.local/bin/yoga-panel show"
   }
-
 }

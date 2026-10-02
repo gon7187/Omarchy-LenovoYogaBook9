@@ -1,11 +1,18 @@
 [tools]
-claude = "latest"
-codex = "latest"
 direnv = "latest"
 gh = "latest"
 just = "latest"
 node = "26.8.1"
+opencode = "latest"
 uv = "latest"
+
+[tools.claude]
+version = "latest"
+minimum_release_age = "0s"
+
+[tools.codex]
+version = "latest"
+minimum_release_age = "0s"
 
 [settings.upgrade]
 auto_prune = false

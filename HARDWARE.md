@@ -4,6 +4,12 @@ Reference data captured from a working Omarchy install on a Lenovo Yoga Book 9 1
 
 Captured 2026-08-25 on Omarchy 4.0.1-1, Hyprland 0.56.2, kernel 7.1.9-arch1-2.
 
+**Current state, 2026-10-02** (Omarchy 4.0.4-1, Hyprland 0.56.2, kernel 7.2.5-3-omarchy). The inventory below is the 2026-08-25 capture and is left as it was, but three things in it have changed:
+
+- **Boot stack:** the initramfs is no longer the `encrypt` one. `zz-sd-encrypt.conf` (from `bin/yoga-tpm-unlock`) switches it to `systemd` / `sd-encrypt`, and the command line carries `rd.luks.name=...` and `rd.luks.options=...=tpm2-device=auto`, so the disk unlocks from the TPM without a prompt. The token is enrolled without PCR binding. Secure Boot is still **disabled** (see [SECUREBOOT.md](SECUREBOOT.md)).
+- **Speaker amp calibration:** `tas2781_apply_calib: V1 CRC error` no longer appears in this boot's kernel log after `bin/yoga-amp-calib fix`; the failure described under Audio is historical.
+- **Audio graph:** the default sink is no longer the raw `Speaker` shown below but the `yoga_dolby` filter sink from `config/pipewire/62-yoga-dolby-eq.conf`.
+
 ## Displays
 
 ```bash

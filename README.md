@@ -13,9 +13,9 @@
   резервное копирование и восстановление пользовательских настроек.
 
 - Виджет бара `gon7187.sysstats`: загрузка CPU, температура процессора (у Iris Xe
-  своего датчика нет, он на том же кристалле) и свободная RAM рядом с часами;
-  в подсказке самое горячее ядро и SSD, от 90 °C подсветка. Обновление раз в 2 секунды,
-  клик открывает btop
+  своего датчика нет, он на том же кристалле) и занятая RAM (в процентах, в подсказке
+  ещё ГиБ) рядом с часами; в подсказке самое горячее ядро и SSD, от 90 °C подсветка.
+  Обновление раз в 2 секунды от сети и раз в 10 секунд на батарее, клик открывает btop
   ([исходник](config/omarchy/plugins/gon7187.sysstats)).
 
 - Все пользовательские плагины бара (`gon7187.monitor`, `gon7187.power`,
@@ -371,16 +371,13 @@ Whether this changes the sound is **untested** — the driver loads firmware onl
 
 ### Tone correction on top
 
-Feeding the woofers fixes the missing bass, but these are small drivers in a thin chassis and still sound light. [`config/pipewire/60-bass-boost.conf`](config/pipewire/60-bass-boost.conf) adds a fixed low shelf and a small upper-mid trim using PipeWire's **built-in** biquad filters — no plugins, no application running, loaded at startup:
+The woofers still sound light: these are small drivers in a thin chassis, and on the SOF driver the routing is already fine (see the 2026-09-16 update above), so what is left is tone. The generic bass-boost filter that used to live here (`60-bass-boost.conf`) was removed in `365b39e`; its replacement is [`config/pipewire/62-yoga-dolby-eq.conf`](config/pipewire/62-yoga-dolby-eq.conf), a filter-chain built from Lenovo's own Dolby profile (next section), together with `yoga-volume`, which adjusts the bass shelf as the volume changes. Install steps are in "Applying all of it" below; the sink it creates is `yoga_dolby`:
 
 ```bash
-install -Dm644 config/pipewire/60-bass-boost.conf \
-  ~/.config/pipewire/pipewire.conf.d/60-bass-boost.conf
-systemctl --user restart pipewire pipewire-pulse wireplumber
-wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="bass_boost_sink")|.id')
+wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 ```
 
-Edit the `Gain` values and restart PipeWire to taste. Keep it modest — large boosts on small drivers give distortion, not depth.
+Edit the `Gain` values in that file and restart PipeWire to taste. Keep it modest — large boosts on small drivers give distortion, not depth.
 
 ### Speaker correction from Lenovo's own driver
 
@@ -437,7 +434,7 @@ Add it to autostart with `Exec=jamesdsp --tray` so the effect persists across lo
 2. **It quits when you close its window**, taking the effect with it. Run it with `--hide-window` from autostart.
 3. **It only processes audio routed into `easyeffects_sink`.** If that is not the default output, its controls do nothing. Check with `pw-link -l | grep ee_soe_`.
 
-Whichever you choose, the equaliser is only tone shaping. The 4-channel fix above is the one that matters — without it the woofers receive no signal at all, and no amount of EQ will conjure bass out of a silent driver.
+Whichever you choose, the equaliser is only tone shaping. On the SOF driver this machine runs, the woofers already receive the full stereo stream, so tone is all there is to adjust; the 4-channel upmix (`51-yoga-bass-speakers.conf`) is only for the legacy `snd_hda_intel` driver, where without it the woofers receive no signal and no amount of EQ will conjure bass out of a silent driver.
 
 ---
 
@@ -521,6 +518,8 @@ yoga-autobrightness-osd off      # or: on, status
 
 That writes `show_osd` to `~/.config/yoga-autobrightness.conf`, which the daemon re-reads on every adjustment — so it applies immediately rather than needing a restart. It defaults to on, because a brightness change with no visible cause reads as a glitch.
 
+The same file carries one more knob, read by `bin/yoga-brightness-sync` rather than by the auto-brightness daemon: `hdr_max_sdrbrightness` (default `3.0`, commented out in [`config/yoga-autobrightness.conf`](config/yoga-autobrightness.conf)). While HDR is on (`yoga-mode hdr on`) the sync sets Hyprland's `sdrbrightness` to the backlight fraction times this value, with a floor of 0.05, so it is the calibration for how bright 100% looks in HDR.
+
 **`brightnessctl` does not raise the OSD.** It writes sysfs directly; Omarchy's on-screen slider comes from `omarchy-osd`, which the brightness keybindings call explicitly. Without it an automatic change is invisible and looks like a glitch, so the daemon calls `omarchy-osd -i brightness -p <pct>` after adjusting — inside a `try`, since `omarchy-osd` resolves only because `/usr/share/omarchy/bin` is on the user manager's PATH, and an unguarded `Popen` would kill the daemon on its first adjustment.
 
 ---
@@ -540,7 +539,7 @@ yoga-mode cycle        # step through them
 
 `book-flip` exists because which way you rotate the machine depends on where your cables are, and the two directions are not interchangeable.
 
-All of it is also on the Omarchy menu — [`config/omarchy/omarchy-menu.jsonc`](config/omarchy/omarchy-menu.jsonc) adds a **Display mode** entry listing the four modes with the active one ticked, plus toggles for auto-rotate and the brightness popup. Install to `~/.config/omarchy/extensions/omarchy-menu.jsonc` and run `omarchy menu refresh`.
+All of it is also on the Omarchy menu — [`config/omarchy/omarchy-menu.jsonc`](config/omarchy/omarchy-menu.jsonc) adds a Russian **Yoga Book — экраны** root (ids `setup.yoga.*`). It lists the five modes (Обычный режим, Книга, Книга — обратный поворот, Презентация, Планшет) with the active one ticked, plus toggles for the top-screen widgets (`yoga-widgets`), auto-rotate and the brightness popup, and two actions: **Вернуть обычные экраны** runs [`bin/yoga-reset-layout`](bin/yoga-reset-layout) (turns auto-rotate off and returns to `stand`), and **Клавиатура и тачпад** runs `yoga-panel show`. Install to `~/.config/omarchy/extensions/omarchy-menu.jsonc` (Omarchy reads menu extensions only from there) and run `omarchy menu refresh`; `yoga-panel/install.py` copies the menu and both helper scripts too.
 
 `present` mirrors the lower panel onto the upper one and sets the upper panel to `transform = 0` — upside down to you, correct way up to whoever you are showing it to. Hyprland does apply a transform to a mirroring output, so this works.
 
@@ -716,20 +715,22 @@ write 64 MiB into it     ->  st_size 256 MiB,  st_blocks 64 MiB
 
 It reports four places shared memory hides, none of which appear in an OOM dump:
 
-| Source | Read from | Idle here |
+| Source | Read from | Idle here (2026-10-02, 1.1 GiB `Shmem`) |
 |---|---|---|
-| fds, unmapped | `st_blocks` of every shmem fd, deduplicated by inode | ~4 MiB |
-| mapped | `RssShmem` in `/proc/PID/status` | ~1 MiB |
-| GPU objects | `drm-resident-*` in DRM `fdinfo` | ~1.2 GiB |
-| tmpfs | `statvfs` per mount | ~14 MiB |
+| fds, unmapped | `st_blocks` of every shmem fd, deduplicated by inode | ~30-45 MiB |
+| mapped | `RssShmem` in `/proc/PID/status` | ~55-75 MiB |
+| GPU objects | `drm-resident-*` in DRM `fdinfo` | ~1.2-1.3 GiB |
+| tmpfs | `statvfs` per mount | ~15-20 MiB |
 
 The GPU line is most of the idle baseline, which is why it is measured rather than left in an unexplained remainder. Note the driver-specific key names: i915 reports `drm-resident-system0`, not the generic `drm-resident-memory`, so a grep for the latter silently finds nothing.
 
-Sanity-check it any time without waiting for an incident:
+Take a snapshot any time without waiting for an incident:
 
 ```bash
 yoga-shmem-watch --once
 ```
+
+`--once` is not a dry run: it prints the snapshot and also **appends it to the real log** (`~/.local/state/yoga-shmem-watch/shmem-watch.log`, rotated at 4 MiB), exactly as an incident would, so a manual run leaves an entry there that looks like any other.
 
 Two limits, both stated in every snapshot rather than left implicit. The categories overlap and are not a partition of `Shmem` — a mapped memfd counts in the first two, and a buffer shared between a client and the compositor is counted against both, so the GPU line alone can exceed `Shmem`. And it runs unprivileged: the whole graphical session is visible, other users' daemons are not.
 
@@ -751,7 +752,7 @@ The unit also runs in `background.slice` rather than the `app.slice` a user serv
 ## Applying all of it
 
 ```bash
-git clone https://github.com/pybe/Omarchy-LenovoYogaBook9
+git clone https://github.com/gon7187/Omarchy-LenovoYogaBook9   # this fork; upstream is pybe/Omarchy-LenovoYogaBook9
 cd Omarchy-LenovoYogaBook9
 
 install -Dm755 bin/yoga-brightness ~/.local/bin/yoga-brightness
@@ -789,11 +790,19 @@ install -Dm755 bin/yoga-autorotate ~/.local/bin/yoga-autorotate
 install -Dm755 bin/yoga-autorotate-toggle ~/.local/bin/yoga-autorotate-toggle
 install -Dm644 config/systemd/yoga-autorotate.service \
   ~/.config/systemd/user/yoga-autorotate.service
+install -Dm755 bin/yoga-autobrightness-toggle ~/.local/bin/yoga-autobrightness-toggle
+install -Dm755 bin/yoga-reset-layout ~/.local/bin/yoga-reset-layout
 install -Dm644 config/omarchy/omarchy-menu.jsonc \
   ~/.config/omarchy/extensions/omarchy-menu.jsonc
 install -Dm644 config/yoga-autobrightness.conf ~/.config/yoga-autobrightness.conf
 install -Dm644 config/systemd/yoga-autobrightness.service \
   ~/.config/systemd/user/yoga-autobrightness.service
+
+# On-screen keyboard and touchpad (builds the helpers and the Hyprland plugin),
+# brightness sync, the bar plugins and the post-update check. No root. It also
+# copies the menu and the helper scripts above, so it is safe to run last.
+python3 yoga-panel/install.py
+~/.local/bin/yoga-panel show
 
 # Shared-memory watcher (no dependencies beyond python3)
 install -Dm755 bin/yoga-shmem-watch ~/.local/bin/yoga-shmem-watch
@@ -845,7 +854,7 @@ hyprctl eval 'hl.monitor({ output = "eDP-1", mode = "2880x1800@60", position = "
 
 ## Open items
 
-Found during a survey of the machine but not fixed. Listed with the evidence so nobody has to re-derive it. Contributions welcome.
+Found during a survey of the machine, listed with the evidence so nobody has to re-derive it. Most entries began as unfixed problems; several are now fixed or only partly answered (status as of 2026-10-02). Still open: the boot splash, stylus palm rejection paired to the wrong panel, the missing `SEN3` sensor, and everything under "Not investigated". Contributions welcome.
 
 ### The boot splash and passphrase prompt are upside down — unresolved
 
@@ -916,7 +925,7 @@ HOOKS=(base udev plymouth keyboard autodetect microcode modconf kms keymap
        consolefont block encrypt filesystems fsck btrfs-overlayfs)
 ```
 
-Note this comes from `/etc/mkinitcpio.conf.d/omarchy_hooks.conf`, not `/etc/mkinitcpio.conf` — the latter shows a stock hook list that is not what actually gets built.
+Note this comes from `/etc/mkinitcpio.conf.d/omarchy_hooks.conf`, not `/etc/mkinitcpio.conf` — the latter shows a stock hook list that is not what actually gets built. On this machine a later drop-in, `zz-sd-encrypt.conf` (from `yoga-tpm-unlock`), then rewrites the list to the systemd equivalents (`udev`→`systemd`, `keymap`→`sd-vconsole`, `encrypt`→`sd-encrypt`); the list above is the input to that rewrite, not the final hook order.
 
 No configuration fixes this. You need a USB keyboard to boot, or you need to remove the prompt. Do not be fooled into thinking it is a display-manager problem: SDDM autologin is already configured by Omarchy and fires without ever drawing a greeter, so the only password box on an encrypted install is the LUKS one.
 
@@ -924,7 +933,7 @@ No configuration fixes this. You need a USB keyboard to boot, or you need to rem
 sddm-helper: pam_unix(sddm-autologin:session): session opened for user <you>
 ```
 
-**Solved on this machine — see [SECUREBOOT.md](SECUREBOOT.md).** Secure Boot was re-enabled with self-enrolled keys and the disk now unlocks from the TPM, so there is no passphrase prompt and no keyboard needed at boot. The prompt can be removed by enrolling the TPM, and the hardware supports it — TPM 2.0 at `/dev/tpm0`, LUKS2 with a single pbkdf2 keyslot and no TPM token. It requires switching the initramfs from the `encrypt` hook to `sd-encrypt`. **Weigh this carefully if Secure Boot is disabled**, as it is here: PCR-bound unlocking is materially weaker when unsigned code can boot and satisfy the same policy. Not done on this machine.
+**Solved on this machine without Secure Boot — see [`bin/yoga-tpm-unlock`](bin/yoga-tpm-unlock) and [SECUREBOOT.md](SECUREBOOT.md).** The disk unlocks from the TPM, so there is no passphrase prompt and no keyboard needed at boot. The prompt can be removed by enrolling the TPM, and the hardware supports it — TPM 2.0 at `/dev/tpm0`, LUKS2. It requires switching the initramfs from the `encrypt` hook to `sd-encrypt`, which `yoga-tpm-unlock` does with a `zz-sd-encrypt.conf` drop-in. Secure Boot is **disabled** here and the token is enrolled **without PCR binding**, so the key is released on every boot: this protects a drive pulled out of the machine, not a stolen laptop. The Secure Boot plus PCR 7 variant is only a procedure in SECUREBOOT.md, not applied. If the TPM ever refuses, systemd asks for the passphrase and a USB keyboard is needed again.
 
 ### Stylus palm rejection is paired to the wrong panel
 
@@ -948,7 +957,7 @@ So resting a hand on the upper panel while drawing on it won't be arbitrated. Th
 
 The firmware's virtual touchpad on the lower panel declares itself a clickpad *and* advertises a physical right button, which libinput calls out as a [kernel bug](https://wayland.freedesktop.org/libinput/doc/1.31.3/clickpad-with-right-button.html).
 
-**Fixed** by [`config/libinput/local-overrides.quirks`](config/libinput/local-overrides.quirks), which removes the phantom button so clickfinger behaviour supplies right-click instead. Install it to `/etc/libinput/local-overrides.quirks` — libinput reads **only** that path, and a copy under `~/.config/libinput/` is silently ignored. Quirks apply when a device is added, so it takes effect on the next boot.
+**Fixed** by [`config/libinput/local-overrides.quirks`](config/libinput/local-overrides.quirks), which removes the phantom button so clickfinger behaviour supplies right-click instead. Install it to `/etc/libinput/local-overrides.quirks` — libinput reads **only** that path, and a copy under `~/.config/libinput/` is silently ignored. Quirks apply when a device is added, so it takes effect on the next boot. As of 2026-10-02 `/etc/libinput/` is empty on this unit (installing it needs root), so the file is shipped here but not applied live.
 
 Two traps, both of which cost a reboot each:
 
@@ -963,13 +972,15 @@ grep "disabling EV_KEY BTN_RIGHT" $XDG_RUNTIME_DIR/hypr/*/hyprland.log
 
 libinput logs the `kernel bug: clickpad advertising right button` notice *after* applying the quirk, because that line describes the hardware rather than libinput's resulting state. Its absence is not the success signal — it persists when the quirk works.
 
-### Speaker amp calibration fails
+### Speaker amp calibration failed — fixed
+
+**Fixed.** `bin/yoga-amp-calib fix` writes the missing CRC into `CALI_DATA` (see Quirk 5), and the error below no longer appears in the kernel log after a reboot. What follows is the original evidence.
 
 ```
 tas2781-hda i2c-TIAS2781:00: tas2781_apply_calib: V1 CRC error
 ```
 
-The TAS2781 smart amp rejects its calibration blob at every boot. Audio works, but an uncalibrated smart amp runs conservative, so expect thin and quiet output. The loaded topology is also the generic fallback rather than anything machine-specific:
+Before the fix the TAS2781 smart amp rejected its calibration blob at every boot. Audio works, but an uncalibrated smart amp runs conservative, so expect thin and quiet output. The loaded topology is also the generic fallback rather than anything machine-specific:
 
 ```
 loading topology: intel/sof-tplg/sof-hda-generic-2ch.tplg
@@ -977,7 +988,9 @@ snd_hda_codec_alc269 ehdaudio0D0: autoconfig for ALC287: line_outs=2 type:speake
 snd_hda_codec_alc269 ehdaudio0D0:    speaker_outs=0
 ```
 
-### Sensors work; auto-rotation still unwired
+### Sensors work; auto-rotation is done
+
+**Update:** auto-rotation is implemented by `bin/yoga-autorotate` and `bin/yoga-orientation`, switched from the Omarchy menu (see the display-mode section). The paragraph at the end of this entry is the original reasoning.
 
 `iio-sensor-proxy` is not installed by default. Once installed, everything reports correctly:
 
@@ -993,7 +1006,7 @@ snd_hda_codec_alc269 ehdaudio0D0:    speaker_outs=0
 | `gyro_3d` (x2) | Present |
 | `hinge` | Exposes **three** angles: `in_angl0_raw` (hinge), `in_angl1_raw` (screen), `in_angl2_raw` (keyboard) |
 
-**Auto-brightness is done** — see below. **Auto-rotation is not**, and needs care: the accelerometer reports orientation `normal` while `eDP-1` carries `transform = 2` because the panel is mounted 180° out. Rotation logic that ignores that offset will land 180° wrong. The three-angle hinge sensor is the obvious signal for switching display modes on a machine that folds.
+**Auto-brightness is done** — see below. **Auto-rotation** needed care (originally not done): the accelerometer reports orientation `normal` while `eDP-1` carries `transform = 2` because the panel is mounted 180° out. Rotation logic that ignores that offset will land 180° wrong. The three-angle hinge sensor is the obvious signal for switching display modes on a machine that folds.
 
 ### Battery charge limiting — available, but not where you would look
 
@@ -1095,9 +1108,9 @@ Still genuinely missing: the `SEN3` thermal sensor is unreadable.
 
 ### Not investigated
 
-- **The virtual keyboard and trackpad — UNTESTED.** On Windows they come from Lenovo's *Yoga Book 9 User Center*, which watches the lower touchscreen for gestures (8-finger tap for the touchpad, 3-finger for the keyboard), switches that panel into input mode and draws the graphics. That application is Windows-only and no Linux equivalent is known.
+- **The virtual keyboard and trackpad — superseded by `yoga-panel/`.** What follows is the original note from before it existed; the on-screen keyboard and touchpad on the lower panel are now provided by `yoga-panel` (see the Russian section at the top). On Windows they come from Lenovo's *Yoga Book 9 User Center*, which watches the lower touchscreen for gestures (8-finger tap for the touchpad, 3-finger for the keyboard), switches that panel into input mode and draws the graphics. That application is Windows-only and no Linux equivalent is known.
 
-  **The gestures have never been tried on this machine**, so whether anything responds is genuinely unknown. An earlier version of this file stated flatly that the feature "does not work on Linux and cannot without new software" — that was reasoned from a web search, not tested, and should not have been written as a finding.
+  **The gestures had never been tried on this machine** when this was written, so whether anything responded was genuinely unknown. An earlier version of this file stated flatly that the feature "does not work on Linux and cannot without new software" — that was reasoned from a web search, not tested, and should not have been written as a finding.
 
   The firmware presents the input devices (`...-emulated-touchpad` and `...-keyboard` on the INGENIC USB gadget) independently of any host software, which leaves open the possibility that part of this is firmware-side.
 

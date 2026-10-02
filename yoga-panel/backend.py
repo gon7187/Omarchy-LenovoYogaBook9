@@ -268,7 +268,7 @@ def main():
                 elif kind == 'scrollEnd':
                     pointer.stdin.write('e\n'); pointer.stdin.flush()
             except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError):
-                print('input-error', flush=True)
+                emit('input-error')
     finally:
         try: voice.cancel()
         except (OSError,subprocess.SubprocessError): pass
