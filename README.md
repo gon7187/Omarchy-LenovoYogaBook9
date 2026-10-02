@@ -240,15 +240,7 @@ The speakers are Bowers & Wilkins branded, and that voicing lives in the amplifi
 codec subsystem ID: 0x17aa3881
 ```
 
-**Do not leave `Speaker Force Firmware Load` switched on.** It is useful for testing — with calibration failing it was the only way to get the DSP profiles to appear at all — but forcing the load plausibly makes the driver use a generic profile instead of resolving the machine-specific file. Worse, **ALSA saves mixer state at shutdown and restores it**, so a control set once as an experiment silently persists across every subsequent reboot:
-
-```bash
-amixer -c 0 cget numid=3          # Speaker Force Firmware Load
-amixer -c 0 cset numid=3 off
-sudo alsactl store                # or it comes back
-```
-
-Whether this changes the sound is **untested** — the driver loads firmware only at init, so it needs a reboot to evaluate.
+**`Speaker Force Firmware Load` is meant to stay on** once the calibration is repaired; see [the calibration section](#speaker-amp-calibration-fails) for why. Its only effect in the 7.2 source is to force the program, config and calibration to be reloaded on every PCM open, from the firmware already loaded; it does not select a different file. ALSA saves the control at shutdown, so if you stop using it, also run `amixer -c 0 cset numid=3 off; sudo alsactl store`.
 
 ### Tone correction on top
 
@@ -623,8 +615,12 @@ install -Dm755 bin/yoga-amp-calib ~/.local/bin/yoga-amp-calib
 install -Dm755 bin/yoga-speaker-test ~/.local/bin/yoga-speaker-test
 yoga-amp-calib fix
 
-# ...and keep the speaker PCM open, or the amps drop that calibration on the
-# first close/open cycle.
+# ...and reload it on every open, or the amps come back uncalibrated after the
+# audio path sleeps; the speaker sink then closes after 30 s of silence.
+install -Dm755 bin/yoga-amp-arm ~/.local/bin/yoga-amp-arm
+install -Dm644 config/systemd/yoga-amp-arm.service ~/.config/systemd/user/yoga-amp-arm.service
+systemctl --user daemon-reload
+systemctl --user enable --now yoga-amp-arm.service
 install -Dm644 config/wireplumber/52-yoga-speakers-keep-open.conf \
   ~/.config/wireplumber/wireplumber.conf.d/52-yoga-speakers-keep-open.conf
 systemctl --user restart wireplumber
@@ -852,18 +848,20 @@ sudo dmesg | grep tas2781_apply_calib      # expect nothing after a reboot
 
 Whether the repair audibly changed the sound has not been cleanly A/B'd on this machine, and **whether Windows minds the now-populated CRC field is untested** — hence the backup and `restore`.
 
-**The repaired calibration is dropped again on the first PCM close/open.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and its power-up block on `OPEN`, but the calibration is only rewritten when the DSP *configuration number* changes — `tasdevice_select_tuningprm_cfg` otherwise logs `Unneeded loading dsp conf` and returns. So the amps come back from the second open uncalibrated. WirePlumber suspends an idle sink after 5 s, which closes the PCM, so restarting a browser was enough to lose the effect until the next boot.
+**The repaired calibration is dropped again once the audio path sleeps.** `tas2781_hda_playback_hook` runs the amp's shutdown block on `HDA_GEN_PCM_ACT_CLOSE` and its power-up block on `OPEN`, and `tasdevice_select_tuningprm_cfg` rewrites the calibration only when an amp's cached configuration differs from the requested one, which happens at probe, after a system resume, or with `Speaker Force Firmware Load` on. Otherwise it logs `Unneeded loading dsp conf` and writes nothing. The close itself is harmless: in profile 0 the shutdown block only writes `reg 0x02 = 0x02` (software shutdown, which keeps registers), and a close/open of about a second keeps the calibration. But about 1-2 s after the close the codec and the SOF DSP runtime-suspend, and after that the amps come back uncalibrated while the driver still believes everything is loaded. What actually resets them is not in the driver; the likeliest candidate is the ACPI power resource `\_SB_.PC00.PAUD`, which turns off with the DSP (unverified). WirePlumber suspends an idle sink after 5 s, so restarting a browser was enough to lose the low end.
 
-**Nothing short of a reboot brings it back.** Once the amps have lost the calibration, toggling `Speaker Config Id` does not restore it, and neither does `Speaker Profile Id`:
+Tested on 2026-10-02 with dynamic debug on (`module snd_soc_tas2781_fmwlib +p`), music paused, the speaker sink suspended until `0000:00:1f.3` read `suspended`, then play pressed again:
 
-```bash
-amixer -c0 cset numid=5 1; amixer -c0 cset numid=5 0   # Speaker Config Id  -- no effect
-amixer -c0 cset numid=1 1; amixer -c0 cset numid=1 0   # Speaker Profile Id -- no effect
-```
+| `Speaker Force Firmware Load` | kernel log on the reopen | open to prepare | by ear |
+|---|---|---|---|
+| off | `Unneeded loading dsp conf 0` | 0.02 s | thin, no low end |
+| on | no skip line | 1.04 s | full |
 
-Tested on 2026-09-23 with a tone playing and the PCM open, after the calibration had been lost to four close/open cycles: the low end did not come back from either toggle, and did come back after a reboot. Nothing about it is visible from the HDA side — `/proc/asound/card0/codec#0` is byte-identical either way, both DACs carry the stream at `[0x57 0x57]` and both pins are open — so the only signal that the amps are running uncalibrated is that they sound thin. The driver writes the calibration at probe, so **a reboot is the only recovery**, which is what makes the config below worth its battery cost rather than a convenience.
+**The fix: force the reload on every open.** `force_fwload_status` has exactly one use in the 7.2 source, in that check (`tas2781-fmwlib.c:2694`): with it on, every open reloads program, config and calibration from the firmware the driver already holds in memory. It does not choose a different firmware file. [`bin/yoga-amp-arm`](bin/yoga-amp-arm) sets it at login from [`config/systemd/yoga-amp-arm.service`](config/systemd/yoga-amp-arm.service), with a bounded wait because the control only appears after the asynchronous firmware load. The first open after boot is calibrated even without it.
 
-[`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) avoids the cycle instead, setting `session.suspend-timeout-seconds = 0` on the speaker sink so the PCM is never closed. That keeps the codec and the amps powered whenever the machine is awake; measured against an idle suspended sink, the cost is about **350 mW**, on an idle desktop drawing roughly 8 W: 8.40 W with the PCM held open against 8.04 W with it suspended (90 samples each, two alternating rounds; the difference came out at 293 mW and 439 mW, and per-sample spread is +/-0.3 W, so treat it as a few hundred mW rather than a precise figure). On this 69 Wh battery that is roughly 20 minutes of idle runtime, 4-5%. Runtime PM of the amps is **not** part of this: with the PCM held open they stay `active` anyway, and no udev rule is needed.
+That lets [`config/wireplumber/52-yoga-speakers-keep-open.conf`](config/wireplumber/52-yoga-speakers-keep-open.conf) close the speaker PCM after 30 s of silence instead of never. Holding it open costs a few hundred mW on battery: 8.40 W open against 8.04 W suspended in two alternating rounds (293 and 439 mW), and 9.55-9.67 W against 8.93 W in a single 90 s A/B on another day. Most of that is the running SOF/HDA path rather than the amps, whose idle draw per the datasheet (SLOSE86B, section 6.5) is roughly 35-65 mW each. The price of the reload is that the first sound after 30 s of silence starts about a second late; 30 s rather than WirePlumber's 5 s keeps short pauses from paying it.
+
+Toggling `Speaker Config Id` or `Speaker Profile Id` back to back does nothing: their handlers only store the number, and the next open reloads only if it differs from what the amps hold. That is why the toggles in the earlier version of this section had no effect.
 
 The loaded topology is also the generic fallback rather than anything machine-specific:
 

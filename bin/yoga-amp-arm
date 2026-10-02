@@ -1,0 +1,20 @@
+#!/bin/bash
+# Make every speaker PCM open reload the TAS2781 program, config and calibration.
+#
+# Once the speaker PCM closes and the codec and SOF DSP runtime-suspend, the amps
+# come back uncalibrated (thin, no bass), but tasdevice_select_tuningprm_cfg()
+# skips rewriting the calibration while the config number is unchanged
+# ("Unneeded loading dsp conf"). Speaker Force Firmware Load is the input that
+# forces that check: with it on, each open reloads everything from the firmware
+# already in memory (the open takes ~1 s instead of 0.02 s), so the PCM may close
+# when idle instead of running silence for a few hundred mW. The firmware file
+# is unchanged.
+#
+# The flag lives in RAM, and the control appears only after the async firmware
+# load, racing alsa-restore at boot; hence a bounded wait at login.
+for _ in $(seq 60); do
+  error=$(amixer -q -c sofhdadsp cset iface=CARD,name='Speaker Force Firmware Load' on 2>&1) && exit 0
+  sleep 0.5
+done
+echo "Speaker Force Firmware Load not set ($error); speakers lose calibration after idle" >&2
+exit 1
