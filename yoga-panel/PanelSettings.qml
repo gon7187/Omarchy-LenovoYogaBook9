@@ -33,6 +33,7 @@ ColumnLayout {
             title: "Ввод"; subtitle: "Подсказки и исправление слов"
             SettingsSwitch { label: "Подсказки слов"; checked: settings.predictionEnabled; onToggled: value => settings.predictionEnabled=value }
             SettingsSwitch { label: "Исправлять по пробелу"; checked: settings.autocorrectEnabled; onToggled: value => settings.autocorrectEnabled=value }
+            SettingsSwitch { label: "Виброотклик"; checked: settings.hapticEnabled; onToggled: value => settings.hapticEnabled=value }
             Text { text: "Backspace сразу после исправления\nвозвращает исходное слово."; color: Theme.textMuted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Item { Layout.fillHeight: true }
             Rectangle {

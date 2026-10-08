@@ -6,6 +6,7 @@
   "inertiaDuration": 650.0,
   "predictionEnabled": false,
   "autocorrectEnabled": true,
+  "hapticEnabled": true,
   "inertiaEnabled": true,
   "oledTheme": false,
   "themeName": "system",

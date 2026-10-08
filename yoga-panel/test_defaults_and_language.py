@@ -38,6 +38,15 @@ class DefaultsAndLanguage(unittest.TestCase):
         devices['keyboards'][2]['main']=True
         with patch('backend.subprocess.check_output',return_value=json.dumps(devices)):
             self.assertEqual(backend.active_language(),'en')
+    def test_haptic_device_is_matched_by_descriptor(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            for name,hid,descriptor in [('hidraw1',backend.HAPTIC_ID,b'\x05\x0d\x09\x04'),('hidraw3','HID_ID=0003:00001234:00006161',backend.HAPTIC_DESCRIPTOR),('hidraw7',backend.HAPTIC_ID,backend.HAPTIC_DESCRIPTOR+b'\xa1\x02')]:
+                device=Path(root)/name/'device'; device.mkdir(parents=True)
+                (device/'uevent').write_text(hid+'\n'); (device/'report_descriptor').write_bytes(descriptor)
+            self.assertEqual(backend.haptic_device(Path(root)),'/dev/hidraw7')
+            (Path(root)/'hidraw7/device/report_descriptor').write_bytes(b'\x05\x0d\x09\x04')
+            with self.assertRaises(FileNotFoundError): backend.haptic_device(Path(root))
     def test_missing_active_keyboard_does_not_guess_english(self):
         with patch('backend.subprocess.check_output',return_value='{"keyboards":[]}'):
             self.assertIsNone(backend.active_language())

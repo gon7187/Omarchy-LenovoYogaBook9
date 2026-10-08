@@ -56,6 +56,7 @@ Rectangle {
         onPressedChanged: {
             if (pressed) {
                 key.down = true;
+                Theme.tap();
                 if (!key.activateOnRelease) key.activated();
                 if (key.repeatable) delay.restart();
             } else key.reset();

@@ -80,7 +80,7 @@ ShellRoot {
     onPanelOpacityChanged: { Theme.surfaceOpacity=panelOpacity; if (settingsLoaded) saveSettings.restart(); }
     onOledShiftChanged: if (settingsLoaded) saveSettings.restart()
     onOledDimChanged: if (settingsLoaded) saveSettings.restart()
-    Connections { target: Theme; function onActivity() { care.wake(); } }
+    Connections { target: Theme; function onActivity() { care.wake(); } function onTap() { if (root.hapticEnabled) root.send({type:"haptic"}); } }
     OledCare {
         id: care
         running: root.opened
@@ -91,6 +91,8 @@ ShellRoot {
     property bool predictionEnabled: false
     property bool autocorrectEnabled: true
     onAutocorrectEnabledChanged: { clearWord(); if (settingsLoaded) saveSettings.restart(); }
+    property bool hapticEnabled: true
+    onHapticEnabledChanged: if (settingsLoaded) saveSettings.restart()
     property string wordPrefix: ""
     property var suggestions: []
     property int predictionRequest: 0
@@ -113,7 +115,7 @@ ShellRoot {
     onScrollSpeedChanged: { pad.stopMomentum(); pad.clearVelocity(); if (settingsLoaded) saveSettings.restart(); }
     Timer {
         id: saveSettings; interval: 350
-        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration,themeName:root.themeName,iconStyle:root.iconStyle,panelOpacity:root.panelOpacity,oledShift:root.oledShift,oledDim:root.oledDim}})
+        onTriggered: root.send({type:"settings",values:{pointerSpeed:root.pointerSpeed,pointerAccel:root.pointerAccel,scrollSpeed:root.scrollSpeed,predictionEnabled:root.predictionEnabled,autocorrectEnabled:root.autocorrectEnabled,hapticEnabled:root.hapticEnabled,inertiaEnabled:root.inertiaEnabled,oledTheme:root.oledTheme,inertiaStrength:root.inertiaStrength,inertiaDuration:root.inertiaDuration,themeName:root.themeName,iconStyle:root.iconStyle,panelOpacity:root.panelOpacity,oledShift:root.oledShift,oledDim:root.oledDim}})
     }
     property string status: "Подключение…"
     readonly property bool statusVisible: !["Готово","Говори…","Распознаю…"].includes(status)
@@ -297,6 +299,7 @@ ShellRoot {
                             root.inertiaStrength=s.inertiaStrength ?? 1.5; root.inertiaDuration=s.inertiaDuration ?? 650;
                             root.predictionEnabled=s.predictionEnabled ?? false;
                             root.autocorrectEnabled=s.autocorrectEnabled ?? true;
+                            root.hapticEnabled=s.hapticEnabled ?? true;
                             root.oledTheme=s.oledTheme ?? false;
                             root.themeName=s.themeName ?? "system"; root.iconStyle=s.iconStyle ?? "theme";
                             root.panelOpacity=s.panelOpacity ?? 1; root.oledShift=s.oledShift ?? true; root.oledDim=s.oledDim ?? true;

@@ -1,0 +1,23 @@
+# Lenovo Yoga Book 9 13IRU8: let the logged-in user pulse the haptic motor.
+#
+# Interface 5 of the INGENIC gadget (17ef:6161) is a HID Simple Haptic
+# Controller (usage page 0x0E); yoga-panel writes output report 0x41 to it for
+# key-press feedback. Its hidraw node is 0600 root by default.
+#
+# The interface has only output and feature reports, no input reports, so this
+# opens no way to read touches or keys. It does expose the vendor feature
+# reports 0x42-0x46 to the seat user; on a single-user laptop that is you.
+# The touchscreen and keyboard interfaces (2-4, 6) stay root-only on purpose:
+# their raw reports would be a keylogger for the on-screen keyboard.
+#
+# The ID_* properties come from usb_id in 60-persistent-hidraw.rules; ATTRS
+# cannot do this, every ATTRS key must match on the same parent and the
+# interface number and the vendor id live on different ones. Numbered before
+# 73-seat-late.rules, which turns the uaccess tag into an ACL.
+#
+# Setup, once:
+#   sudo install -Dm644 70-yoga-haptic-access.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload
+#   sudo udevadm trigger --action=change --subsystem-match=hidraw
+
+SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="17ef", ENV{ID_MODEL_ID}=="6161", ENV{ID_USB_INTERFACE_NUM}=="05", TAG+="uaccess"

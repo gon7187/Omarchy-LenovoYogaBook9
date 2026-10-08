@@ -97,9 +97,9 @@ def valid_settings(data):
     icon=data.get('iconStyle',DEFAULTS['iconStyle'])
     if icon not in ('theme','pixel','line','text'): raise ValueError('Invalid icon style')
     result['iconStyle']=icon
-    for key in ('oledShift','oledDim'):
+    for key in ('oledShift','oledDim','hapticEnabled'):
         value=data.get(key,DEFAULTS[key])
-        if type(value) is not bool: raise ValueError('Invalid OLED setting')
+        if type(value) is not bool: raise ValueError('Invalid switch setting')
         result[key]=value
     return result
 
@@ -121,6 +121,40 @@ def save_settings(data):
     temporary = SETTINGS_PATH.with_suffix('.tmp')
     temporary.write_text(json.dumps(settings)+'\n')
     os.replace(temporary,SETTINGS_PATH)
+
+HAPTIC_ID='HID_ID=0003:000017EF:00006161'
+# HID Simple Haptic Controller: usage page 0x0E, usage 0x01. Output report 0x41 is
+# repeat count, intensity, manual trigger (waveform 1-18), cutoff (10 ms units), retrigger period (u16 ms).
+HAPTIC_DESCRIPTOR=b'\x05\x0e\x09\x01'
+HAPTIC_PULSE=bytes([0x41,1,255,3,0,0,0])
+
+def haptic_device(root=Path('/sys/class/hidraw')):
+    """Find the INGENIC gadget's haptic interface; its hidraw number moves between boots."""
+    for node in sorted(root.glob('hidraw*')):
+        try:
+            if HAPTIC_ID in (node/'device/uevent').read_text() and (node/'device/report_descriptor').read_bytes().startswith(HAPTIC_DESCRIPTOR):
+                return '/dev/'+node.name
+        except OSError: pass
+    raise FileNotFoundError('No haptic controller')
+
+class Haptic:
+    """Write-only motor pulses. The node has no input reports, so nothing typed can be read back here."""
+    def __init__(self):
+        self.wanted=threading.Event()
+        threading.Thread(target=self.run,daemon=True).start()
+    def pulse(self): self.wanted.set()
+    def run(self):
+        # A USB write can stall for its 5 s control timeout; on this thread it only costs pulses, never keystrokes.
+        fd=None
+        while True:
+            self.wanted.wait(); self.wanted.clear()
+            try:
+                if fd is None: fd=os.open(haptic_device(),os.O_WRONLY|os.O_CLOEXEC)
+                os.write(fd,HAPTIC_PULSE)
+            except OSError:
+                if fd is not None: os.close(fd)
+                # ponytail: unplugged or no udev rule yet; rescan on a key after the pause instead of watching udev.
+                fd=None; time.sleep(5); self.wanted.clear()
 
 KEYS = {'Escape', 'Tab', 'BackSpace', 'Return', 'Left', 'Right', 'Up', 'Down', 'Delete', 'Home', 'End', 'Insert', 'Prior', 'Next', *(f'F{key}' for key in range(1,13))}
 
@@ -186,6 +220,7 @@ def main():
     corrector=Autocorrect(predictor)
     voice=Voice()
     actions=ActionRunner(emit)
+    haptic=Haptic()
     pointer = subprocess.Popen([str(Path(__file__).parent/'build/yoga-pointer')], stdin=subprocess.PIPE, text=True)
     keyboard = subprocess.Popen([str(Path(__file__).parent/'build/yoga-keyboard')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     def keyboard_status():
@@ -215,6 +250,8 @@ def main():
                         try: voice.cancel()
                         except (OSError,subprocess.SubprocessError): pass
                         emit({'voice':'error'})
+                elif kind == 'haptic':
+                    haptic.pulse()
                 elif kind == 'resetWord':
                     corrector.reset()
                 elif kind == 'settings':

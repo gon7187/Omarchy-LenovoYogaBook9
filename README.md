@@ -966,6 +966,14 @@ grep "disabling EV_KEY BTN_RIGHT" $XDG_RUNTIME_DIR/hypr/*/hyprland.log
 
 libinput logs the `kernel bug: clickpad advertising right button` notice *after* applying the quirk, because that line describes the hardware rather than libinput's resulting state. Its absence is not the success signal — it persists when the quirk works.
 
+### The haptic motor is there, but the firmware ignores it — unresolved
+
+Interface 5 of the INGENIC gadget (`17ef:6161`, `/dev/input/by-id/usb-INGENIC_Gadget_Serial_and_keyboard_ingenic-if05-hidraw`) is a standard HID **Simple Haptic Controller** (usage page `0x0E`). Output report `0x41` carries repeat count, intensity, manual trigger (waveform 1–18), cutoff time and retrigger period; feature reports `0x42`–`0x46` are vendor-defined. No waveform or duration list is declared, so the kernel's HID haptic code does not bind it and nothing exposes `EV_FF`.
+
+Writing `0x41` does not vibrate anything. The first few reports land in the endpoint FIFO, then the firmware NAKs every further write until the 5 s USB timeout (`ETIMEDOUT`), on the interrupt endpoint and through `HIDIOCSOUTPUT` on EP0 alike, for every waveform 1–18. EP0 itself stays responsive, and the touch interfaces are unaffected. `GET_FEATURE` answers instantly but returns a stale buffer — other interfaces' descriptor bytes, or the previous report — so it cannot be used to read the controller's state. Presumably Windows enables the controller first (waveform library upload over `0x42`/`0x43`, or a command on the CDC ACM channel); that sequence is not published anywhere and this unit has no Windows to capture it with USBPcap. Writing the vendor reports blindly risks the MCU that runs both touchscreens.
+
+[`config/udev/70-yoga-haptic-access.rules`](config/udev/70-yoga-haptic-access.rules) gives the seat user access to that one node, for whenever the init sequence is known.
+
 ### Speaker amp calibration failed — fixed
 
 **Fixed.** `bin/yoga-amp-calib fix` writes the missing CRC into `CALI_DATA` (see Quirk 5), and the error below no longer appears in the kernel log after a reboot. What follows is the original evidence.

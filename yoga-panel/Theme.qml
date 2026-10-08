@@ -11,6 +11,7 @@ QtObject {
     property bool oled: false // Retained for older preview/test clients.
     property int heldKeys: 0
     signal activity()
+    signal tap()
     signal cancelInput()
     readonly property bool light: palette.mode==="light"
     readonly property bool black: name==="oled-black" || name==="vantablack"
