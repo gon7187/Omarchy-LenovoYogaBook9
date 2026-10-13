@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep Yoga speaker loudness compensation in sync with sliders
+After=pipewire.service pipewire-pulse.service
+
+[Service]
+ExecStart=%h/.local/bin/yoga-volume watch
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

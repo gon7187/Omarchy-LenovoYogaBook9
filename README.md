@@ -402,7 +402,7 @@ And `sliding-bass` is enabled: **up to 18.625 dB of gain below 300 Hz, applied m
 
 There is no gain compensation anywhere (`pregain=0`, `postgain=0`, `system-gain=0`) despite filter gains reaching +9 dB. Dolby relies on `regulator-enable=1`, a limiter with speaker-distortion modelling, to absorb it. Copy the EQ without headroom and it clips.
 
-[`config/pipewire/62-yoga-dolby-eq.conf`](config/pipewire/62-yoga-dolby-eq.conf) implements this, with `yoga-volume` setting the bass shelf as the volume changes. See issue #9 for the full analysis.
+[`config/pipewire/62-yoga-dolby-eq.conf`](config/pipewire/62-yoga-dolby-eq.conf) implements this, with `yoga-volume watch` setting the bass shelf on sink volume/state events, including graphical sliders and graph recreation. The initial shelf is full-volume-safe even before the watcher runs. See issue #9 for the full analysis.
 
 > **The XML is proprietary Lenovo/Dolby data.** Extracted for interoperability on the machine it shipped with. Derived filter values are recorded; the file itself is not redistributed and must not be committed.
 
@@ -764,6 +764,9 @@ hyprctl configerrors   # must print nothing
 install -Dm644 config/pipewire/62-yoga-dolby-eq.conf \
   ~/.config/pipewire/pipewire.conf.d/62-yoga-dolby-eq.conf
 install -Dm755 bin/yoga-volume ~/.local/bin/yoga-volume
+install -Dm644 config/systemd/user/yoga-volume-sync.service ~/.config/systemd/user/yoga-volume-sync.service
+systemctl --user daemon-reload
+systemctl --user enable --now yoga-volume-sync.service
 systemctl --user restart pipewire pipewire-pulse wireplumber
 wpctl set-default $(pw-dump | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id')
 

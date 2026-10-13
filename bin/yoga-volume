@@ -67,7 +67,7 @@ physical_sink() {
 
   local resolved
   resolved="$(resolve_via_pipewire "$sink")"
-  if [[ -n $resolved ]] && pactl list sinks short 2>/dev/null | grep -q "[[:space:]]$resolved[[:space:]]"; then
+  if [[ -n $resolved ]] && pactl list sinks short 2>/dev/null | grep -q "[[:space:]]${resolved}[[:space:]]"; then
     printf '%s\n' "$resolved"
     return
   fi
@@ -89,6 +89,48 @@ show_osd() {
   if muted "$sink"; then icon="$OSD_ICON_MUTED"; else icon="$OSD_ICON_VOLUME"; fi
   command -v omarchy-osd >/dev/null && omarchy-osd -i "$icon" -p "${pct:-0}" >/dev/null 2>&1
 }
+
+# --- loudness compensation -------------------------------------------------
+#
+# Ears lose bass sensitivity far faster than midrange as level drops, so a
+# fixed bass shelf sounds right loud and hollow quiet. Dolby handles this on
+# Windows with "sliding-bass": up to 18.6 dB of gain below 300 Hz, applied more
+# as the level falls (sliding-bass-max-gain / -xo-frequency in the tuning XML).
+#
+# PipeWire has no dynamic equivalent, but this script already owns the volume
+# path, so the shelf is set here instead -- more bass as the volume goes down.
+#
+# The filter-chain control can only be set while its node is alive; on a
+# SUSPENDED node pw-cli accepts the call and silently does nothing.
+# Event-driven updates also cover sliders and a freshly created/running graph.
+LOUDNESS_KEY=""
+apply_loudness() {
+  local node id state pct gain key
+  node="$(pw-dump 2>/dev/null | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|[.id,.info.state]|@tsv' | head -1)"
+  IFS=$'\t' read -r id state <<< "$node"
+  if [[ -z $id || $state != running ]]; then LOUDNESS_KEY=""; return 0; fi
+  pct="$(volume_percent yoga_dolby)"
+  [[ $pct =~ ^[0-9]+$ ]] || return 0
+  # Cubic sink attenuation precedes the EQ; full-volume bass stays at +4 dB.
+  gain="$(awk -v p="$pct" 'BEGIN { g = 4 + 8 * (1 - p/100); if (g < 4) g = 4; if (g > 12) g = 12; printf "%.1f", g }')"
+  key="$id:$gain"
+  [[ $key == "$LOUDNESS_KEY" ]] && return 0
+  if pw-cli s "$id" Props "{ params = [ \"bassL:Gain\" $gain \"bassR:Gain\" $gain ] }" >/dev/null 2>&1; then
+    LOUDNESS_KEY="$key"
+  fi
+}
+
+watch_loudness() {
+  apply_loudness
+  pactl subscribe | while IFS= read -r event; do
+    case "$event" in *"on sink #"*) apply_loudness ;; esac
+  done
+}
+
+case "${1:-}" in
+sync) apply_loudness; exit $? ;;
+watch) watch_loudness; exit $? ;;
+esac
 
 action="${1:-}"
 [[ -n $action ]] || { echo "usage: ${0##*/} <raise|lower|mute-toggle|+N|-N>" >&2; exit 1; }
@@ -126,30 +168,5 @@ else
 fi
 
 
-# --- loudness compensation -------------------------------------------------
-#
-# Ears lose bass sensitivity far faster than midrange as level drops, so a
-# fixed bass shelf sounds right loud and hollow quiet. Dolby handles this on
-# Windows with "sliding-bass": up to 18.6 dB of gain below 300 Hz, applied more
-# as the level falls (sliding-bass-max-gain / -xo-frequency in the tuning XML).
-#
-# PipeWire has no dynamic equivalent, but this script already owns the volume
-# path, so the shelf is set here instead -- more bass as the volume goes down.
-#
-# The filter-chain control can only be set while its node is alive; on a
-# SUSPENDED node pw-cli accepts the call and silently does nothing.
-apply_loudness() {
-  local pct="$1" id gain
-  id="$(pw-dump 2>/dev/null | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|.id' | head -1)"
-  [[ -n $id ]] || return 0
-
-  # +4 dB at full volume rising to +12 dB at silence, linear in displayed
-  # percent. Capped well below Dolby's 18.6 dB: with only the -6 dB input
-  # trim as headroom, more than +12 dB clips bass-heavy material.
-  gain="$(awk -v p="$pct" 'BEGIN { g = 4 + 8 * (1 - p/100); if (g < 4) g = 4; if (g > 12) g = 12; printf "%.1f", g }')"
-
-  pw-cli s "$id" Props "{ params = [ \"bassL:Gain\" $gain \"bassR:Gain\" $gain ] }" >/dev/null 2>&1
-}
-
-apply_loudness "$(volume_percent "$sink")"
+apply_loudness
 show_osd "$sink"
