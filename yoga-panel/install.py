@@ -71,14 +71,14 @@ def main():
     for command in ['g++','gcc','pkg-config','wayland-scanner','quickshell','hyprctl','brightnessctl']:
         if not shutil.which(command): raise SystemExit('Missing dependency: '+command)
     TARGET.parent.mkdir(parents=True,exist_ok=True)
-    backup=HOME/'.local/state/yoga-panel/backups'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    backup=HOME/'.local/state/yoga-panel/backups'/datetime.now().astimezone().strftime('%Y%m%d-%H%M%S-%f')
     with tempfile.TemporaryDirectory(prefix='.yoga-panel-',dir=TARGET.parent) as staging:
         app=Path(staging)/'app'
         shutil.copytree(SOURCE,app,ignore=shutil.ignore_patterns('build','__pycache__','*.pyc'))
         run('bash','build.sh',cwd=app)
         run('bash','build-gesture.sh',cwd=app)
         # Title bars are optional: no network for the pinned source must not block an install.
-        if subprocess.run(['bash','build-hyprbars.sh'],cwd=app).returncode: print('hyprbars not built; windows keep no title bars')
+        if subprocess.run(['bash','build-hyprbars.sh'],cwd=app,check=False).returncode: print('hyprbars not built; windows keep no title bars')
         subprocess.run(['systemctl','--user','stop','yoga-panel.service'],check=False)
         for old_app in {TARGET,args.previous_app} - {None}:
             for library in ('yoga-panel-gesture.so','hyprbars.so'):
@@ -94,11 +94,26 @@ def main():
                 shutil.copy2(destination,saved)
             shutil.copy2(source,destination)
             if destination.parent.name=='bin': destination.chmod(0o755)
-    hyprland=HOME/'.config/hypr/hyprland.lua'
-    for module,comment in (('hypr.minimize','Three-finger swipe down/up: minimize/restore all windows on the workspace.'),
-                           ('hypr.yoga-windows','Windows opened while the lower-screen keyboard is up go to the upper screen.'),
-                           ('hypr.yoga-titlebars','Compact touch title bars: drag to move, close button.'),
-                           ('hypr.yoga-widgets','Blur rule for the desktop widget layer.')):
+    hyprland = HOME / ".config/hypr/hyprland.lua"
+    if hyprland.exists():
+        saved = backup / hyprland.relative_to(HOME)
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(hyprland, saved)
+    for module, comment in (
+        (
+            "hypr.minimize",
+            "Three-finger swipe down/up: minimize/restore all windows on the workspace.",
+        ),
+        (
+            "hypr.yoga-windows",
+            "Windows opened while the lower-screen keyboard is up go to the upper screen.",
+        ),
+        (
+            "hypr.yoga-titlebars",
+            "Compact touch title bars: drag to move, close button.",
+        ),
+        ("hypr.yoga-widgets", "Blur rule for the desktop widget layer."),
+    ):
         if hyprland.exists() and 'require("'+module+'")' not in hyprland.read_text():
             with hyprland.open('a') as config:
                 config.write('\n-- '+comment+'\nrequire("'+module+'")\n')
