@@ -237,8 +237,18 @@ def install():
         subprocess.run(['install', '-Dm755', os.path.realpath(__file__), target], check=True)
     os.makedirs(os.path.dirname(UNIT), exist_ok=True)
     write(UNIT, unit)
-    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
-    subprocess.run(['systemctl', '--user', 'enable', '--now', 'yoga-hinge'], check=True)
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", "yoga-hinge"], check=True)
+    active = (
+        subprocess.run(
+            ["systemctl", "--user", "--quiet", "is-active", "yoga-autorotate.service"],
+            check=False,
+        ).returncode
+        == 0
+    )
+    subprocess.run(
+        ["systemctl", "--user", "start" if active else "stop", "yoga-hinge"], check=True
+    )
 
 
 def remove():
