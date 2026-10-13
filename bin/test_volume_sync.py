@@ -17,7 +17,7 @@ root=pathlib.Path(os.environ['AUDIO_FIXTURE'])
 state=json.loads((root/'state.json').read_text())
 cmd=pathlib.Path(sys.argv[0]).name
 if cmd=='pw-dump':
- print(json.dumps([{'id':state['id'],'info':{'state':state['status'],'props':{'node.name':'yoga_dolby'}}}]))
+ print(json.dumps([{'id':state['id'],'info':{'state':state['status'],'props':{'node.name':'yoga_dolby','object.serial':state.get('serial',1)}}}]))
  (root/'observed').write_text(str(state.get('event',-1)))
 elif cmd=='pw-cli':
  gain=float(re.search(r'"bassL:Gain" ([0-9.]+)',sys.argv[-1])[1])
@@ -46,7 +46,13 @@ def check_sync():
             json.dumps({"id": 42, "pct": 100, "status": "running"})
         )
         (root / "events.json").write_text(
-            json.dumps([{"pct": 50}, {"pct": 100, "id": 43}])
+            json.dumps(
+                [
+                    {"pct": 50},
+                    {"pct": 100, "id": 43},
+                    {"pct": 100, "id": 43, "serial": 2},
+                ]
+            )
         )
         (root / "calls").write_text("")
         for name in ("pactl", "pw-dump", "pw-cli"):
@@ -66,6 +72,7 @@ def check_sync():
             {"id": "42", "gain": 4.0},
             {"id": "42", "gain": 11.5},
             {"id": "43", "gain": 4.0},
+            {"id": "43", "gain": 4.0},
         ], calls
         # A suspended graph must retain the safe config until it starts running.
         (root / "state.json").write_text(
@@ -74,7 +81,7 @@ def check_sync():
         subprocess.run(
             [str(REPO / "bin/yoga-volume"), "sync"], env=env, check=True, timeout=5
         )
-        assert len((root / "calls").read_text().splitlines()) == 3
+        assert len((root / "calls").read_text().splitlines()) == 4
     print("VOLUME_SYNC_OK: startup, direct slider, graph replacement, suspended graph")
 
 

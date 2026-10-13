@@ -146,15 +146,15 @@ show_osd() {
 # Event-driven updates also cover sliders and a freshly created/running graph.
 LOUDNESS_KEY=""
 apply_loudness() {
-  local node id state pct gain key
-  node="$(pw-dump 2>/dev/null | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|[.id,.info.state]|@tsv' | head -1)"
-  IFS=$'\t' read -r id state <<< "$node"
+  local node id state serial pct gain key
+  node="$(pw-dump 2>/dev/null | jq -r '.[]|select(.info.props."node.name"?=="yoga_dolby")|[.id,.info.state,.info.props."object.serial"]|@tsv' | head -1)"
+  IFS=$'\t' read -r id state serial <<< "$node"
   if [[ -z $id || $state != running ]]; then LOUDNESS_KEY=""; return 0; fi
   pct="$(volume_percent yoga_dolby)"
   [[ $pct =~ ^[0-9]+$ ]] || return 0
   # Cubic sink attenuation precedes the EQ; full-volume bass stays at +4 dB.
   gain="$(awk -v p="$pct" 'BEGIN { g = 4 + 15 * (1 - p/100); if (g < 4) g = 4; if (g > 19) g = 19; printf "%.1f", g }')"
-  key="$id:$gain"
+  key="$id:$serial:$gain"
   [[ $key == "$LOUDNESS_KEY" ]] && return 0
   if pw-cli s "$id" Props "{ params = [ \"bassL:Gain\" $gain \"bassR:Gain\" $gain ] }" >/dev/null 2>&1; then
     LOUDNESS_KEY="$key"
