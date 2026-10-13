@@ -2,6 +2,10 @@
 
 # Volume control that can see past a DSP sink built on PipeWire links.
 #
+# Exception: for the sinks in SOFTWARE_VOLUME_SINKS (the yoga_dolby EQ) the
+# keys move that sink's own volume and the hardware is held at 100% -- see
+# below for why.
+#
 # Omarchy deliberately reaches through DSP sinks to the physical one, so the
 # keys move real loudness and the processing always sees full-scale input.
 # omarchy-audio-output-sink does that by finding a PulseAudio *sink-input*
@@ -55,9 +59,46 @@ for _ in range(6):                       # bounded: never loop on a cycle
 ' "$1"
 }
 
+# Sinks whose own volume the keys should move, with the hardware held at 100%.
+#
+# The Speaker hardware volume on this machine is "Speaker Playback Volume",
+# which sits on DAC 0x03 (tweeters) only; DAC 0x02 (woofers) stays at 87/87
+# whatever it says. So lowering the hardware changes the tweeter/woofer
+# balance, not just loudness. Attenuating before the EQ and leaving the
+# hardware at full keeps both drivers matched -- judged best by ear
+# (2026-09-19) against hardware volume, with and without the EQ.
+SOFTWARE_VOLUME_SINKS=(yoga_dolby)
+
+# Hold the hardware under a software-volume sink at 100%. The first time,
+# carry the hardware level over to the software sink so switching the
+# scheme does not jump in loudness.
+pin_hardware() {
+  local soft="$1" hw hw_pct
+  # A filter-chain's sink and its playback stream are joined inside the
+  # module, not by a PipeWire link, so start from the playback side
+  # (named <sink>_out in 62-yoga-dolby-eq.conf).
+  hw="$(resolve_via_pipewire "${soft}_out")"
+  [[ -n $hw ]] || return 0
+  hw_pct="$(volume_percent "$hw")"
+  [[ -n $hw_pct ]] || return 0
+  if ((hw_pct != 100)); then
+    pactl set-sink-volume "$soft" "${hw_pct}%"
+    pactl set-sink-volume "$hw" 100%
+  fi
+  pactl set-sink-mute "$hw" 0
+}
+
 physical_sink() {
-  local sink
+  local sink s
   sink="$(pactl get-default-sink 2>/dev/null)"
+
+  for s in "${SOFTWARE_VOLUME_SINKS[@]}"; do
+    if [[ $sink == "$s" ]]; then
+      pin_hardware "$sink"
+      printf '%s\n' "$sink"
+      return
+    fi
+  done
 
   # Already physical: nothing to resolve.
   if [[ -z $sink || $sink == alsa_output.* ]]; then
