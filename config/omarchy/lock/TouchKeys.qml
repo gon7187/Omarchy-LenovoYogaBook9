@@ -62,7 +62,6 @@ Item {
           Rectangle {
             required property string modelData
             readonly property bool wide: modelData === "space"
-            readonly property bool action: modelData.length > 1 || "⇧⌫↵".indexOf(modelData) !== -1
             width: row.unit * (wide ? 5 : 1)
             height: keys.keyH
             radius: Style.cornerRadius
