@@ -32,29 +32,33 @@ PARK="10000x0"
 # or the menu ticks the wrong row, `cycle` steps from a false state, and
 # yoga-autorotate believes the layout already matches.
 apply() {
-  local out
-  if ! out="$(hyprctl eval "$1" 2>&1)" || [[ $out != ok* ]]; then
+  local out rule="$1"
+  # Keep HDR policy in one place so new tablet/layout modes inherit it too.
+  if [[ $rule == hl.monitor* && $rule != *'disabled = true'* ]]; then
+    rule="${rule% \}\)} , bitdepth = 10, cm = \"hdr\" })"
+  fi
+  if ! out="$(hyprctl eval "$rule" 2>&1)" || [[ $out != ok* ]]; then
     echo "hyprctl eval failed: ${out:-no output}" >&2
     return 1
   fi
 }
 
 park() {
-  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"$PARK\", scale = 2, transform = 0, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })"
+  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"$PARK\", scale = 2, transform = 0, mirror = \"none\" })"
 }
 
 mode_stand() {
   park &&
-  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 2, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })" &&
-  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x900\", scale = 2, transform = 0, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })"
+  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 2, mirror = \"none\" })" &&
+  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x900\", scale = 2, transform = 0, mirror = \"none\" })"
 }
 
 # Book: machine turned 90 degrees, two portrait screens side by side.
 # 900x1440 logical each once rotated, so the right-hand panel starts at x=900.
 mode_book() {
   park &&
-  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })" &&
-  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })"
+  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\" })" &&
+  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\" })"
 }
 
 # Book turned the other way. Which direction you rotate depends on where the
@@ -62,8 +66,8 @@ mode_book() {
 # mode_book, and the two swap sides.
 mode_book_flip() {
   park &&
-  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })" &&
-  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })"
+  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 1, mirror = \"none\" })" &&
+  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"900x0\", scale = 2, transform = 3, mirror = \"none\" })"
 }
 
 # Present: machine folded in half, upper panel facing the person opposite. It
@@ -72,8 +76,8 @@ mode_book_flip() {
 # counts it in the layout, so it must not share coordinates with eDP-2.
 mode_present() {
   park &&
-  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x900\", scale = 2, transform = 0, mirror = \"eDP-2\", bitdepth = 10, cm = \"hdr\" })" &&
-  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 0, mirror = \"none\", bitdepth = 10, cm = \"hdr\" })"
+  apply "hl.monitor({ output = \"eDP-1\", mode = \"$MODE\", position = \"0x900\", scale = 2, transform = 0, mirror = \"eDP-2\" })" &&
+  apply "hl.monitor({ output = \"eDP-2\", mode = \"$MODE\", position = \"0x0\",   scale = 2, transform = 0, mirror = \"none\" })"
 }
 
 current() { cat "$MODE_FILE" 2>/dev/null || echo stand; }
