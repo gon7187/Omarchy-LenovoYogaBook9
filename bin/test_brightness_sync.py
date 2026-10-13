@@ -32,6 +32,9 @@ def main():
         return subprocess.CompletedProcess(args, 0, stdout=json.dumps([monitor]))
 
     with tempfile.TemporaryDirectory() as directory:
+        module.get("sync_hdr", lambda primary: None).__globals__["CONFIG_PATH"] = (
+            Path(directory) / "autobrightness.conf"
+        )
         primary, secondary = Path(directory) / "primary", Path(directory) / "secondary"
         primary.mkdir()
         secondary.mkdir()
