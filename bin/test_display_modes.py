@@ -45,9 +45,15 @@ def main():
             modes.append("tablet")
         for mode in modes:
             (root / "calls").write_text("")
-            subprocess.run(
-                [str(repo / "bin/yoga-mode"), mode], env=env, check=True, timeout=5
+            result = subprocess.run(
+                [str(repo / "bin/yoga-mode"), mode],
+                env=env,
+                check=True,
+                timeout=5,
+                capture_output=True,
+                text=True,
             )
+            assert not result.stderr, result.stderr
             requests = [
                 json.loads(line) for line in (root / "calls").read_text().splitlines()
             ]
