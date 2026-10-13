@@ -16,7 +16,8 @@ if sys.argv[1]=='eval':
  with (root/'calls').open('a') as f:f.write(json.dumps(sys.argv[2])+'\\n')
  print('ok')
 elif sys.argv[1]=='monitors':print(json.dumps([{'name':'eDP-1','disabled':False,'activeWorkspace':{'id':1}},{'name':'eDP-2','disabled':False,'activeWorkspace':{'id':2}}]))
-elif sys.argv[1]=='clients':print('[]')
+elif sys.argv[1] in ('clients','workspaces'):print('[]')
+elif sys.argv[1]=='activewindow':print('{}')
 """
 
 
@@ -25,6 +26,8 @@ def main():
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         (root / "calls").write_text("")
+        (root / "state").mkdir()
+        (root / "state/yoga-hdr").write_text("on")
         for name in ("hyprctl", "omarchy-notification-send"):
             command = root / name
             command.write_text(FAKE)
@@ -35,15 +38,22 @@ def main():
             "PATH": str(root) + ":" + os.environ["PATH"],
             "XDG_RUNTIME_DIR": str(root),
             "XDG_CONFIG_HOME": str(root / ".config"),
+            "XDG_STATE_HOME": str(root / "state"),
         }
         modes = ["stand", "book", "book-flip", "present"]
         if "--tablet" in sys.argv:
             modes.append("tablet")
         for mode in modes:
             (root / "calls").write_text("")
-            subprocess.run(
-                [str(repo / "bin/yoga-mode"), mode], env=env, check=True, timeout=5
+            result = subprocess.run(
+                [str(repo / "bin/yoga-mode"), mode],
+                env=env,
+                check=True,
+                timeout=5,
+                capture_output=True,
+                text=True,
             )
+            assert not result.stderr, result.stderr
             requests = [
                 json.loads(line) for line in (root / "calls").read_text().splitlines()
             ]
