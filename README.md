@@ -606,13 +606,14 @@ A user plugin cannot replace the lock: the shell only trusts first-party plugins
 
 ### Fix
 
-[`config/omarchy/lock/TouchKeys.qml`](config/omarchy/lock/TouchKeys.qml) is a touch keyboard (letters, shift, digits/symbols, backspace, enter) drawn in the lock view on the lower panel `eDP-2` only. It edits the lock's own password text and submits through the same path as the Enter key, so PAM, faillock and fingerprint behave exactly as stock.
+[`config/omarchy/lock/TouchKeys.qml`](config/omarchy/lock/TouchKeys.qml) is a touch keyboard (letters, shift, all printable ASCII digits/symbols, backspace, enter) drawn in the lock view on `eDP-2`, or `eDP-1` when the lower panel is disabled in tablet mode. It edits the lock's own password text and submits through the same path as the Enter key, so PAM, faillock and fingerprint behave exactly as stock.
 
 [`bin/yoga-lock-keyboard`](bin/yoga-lock-keyboard) installs it (via `sudo` or `pkexec`):
 
 - copies the QML next to `LockView.qml` and inserts one `TouchKeys { view: root }` line;
-- adds `/etc/pacman.d/hooks/yoga-lock-keyboard.hook`, which re-applies the patch after every `omarchy` package upgrade and fails loudly if `LockView.qml` changed shape;
-- writes `/etc/sddm.conf.d/zz-yoga-relogin.conf` (`Relogin=true`), so logging out goes back through autologin instead of SDDM's greeter, which has no touch keyboard either.
+- adds `/etc/pacman.d/hooks/yoga-lock-keyboard.hook`, which re-applies the patch after every `omarchy` package upgrade and fails loudly if `LockView.qml` changed shape.
+
+Installation and removal do not change SDDM authentication or autologin. Logout still uses the configured greeter, which may require an external keyboard. Earlier versions created `/etc/sddm.conf.d/zz-yoga-relogin.conf`; if that file still enables `Relogin=true`, review it separately. It is not removed automatically because it may now contain administrator configuration.
 
 ```bash
 bin/yoga-lock-keyboard install
